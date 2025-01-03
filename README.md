@@ -10,6 +10,7 @@ mcs/
 ├── backend/      # FastAPI backend service
 ├── shared/       # Shared types and utilities
 ├── docs/         # Project documentation
+├── .notes/       # Project notes
 └── scripts/      # Development and deployment scripts
 ```
 
