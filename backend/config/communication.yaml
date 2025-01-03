@@ -1,0 +1,36 @@
+# Communication service configuration
+
+version: "1.0.0"
+
+service:
+  host: "0.0.0.0"
+  port: 8003
+  log_level: "INFO"
+
+communication:
+  hardware:
+    network:
+      force_mock: true # Set to true only for testing without hardware
+      plc:
+        ip: "192.168.0.130"
+        tag_file: "resources/tags/MicroColdSpray_basic.csv"
+      ssh:
+        host: "192.168.0.200"
+        port: 22
+        username: "root"
+        password: "deltatau"
+
+  polling:
+    interval: 0.2 # Tag polling interval in seconds
+    batch_size: 50 # Number of tags to read in one batch
+
+  services:
+    tag_mapping:
+      version: "1.0.0"
+      config_file: "config/tags.yaml"
+    tag_cache:
+      version: "1.0.0"
+    motion:
+      version: "1.0.0"
+    equipment:
+      version: "1.0.0"

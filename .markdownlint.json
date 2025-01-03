@@ -1,0 +1,21 @@
+{
+    "default": true,
+    "MD013": false,
+    "MD024": false,
+    "MD033": false,
+    "MD041": false,
+    "MD046": false,
+    "MD029": false,
+    "MD004": {
+        "style": "dash"
+    },
+    "MD007": {
+        "indent": 4
+    },
+    "MD012": {
+        "maximum": 2
+    },
+    "MD026": {
+        "punctuation": ".,;:!"
+    }
+} 

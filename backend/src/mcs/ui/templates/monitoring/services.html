@@ -1,0 +1,188 @@
+{% extends "base.html" %}
+
+{% block title %}Service Monitor - MicroColdSpray{% endblock %}
+
+{% block nav_items %}
+<button id="refresh-btn" class="px-4 py-2 bg-primary text-white rounded hover:bg-blue-600 transition-colors flex items-center space-x-2">
+    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+    </svg>
+    <span>Refresh</span>
+</button>
+{% endblock %}
+
+{% block content %}
+<div class="container mx-auto px-4">
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6" id="services-grid">
+        <!-- Service blocks will be dynamically added here -->
+    </div>
+</div>
+
+<script>
+// Service update interval in milliseconds
+const UPDATE_INTERVAL = 5000;
+
+// Track update timer
+let updateTimer = null;
+
+/**
+ * Create service card element
+ * @param {string} name - Service name
+ * @param {Object} service - Service data
+ * @returns {HTMLElement} Card element
+ */
+function createServiceCard(name, service) {
+    const card = document.createElement('div');
+    
+    // Map status to display colors
+    let statusColor;
+    switch (service.status.toLowerCase()) {
+        case 'ok':
+        case 'running':
+            statusColor = 'success';
+            break;
+        case 'starting':
+            statusColor = 'warning';
+            break;
+        case 'error':
+            statusColor = 'error';
+            break;
+        case 'stopped':
+            statusColor = 'error';
+            break;
+        default:
+            statusColor = 'error';
+    }
+    
+    card.className = `service-card p-6 rounded-lg border-2 border-${statusColor} bg-${statusColor}/10`;
+    
+    card.innerHTML = `
+        <div class="flex justify-between items-center mb-4">
+            <h3 class="text-lg font-semibold">${mcsprayUI.formatUtils.formatServiceName(name)}</h3>
+            <span class="px-2 py-1 rounded text-sm text-white bg-${statusColor}">
+                ${service.is_running ? 'RUNNING' : service.status.toUpperCase()}
+            </span>
+        </div>
+        <div class="space-y-2">
+            <p class="text-sm">
+                <span class="font-medium">Version:</span> ${service.version || 'Not available'}
+            </p>
+            ${service.port ? `
+                <p class="text-sm">
+                    <span class="font-medium">Port:</span> ${service.port}
+                </p>
+            ` : ''}
+            <p class="text-sm">
+                <span class="font-medium">Uptime:</span> ${mcsprayUI.formatUtils.formatUptime(service.uptime)}
+            </p>
+            ${service.mode ? `
+                <p class="text-sm">
+                    <span class="font-medium">Mode:</span> ${service.mode}
+                </p>
+            ` : ''}
+            ${service.error ? `
+                <div class="error-message mt-2 text-sm text-red-600">
+                    <span class="font-medium">Error:</span> ${service.error}
+                </div>
+            ` : ''}
+            ${service.components ? `
+                <div class="mt-4 border-t pt-2">
+                    <p class="text-sm font-medium mb-2">Components:</p>
+                    ${Object.entries(service.components).map(([name, health]) => {
+                        // Map component status to color
+                        let componentColor;
+                        switch (health.status.toLowerCase()) {
+                            case 'ok':
+                                componentColor = 'success';
+                                break;
+                            case 'warning':
+                                componentColor = 'warning';
+                                break;
+                            case 'error':
+                                componentColor = 'error';
+                                break;
+                            default:
+                                componentColor = 'error';
+                        }
+                        return `
+                            <div class="component-status flex items-center justify-between mt-2 text-sm">
+                                <span class="font-medium">${mcsprayUI.formatUtils.formatServiceName(name)}:</span>
+                                <span class="px-2 py-0.5 rounded text-xs text-white bg-${componentColor}">
+                                    ${health.status.toUpperCase()}
+                                </span>
+                            </div>
+                            ${health.error ? `<p class="text-xs text-red-600 mt-1">${health.error}</p>` : ''}
+                        `;
+                    }).join('')}
+                </div>
+            ` : ''}
+        </div>
+    `;
+    
+    return card;
+}
+
+/**
+ * Update services display
+ * @param {boolean} showLoading - Whether to show loading state
+ */
+async function updateServices(showLoading = false) {
+    const grid = document.getElementById('services-grid');
+    
+    try {
+        // Only show loading on initial load or manual refresh
+        if (showLoading) {
+            grid.innerHTML = '';
+            grid.appendChild(mcsprayUI.domUtils.createSpinner());
+        }
+        
+        // Fetch services status
+        const services = await mcsprayUI.apiUtils.fetchWithTimeout('/monitoring/services/status');
+        
+        // Create new cards
+        const newGrid = document.createElement('div');
+        Object.entries(services).forEach(([name, service]) => {
+            newGrid.appendChild(createServiceCard(name, service));
+        });
+        
+        // Only update DOM if content changed
+        if (grid.innerHTML !== newGrid.innerHTML) {
+            grid.innerHTML = newGrid.innerHTML;
+        }
+    } catch (error) {
+        const errorDetails = mcsprayUI.apiUtils.handleError(error, 'services-update');
+        grid.innerHTML = '';
+        grid.appendChild(mcsprayUI.domUtils.createErrorMessage(
+            'Failed to fetch services status. Please try refreshing the page.'
+        ));
+    }
+}
+
+// Setup refresh button
+document.getElementById('refresh-btn').addEventListener('click', () => {
+    // Clear existing timer
+    if (updateTimer) {
+        clearInterval(updateTimer);
+    }
+    
+    // Perform immediate update with loading indicator
+    updateServices(true);
+    
+    // Restart timer
+    updateTimer = setInterval(() => updateServices(false), UPDATE_INTERVAL);
+});
+
+// Initial update with loading indicator
+updateServices(true);
+
+// Start update timer without loading indicator
+updateTimer = setInterval(() => updateServices(false), UPDATE_INTERVAL);
+
+// Cleanup on page unload
+window.addEventListener('unload', () => {
+    if (updateTimer) {
+        clearInterval(updateTimer);
+    }
+});
+</script>
+{% endblock %} 

@@ -1,0 +1,99 @@
+{
+    "rules": {
+        "context_initialization": {
+            "description": "Starting point for each interaction",
+            "steps": [
+                "ALWAYS read `.notes/project_overview.md` and `.notes/task_list.md`",
+                "ALWAYS follow standardized service patterns from standardizing.md",
+                "ALWAYS consider hardware safety implications",
+                "ALWAYS maintain type safety between frontend and backend"
+            ]
+        },
+        "operational_protocol": {
+            "description": "How to approach tasks",
+            "before_action": [
+                "Create a MECE task breakdown",
+                "Review relevant TypeScript types in shared/",
+                "Check hardware safety requirements",
+                "Verify service pattern compliance"
+            ],
+            "code_changes": [
+                "Read relevant code sections before editing",
+                "Follow standardized service patterns",
+                "Preserve existing functionality",
+                "Maintain type safety",
+                "Update shared types when modifying data structures",
+                "Implement proper error handling",
+                "Add health check endpoints"
+            ]
+        },
+        "safety_requirements": [
+            "NEVER break type safety between frontend and backend",
+            "NEVER bypass hardware safety checks",
+            "ALWAYS implement proper error handling using create_error",
+            "ALWAYS include health check endpoints",
+            "ALWAYS document new code and API changes",
+            "ALWAYS update API documentation when endpoints change",
+            "ALWAYS implement proper service shutdown"
+        ],
+        "service_patterns": {
+            "initialization": [
+                "Set basic properties in __init__",
+                "Initialize components in initialize()",
+                "Start components in dependency order",
+                "Implement proper shutdown"
+            ],
+            "error_handling": [
+                "Use create_error for consistent errors",
+                "Include appropriate status codes",
+                "Log errors properly",
+                "Maintain service state on errors"
+            ],
+            "health_checks": [
+                "Implement health() method",
+                "Check component status",
+                "Report detailed health state",
+                "Include uptime and version"
+            ]
+        },
+        "priorities": [
+            {
+                "source": ".notes/",
+                "weight": 1.0
+            },
+            {
+                "source": "shared/src/",
+                "weight": 0.9
+            },
+            {
+                "source": "backend/src/services/",
+                "weight": 0.8
+            },
+            {
+                "source": "frontend/src/features/",
+                "weight": 0.7
+            }
+        ],
+        "modes": {
+            "base": {
+                "description": "For routine tasks and simple updates"
+            },
+            "enhanced": {
+                "description": "For complex problems requiring deep analysis",
+                "requirements": [
+                    "Hardware safety implications",
+                    "Service pattern compliance",
+                    "Error handling coverage"
+                ]
+            }
+        },
+        "project_directives": {
+            "name": "mcs",
+            "ai_first": true,
+            "type_safety": true,
+            "documentation_required": true,
+            "hardware_safety": true,
+            "service_patterns": true
+        }
+    }
+} 

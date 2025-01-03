@@ -1,0 +1,289 @@
+# Validation rules for micro cold spray system
+
+version: "1.0.0"
+
+validation:
+  # Hardware validation rules
+  hardware:
+    required_fields:
+      message: "Missing required hardware field"
+      fields:
+      - nozzle
+      - chamber
+      - feeder
+      - deagglomerator
+    optional_fields:
+      message: "Unknown hardware field"
+      fields:
+      - offset_x
+      - notes
+    components:
+      nozzle:
+        required_fields:
+          message: "Missing required nozzle field"
+          fields:
+          - type
+          - diameter
+        parameter_limits:
+          diameter:
+            min: 0.1
+            max: 5.0
+        enum_values:
+          type:
+            values:
+            - standard
+            - high_flow
+            - custom
+      chamber:
+        required_fields:
+          message: "Missing required chamber field"
+          fields:
+          - pressure
+          - temperature
+        parameter_limits:
+          pressure:
+            min: 0.0
+            max: 10.0
+          temperature:
+            min: 0.0
+            max: 100.0
+
+  # Parameter validation rules
+  parameters:
+    material:
+      required_fields:
+        message: "Missing required material field"
+        fields:
+        - type
+        - size
+        - manufacturer
+        - lot
+      optional_fields:
+        message: "Unknown material field"
+        fields:
+        - notes
+        - certifications
+      parameter_limits:
+        size:
+          min: 0.1
+          max: 100.0
+      enum_values:
+        type:
+          values:
+          - metal
+          - ceramic
+          - polymer
+
+    process:
+      required_fields:
+        message: "Missing required process field"
+        fields:
+        - nozzle
+        - chamber
+        - gas_flows
+        - powder_feed
+      optional_fields:
+        message: "Unknown process field"
+        fields:
+        - notes
+        - modifications
+      parameter_limits:
+        gas_flows:
+          main_flow:
+            min: 0.0
+            max: 100.0
+          feeder_flow:
+            min: 0.0
+            max: 10.0
+        powder_feed:
+          min: 0.0
+          max: 5.0
+
+  # Pattern validation rules
+  patterns:
+    serpentine:
+      required_fields:
+        message: "Missing required serpentine pattern field"
+        fields:
+        - origin
+        - length
+        - spacing
+        - speed
+      optional_fields:
+        message: "Unknown serpentine pattern field"
+        fields:
+        - direction
+        - acceleration
+      dimensions:
+        required_fields:
+          message: "Missing required dimension"
+          fields:
+          - length
+          - spacing
+        limits:
+          length:
+            min: 0.0
+            max: 1000.0
+          spacing:
+            min: 0.1
+            max: 10.0
+      parameters:
+        required_fields:
+          message: "Missing required parameter"
+          fields:
+          - speed
+        limits:
+          speed:
+            min: 0.1
+            max: 100.0
+          acceleration:
+            min: 0.0
+            max: 10.0
+
+    spiral:
+      required_fields:
+        message: "Missing required spiral pattern field"
+        fields:
+        - origin
+        - diameter
+        - pitch
+        - speed
+      optional_fields:
+        message: "Unknown spiral pattern field"
+        fields:
+        - acceleration
+      dimensions:
+        required_fields:
+          message: "Missing required dimension"
+          fields:
+          - diameter
+          - pitch
+        limits:
+          diameter:
+            min: 0.0
+            max: 500.0
+          pitch:
+            min: 0.1
+            max: 10.0
+      parameters:
+        required_fields:
+          message: "Missing required parameter"
+          fields:
+          - speed
+        limits:
+          speed:
+            min: 0.1
+            max: 100.0
+          acceleration:
+            min: 0.0
+            max: 10.0
+
+  # Sequence validation rules
+  sequences:
+    required_fields:
+      message: "Missing required sequence field"
+      fields:
+      - metadata
+      - steps
+    optional_fields:
+      message: "Unknown sequence field"
+      fields:
+      - description
+      - notes
+    metadata:
+      required_fields:
+        message: "Missing required metadata field"
+        fields:
+        - name
+        - timestamp
+        - version
+      optional_fields:
+        message: "Unknown metadata field"
+        fields:
+        - description
+        - author
+    step_fields:
+      required_fields:
+        message: "Missing required step field"
+        fields:
+        - action
+        - parameters
+      optional_fields:
+        message: "Unknown step field"
+        fields:
+        - description
+        - timeout
+    move:
+      required_parameters:
+        message: "Missing required move parameter"
+        fields:
+        - x
+        - y
+        - z
+      position_limits:
+        x:
+          min: -500
+          max: 500.0
+        y:
+          min: -500
+          max: 500.0
+        z:
+          min: 0.0
+          max: 500.0
+    spray:
+      required_parameters:
+        message: "Missing required spray parameter"
+        fields:
+        - duration
+        - flow_rate
+      parameter_limits:
+        duration:
+          min: 0.1
+          max: 3600.0
+        flow_rate:
+          min: 0.1
+          max: 10.0
+    patterns:
+      serpentine:
+        required_parameters:
+          message: "Missing required serpentine parameter"
+          fields:
+          - length
+          - spacing
+          - speed
+        parameter_limits:
+          length:
+            min: 0.0
+            max: 1000.0
+          spacing:
+            min: 0.1
+            max: 10.0
+          speed:
+            min: 0.1
+            max: 100.0
+      spiral:
+        required_parameters:
+          message: "Missing required spiral parameter"
+          fields:
+          - diameter
+          - pitch
+          - speed
+        parameter_limits:
+          diameter:
+            min: 0.0
+            max: 500.0
+          pitch:
+            min: 0.1
+            max: 10.0
+          speed:
+            min: 0.1
+            max: 100.0
+    max_steps: 100
+    types:
+      test:
+        rules:
+        - check_order: true
+        - required_steps:
+          - move
+        - step_order:
+          - move
