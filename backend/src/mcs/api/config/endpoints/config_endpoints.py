@@ -4,7 +4,7 @@ from typing import Dict, Optional, Any
 from fastapi import APIRouter, Request, status, HTTPException
 from loguru import logger
 
-from micro_cold_spray.api.config.models.config_models import (
+from mcs.api.config.models.config_models import (
     ConfigRequest,
     ConfigResponse,
     ConfigListResponse,
@@ -13,7 +13,7 @@ from micro_cold_spray.api.config.models.config_models import (
     SchemaListResponse,
     MessageResponse
 )
-from micro_cold_spray.utils.errors import create_error
+from mcs.utils.errors import create_error
 
 
 router = APIRouter(prefix="/config", tags=["config"])

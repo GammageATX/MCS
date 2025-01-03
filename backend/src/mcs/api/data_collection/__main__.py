@@ -6,13 +6,13 @@ import yaml
 import uvicorn
 from loguru import logger
 
-from micro_cold_spray.api.data_collection.data_collection_app import create_data_collection_app
-from micro_cold_spray.utils.errors import create_error
+from mcs.api.data_collection.data_collection_app import create_data_collection_app
+from mcs.utils.errors import create_error
 
 
 def setup_logging():
     """Setup logging configuration."""
-    log_dir = "logs"
+    log_dir = os.path.join("logs", "data_collection")
     if not os.path.exists(log_dir):
         os.makedirs(log_dir)
 
@@ -26,7 +26,7 @@ def setup_logging():
         "<cyan>{name}</cyan>:<cyan>{function}</cyan>:<cyan>{line}</cyan> - "
         "<level>{message}</level>"
     )
-    logger.add(sys.stderr, format=log_format, level="INFO")
+    logger.add(sys.stderr, format=log_format, level="INFO", enqueue=True)
     
     # Add file handler with rotation
     file_format = (
@@ -40,7 +40,9 @@ def setup_logging():
         rotation="1 day",
         retention="30 days",
         format=file_format,
-        level="DEBUG"
+        level="DEBUG",
+        enqueue=True,
+        compression="zip"
     )
 
 
@@ -54,7 +56,7 @@ def load_config():
                 "service": {
                     "version": "1.0.0",
                     "host": "0.0.0.0",
-                    "port": 8006,
+                    "port": 8005,
                     "history_retention_days": 30
                 }
             }
@@ -83,7 +85,7 @@ def main():
         
         # Get config from environment or use defaults
         host = os.getenv("DATA_COLLECTION_HOST", service_config.get("host", "0.0.0.0"))
-        port = int(os.getenv("DATA_COLLECTION_PORT", service_config.get("port", 8006)))
+        port = int(os.getenv("DATA_COLLECTION_PORT", service_config.get("port", 8005)))
         reload = os.getenv("DATA_COLLECTION_RELOAD", "false").lower() == "true"
         
         # Log startup configuration
@@ -93,12 +95,13 @@ def main():
         
         # Run service
         uvicorn.run(
-            "micro_cold_spray.api.data_collection.data_collection_app:create_data_collection_app",
+            "mcs.api.data_collection.data_collection_app:create_data_collection_app",
             host=host,
             port=port,
             reload=reload,
             log_level="info",
-            factory=True
+            factory=True,
+            reload_dirs=[os.path.dirname(os.path.dirname(__file__))]  # Watch mcs package
         )
 
     except Exception as e:

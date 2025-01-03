@@ -4,10 +4,10 @@ from typing import List
 from datetime import datetime
 from fastapi import APIRouter, Depends, Request, status
 
-from micro_cold_spray.utils.errors import create_error
-from micro_cold_spray.utils.health import ServiceHealth
-from micro_cold_spray.api.data_collection.data_collection_service import DataCollectionService
-from micro_cold_spray.api.data_collection.data_collection_models import (
+from mcs.utils.errors import create_error
+from mcs.utils.health import ServiceHealth
+from mcs.api.data_collection.data_collection_service import DataCollectionService
+from mcs.api.data_collection.data_collection_models import (
     SprayEvent,
     CollectionResponse,
     SprayEventResponse,

@@ -7,10 +7,10 @@ from datetime import datetime
 from fastapi import status
 from loguru import logger
 
-from micro_cold_spray.utils.errors import create_error
-from micro_cold_spray.utils.health import ServiceHealth, ComponentHealth
-from micro_cold_spray.api.data_collection.data_collection_storage import DataCollectionStorage
-from micro_cold_spray.api.data_collection.data_collection_models import SprayEvent
+from mcs.utils.errors import create_error
+from mcs.utils.health import ServiceHealth, ComponentHealth
+from mcs.api.data_collection.data_collection_storage import DataCollectionStorage
+from mcs.api.data_collection.data_collection_models import SprayEvent
 
 
 def load_config() -> Dict[str, Any]:

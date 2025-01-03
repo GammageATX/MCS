@@ -3,10 +3,10 @@
 from fastapi import APIRouter, Depends, status
 from loguru import logger
 
-from micro_cold_spray.utils.errors import create_error
-from micro_cold_spray.utils.health import ServiceHealth
-from micro_cold_spray.api.process import get_process_service, ProcessService
-from micro_cold_spray.api.process.models.process_models import (
+from mcs.utils.errors import create_error
+from mcs.utils.health import ServiceHealth
+from mcs.api.process import get_process_service, ProcessService
+from mcs.api.process.models.process_models import (
     NozzleResponse,
     NozzleListResponse,
     PowderResponse,

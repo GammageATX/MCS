@@ -16,7 +16,7 @@ class MockPLCClient:
         self._config = config
         
         # Load mock data
-        mock_data_path = Path("config/mock_data.yaml")
+        mock_data_path = Path("backend/config/mock_data.yaml")
         if not mock_data_path.exists():
             logger.warning(f"Mock data file not found: {mock_data_path}")
             self._mock_data = {"plc_tags": {}}

@@ -22,4 +22,4 @@ components:
     - "json"
   schema:
     version: "1.0.0"
-    schema_path: "config/schemas"
+    schema_path: "backend/config/schemas"

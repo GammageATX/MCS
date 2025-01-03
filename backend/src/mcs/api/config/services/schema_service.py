@@ -8,14 +8,14 @@ from fastapi import status
 from loguru import logger
 import jsonschema
 
-from micro_cold_spray.utils.errors import create_error
-from micro_cold_spray.utils.health import ServiceHealth, ComponentHealth
+from mcs.utils.errors import create_error
+from mcs.utils.health import ServiceHealth, ComponentHealth
 
 
 class SchemaService:
     """Schema service."""
 
-    def __init__(self, schema_path: str = "config/schemas", version: str = "1.0.0"):
+    def __init__(self, schema_path: str = os.path.join("backend", "config", "schemas"), version: str = "1.0.0"):
         """Initialize service.
         
         Args:

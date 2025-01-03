@@ -13,19 +13,19 @@ from loguru import logger
 import yaml
 import sys
 
-from micro_cold_spray.utils.errors import create_error
-from micro_cold_spray.utils.health import ServiceHealth, ComponentHealth
-from micro_cold_spray.api.communication.endpoints import router as state_router
-from micro_cold_spray.api.communication.endpoints.equipment import router as equipment_router
-from micro_cold_spray.api.communication.endpoints.motion import router as motion_router
-from micro_cold_spray.api.communication.services.equipment import EquipmentService
-from micro_cold_spray.api.communication.services.motion import MotionService
-from micro_cold_spray.api.communication.services.tag_cache import TagCacheService
-from micro_cold_spray.api.communication.services.tag_mapping import TagMappingService
-from micro_cold_spray.api.communication.clients.mock import MockPLCClient
-from micro_cold_spray.api.communication.clients.plc import PLCClient
-from micro_cold_spray.api.communication.clients.ssh import SSHClient
-from micro_cold_spray.api.communication.communication_service import CommunicationService
+from mcs.utils.errors import create_error
+from mcs.utils.health import ServiceHealth, ComponentHealth
+from mcs.api.communication.endpoints import router as state_router
+from mcs.api.communication.endpoints.equipment import router as equipment_router
+from mcs.api.communication.endpoints.motion import router as motion_router
+from mcs.api.communication.services.equipment import EquipmentService
+from mcs.api.communication.services.motion import MotionService
+from mcs.api.communication.services.tag_cache import TagCacheService
+from mcs.api.communication.services.tag_mapping import TagMappingService
+from mcs.api.communication.clients.mock import MockPLCClient
+from mcs.api.communication.clients.plc import PLCClient
+from mcs.api.communication.clients.ssh import SSHClient
+from mcs.api.communication.communication_service import CommunicationService
 
 
 def setup_logging(log_level: str = "INFO") -> None:
@@ -74,7 +74,7 @@ def load_config() -> Dict[str, Any]:
     Raises:
         FileNotFoundError: If config file not found
     """
-    config_path = Path("config/communication.yaml")
+    config_path = Path("backend/config/communication.yaml")
     if not config_path.exists():
         raise FileNotFoundError(f"Config file not found: {config_path}")
         

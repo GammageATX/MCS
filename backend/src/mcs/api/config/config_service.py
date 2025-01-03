@@ -8,16 +8,16 @@ from typing import Dict, List, Optional, Any, Union
 from loguru import logger
 
 from fastapi import status, HTTPException
-from micro_cold_spray.utils.errors import create_error
-from micro_cold_spray.utils.health import ServiceHealth, ComponentHealth
-from micro_cold_spray.api.config.services.file_service import FileService
-from micro_cold_spray.api.config.services.format_service import FormatService
-from micro_cold_spray.api.config.services.schema_service import SchemaService
+from mcs.utils.errors import create_error
+from mcs.utils.health import ServiceHealth, ComponentHealth
+from mcs.api.config.services.file_service import FileService
+from mcs.api.config.services.format_service import FormatService
+from mcs.api.config.services.schema_service import SchemaService
 import jsonschema
 
 
 # Default paths
-DEFAULT_CONFIG_PATH = os.path.join(os.getcwd(), "config")
+DEFAULT_CONFIG_PATH = os.path.join(os.getcwd(), "backend", "config")
 DEFAULT_SCHEMA_PATH = os.path.join(DEFAULT_CONFIG_PATH, "schemas")
 
 
@@ -122,7 +122,8 @@ class ConfigService:
     async def _load_config(self) -> None:
         """Load configuration."""
         try:
-            with open("config/config.yaml", "r") as f:
+            config_path = os.path.join("backend", "config", "config.yaml")
+            with open(config_path, "r") as f:
                 self._config = yaml.safe_load(f)
             self._version = self._config["version"]
             logger.info(f"Loaded config version {self._version}")

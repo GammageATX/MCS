@@ -1,4 +1,4 @@
-# src/micro_cold_spray/api/process/process_app.py
+# src/mcs/api/process/process_app.py
 """Process API application."""
 
 from contextlib import asynccontextmanager
@@ -6,8 +6,8 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from loguru import logger
 
-from micro_cold_spray.api.process.process_service import ProcessService
-from micro_cold_spray.api.process.endpoints import (
+from mcs.api.process.process_service import ProcessService
+from mcs.api.process.endpoints import (
     process_router,
     pattern_router,
     parameter_router,

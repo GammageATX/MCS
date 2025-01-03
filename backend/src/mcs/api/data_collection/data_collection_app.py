@@ -7,11 +7,11 @@ from fastapi.responses import JSONResponse
 from fastapi.exceptions import RequestValidationError
 from loguru import logger
 
-from micro_cold_spray.api.data_collection.data_collection_router import router
-from micro_cold_spray.api.data_collection.data_collection_service import DataCollectionService
-from micro_cold_spray.api.data_collection.data_collection_storage import DataCollectionStorage
-from micro_cold_spray.utils.errors import create_error
-from micro_cold_spray.utils.health import ServiceHealth
+from mcs.api.data_collection.data_collection_router import router
+from mcs.api.data_collection.data_collection_service import DataCollectionService
+from mcs.api.data_collection.data_collection_storage import DataCollectionStorage
+from mcs.utils.errors import create_error
+from mcs.utils.health import ServiceHealth
 
 
 @asynccontextmanager

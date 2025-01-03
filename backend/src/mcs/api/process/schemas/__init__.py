@@ -1,13 +1,13 @@
 """Process API schemas."""
 
-from micro_cold_spray.api.process.schemas.pattern_schema import PatternData, Pattern, PatternParams, PatternType
-from micro_cold_spray.api.process.schemas.parameter_schema import ParameterData, ProcessParameters
-from micro_cold_spray.api.process.schemas.sequence_schema import (
+from mcs.api.process.schemas.pattern_schema import PatternData, Pattern, PatternParams, PatternType
+from mcs.api.process.schemas.parameter_schema import ParameterData, ProcessParameters
+from mcs.api.process.schemas.sequence_schema import (
     SequenceData, Sequence, SequenceMetadata,
     SequenceStep, StepType
 )
-from micro_cold_spray.api.process.schemas.nozzle_schema import NozzleData, Nozzle, NozzleType
-from micro_cold_spray.api.process.schemas.powder_schema import (
+from mcs.api.process.schemas.nozzle_schema import NozzleData, Nozzle, NozzleType
+from mcs.api.process.schemas.powder_schema import (
     PowderData, Powder, PowderMorphology,
     SizeRange
 )

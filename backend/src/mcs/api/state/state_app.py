@@ -10,9 +10,9 @@ from fastapi.responses import JSONResponse
 from fastapi.exceptions import RequestValidationError
 from loguru import logger
 
-from micro_cold_spray.utils.errors import create_error
-from micro_cold_spray.utils.health import ServiceHealth
-from micro_cold_spray.api.state.state_service import StateService, load_config
+from mcs.utils.errors import create_error
+from mcs.utils.health import ServiceHealth
+from mcs.api.state.state_service import StateService, load_config
 
 
 @asynccontextmanager

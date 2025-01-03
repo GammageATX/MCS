@@ -3,7 +3,7 @@
 from typing import Literal
 from pydantic import BaseModel, Field
 
-from micro_cold_spray.api.communication.models.motion import Position, SystemStatus
+from mcs.api.communication.models.motion import Position, SystemStatus
 
 
 class GasState(BaseModel):

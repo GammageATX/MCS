@@ -1,6 +1,6 @@
 """Communication API models."""
 
-from micro_cold_spray.api.communication.models.equipment import (
+from mcs.api.communication.models.equipment import (
     EquipmentState,
     GasState,
     VacuumState,
@@ -14,7 +14,7 @@ from micro_cold_spray.api.communication.models.equipment import (
     FeederRequest
 )
 
-from micro_cold_spray.api.communication.models.motion import (
+from mcs.api.communication.models.motion import (
     Position,
     AxisStatus,
     SystemStatus,

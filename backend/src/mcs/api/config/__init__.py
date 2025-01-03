@@ -1,4 +1,7 @@
 """Configuration service package."""
 
 # Import version
-from micro_cold_spray import __version__
+from mcs import __version__
+
+# Export version
+__version__ = __version__

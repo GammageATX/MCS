@@ -5,7 +5,7 @@ from fastapi import APIRouter, Request, WebSocket, WebSocketDisconnect, status
 from loguru import logger
 import asyncio
 
-from micro_cold_spray.utils.errors import create_error
+from mcs.utils.errors import create_error
 
 
 router = APIRouter()

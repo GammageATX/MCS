@@ -6,18 +6,18 @@ from datetime import datetime
 from fastapi import status
 from loguru import logger
 
-from micro_cold_spray.utils.errors import create_error
-from micro_cold_spray.utils.health import ServiceHealth, ComponentHealth
-from micro_cold_spray.api.communication.clients.mock import MockPLCClient
-from micro_cold_spray.api.communication.clients.plc import PLCClient
-from micro_cold_spray.api.communication.clients.ssh import SSHClient
-from micro_cold_spray.api.communication.services.tag_mapping import TagMappingService
-from micro_cold_spray.api.communication.models.equipment import (
+from mcs.utils.errors import create_error
+from mcs.utils.health import ServiceHealth, ComponentHealth
+from mcs.api.communication.clients.mock import MockPLCClient
+from mcs.api.communication.clients.plc import PLCClient
+from mcs.api.communication.clients.ssh import SSHClient
+from mcs.api.communication.services.tag_mapping import TagMappingService
+from mcs.api.communication.models.equipment import (
     GasState, VacuumState, FeederState, NozzleState, EquipmentState,
     DeagglomeratorState, PressureState, MotionState, HardwareState,
     ProcessState, SafetyState
 )
-from micro_cold_spray.api.communication.models.motion import (
+from mcs.api.communication.models.motion import (
     Position, AxisStatus, SystemStatus
 )
 

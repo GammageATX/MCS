@@ -4,10 +4,10 @@ from fastapi import APIRouter, Depends, WebSocket, WebSocketDisconnect, status
 from loguru import logger
 import asyncio
 
-from micro_cold_spray.utils.errors import create_error
-from micro_cold_spray.api.process.process_service import ProcessService
-from micro_cold_spray.api.process import get_process_service
-from micro_cold_spray.api.process.models.process_models import (
+from mcs.utils.errors import create_error
+from mcs.api.process.process_service import ProcessService
+from mcs.api.process import get_process_service
+from mcs.api.process.models.process_models import (
     BaseResponse,
     Sequence,
     SequenceResponse,

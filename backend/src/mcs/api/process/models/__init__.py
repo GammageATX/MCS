@@ -1,6 +1,6 @@
 """Process API models."""
 
-from micro_cold_spray.api.process.models.process_models import (
+from mcs.api.process.models.process_models import (
     # Enums
     NozzleType,
     

@@ -7,8 +7,8 @@ from fastapi import status
 from loguru import logger
 from pathlib import Path
 
-from micro_cold_spray.utils.errors import create_error
-from micro_cold_spray.utils.health import ServiceHealth, ComponentHealth
+from mcs.utils.errors import create_error
+from mcs.utils.health import ServiceHealth, ComponentHealth
 
 
 class SchemaService:

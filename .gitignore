@@ -70,7 +70,6 @@ Thumbs.db
 *.cal
 
 # Data files
-*.csv
 *.xlsx
 *.pdf
 data/raw/

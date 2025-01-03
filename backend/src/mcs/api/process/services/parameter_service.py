@@ -9,9 +9,9 @@ from fastapi import status
 from loguru import logger
 from pathlib import Path
 
-from micro_cold_spray.utils.errors import create_error
-from micro_cold_spray.utils.health import ServiceHealth, ComponentHealth
-from micro_cold_spray.api.process.models.process_models import (
+from mcs.utils.errors import create_error
+from mcs.utils.health import ServiceHealth, ComponentHealth
+from mcs.api.process.models.process_models import (
     Parameter,
     Nozzle,
     Powder,

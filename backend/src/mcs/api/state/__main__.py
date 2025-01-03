@@ -5,8 +5,8 @@ import sys
 import uvicorn
 from loguru import logger
 
-from micro_cold_spray.api.state.state_app import create_state_service
-from micro_cold_spray.utils.errors import create_error
+from mcs.api.state.state_app import create_state_service
+from mcs.utils.errors import create_error
 
 
 def setup_logging():
@@ -55,7 +55,7 @@ def main():
     Configures logging, creates the FastAPI application, and starts the uvicorn server.
     Environment variables:
         STATE_SERVICE_HOST: Host to bind to (default: 0.0.0.0)
-        STATE_SERVICE_PORT: Port to listen on (default: 8004)
+        STATE_SERVICE_PORT: Port to listen on (default: 8002)
         STATE_SERVICE_RELOAD: Enable auto-reload (default: false)
         STATE_SERVICE_LOG_LEVEL: Logging level (default: info)
     """
@@ -69,7 +69,7 @@ def main():
         
         # Get config from environment or use defaults
         host = os.getenv("STATE_SERVICE_HOST", "0.0.0.0")
-        port = int(os.getenv("STATE_SERVICE_PORT", "8004"))
+        port = int(os.getenv("STATE_SERVICE_PORT", "8002"))
         reload = os.getenv("STATE_SERVICE_RELOAD", "false").lower() == "true"
         log_level = os.getenv("STATE_SERVICE_LOG_LEVEL", "info").lower()
         
@@ -94,7 +94,8 @@ def main():
             port=port,
             reload=reload,
             log_level=log_level,
-            access_log=True
+            access_log=True,
+            reload_dirs=[os.path.dirname(os.path.dirname(__file__))]  # Watch mcs package
         )
 
     except Exception:

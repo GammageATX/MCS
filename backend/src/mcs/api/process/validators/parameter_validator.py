@@ -4,8 +4,8 @@ from typing import Dict, Any
 from fastapi import status
 from loguru import logger
 
-from micro_cold_spray.utils.errors import create_error
-from micro_cold_spray.api.process.schemas import ParameterData
+from mcs.utils.errors import create_error
+from mcs.api.process.schemas import ParameterData
 
 
 def validate_parameter(data: Dict[str, Any]) -> Dict[str, Any]:

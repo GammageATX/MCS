@@ -13,7 +13,7 @@ communication:
       force_mock: true # Set to true only for testing without hardware
       plc:
         ip: "192.168.0.130"
-        tag_file: "resources/tags/MicroColdSpray_basic.csv"
+        tag_file: "backend/resources/tags/MicroColdSpray_basic.csv"
       ssh:
         host: "192.168.0.200"
         port: 22
@@ -27,7 +27,7 @@ communication:
   services:
     tag_mapping:
       version: "1.0.0"
-      config_file: "config/tags.yaml"
+      config_file: "backend/config/tags.yaml"
     tag_cache:
       version: "1.0.0"
     motion:

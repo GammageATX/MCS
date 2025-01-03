@@ -1,8 +1,8 @@
 """Communication client implementations."""
 
-from micro_cold_spray.api.communication.clients.mock import MockPLCClient
-from micro_cold_spray.api.communication.clients.plc import PLCClient
-from micro_cold_spray.api.communication.clients.ssh import SSHClient
+from mcs.api.communication.clients.mock import MockPLCClient
+from mcs.api.communication.clients.plc import PLCClient
+from mcs.api.communication.clients.ssh import SSHClient
 
 __all__ = [
     "MockPLCClient",
