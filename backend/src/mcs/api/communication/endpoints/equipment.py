@@ -1,6 +1,6 @@
 """Equipment control endpoints."""
 
-from typing import Dict, Any, Literal
+from typing import Literal
 from fastapi import APIRouter, Request, WebSocket, WebSocketDisconnect, status
 from loguru import logger
 import asyncio

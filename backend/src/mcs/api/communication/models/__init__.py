@@ -35,7 +35,7 @@ __all__ = [
     "GateValveRequest",
     "ShutterRequest",
     "FeederRequest",
-    
+
     # Motion models
     "Position",
     "AxisStatus",

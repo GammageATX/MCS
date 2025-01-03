@@ -12,19 +12,19 @@ class SSHClient:
 
     # Buffer size for reading responses
     BUFFER_SIZE = 4096
-    
+
     # Maximum number of commands in queue
     MAX_QUEUE_SIZE = 100
-    
+
     def __init__(self, config: Dict[str, Any]):
         """Initialize SSH client.
-        
+
         Args:
             config: Client configuration from communication.yaml
         """
         self._config = config
         self._connected = False
-        
+
         # Extract SSH config
         ssh_config = config["communication"]["hardware"]["network"]["ssh"]
         self._host = ssh_config["host"]
@@ -37,15 +37,15 @@ class SSHClient:
             "max_attempts": 3,
             "delay": 5.0
         })
-        
+
         # Initialize client
         self._client: Optional[paramiko.SSHClient] = None
         self._terminal = None
-        
+
         # Command queue and lock
         self._command_queue: asyncio.Queue = asyncio.Queue(maxsize=self.MAX_QUEUE_SIZE)
         self._command_lock = asyncio.Lock()
-        
+
         logger.info(f"Initialized SSH client for {self._host}")
 
     async def connect(self) -> None:
@@ -56,7 +56,7 @@ class SSHClient:
                 # Create SSH client
                 self._client = paramiko.SSHClient()
                 self._client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-                
+
                 # Connect and get shell
                 self._client.connect(
                     self._host,
@@ -65,20 +65,20 @@ class SSHClient:
                     password=self._password,
                     timeout=self._timeout
                 )
-                
+
                 # Set up terminal
                 self._client.get_transport().window_size = 2 * 1024 * 1024
                 self._terminal = self._client.invoke_shell(term="vt100")
-                
+
                 # Initialize gpascii
                 time.sleep(0.2)
                 response = await self._read_response()
                 await self._send_raw("gpascii -2\r\n")
                 time.sleep(1.0)
-                
+
                 response = await self._read_response()
                 logger.debug(f"gpascii response: {response}")
-                
+
                 # Handle error case where we need to retry
                 if "Err" in response:
                     logger.warning("gpascii error, retrying after delay")
@@ -87,23 +87,23 @@ class SSHClient:
                     time.sleep(1)
                     response = await self._read_response()
                     logger.debug(f"gpascii retry response: {response}")
-                
+
                 # Test echo
                 if not ("Err" in response):
                     await self._send_raw("echo1\n\r")
                     response = await self._read_response(size=256)
                     logger.debug(f"echo response: {response}")
-                
+
                 self._connected = True
                 logger.info(f"Connected to SSH at {self._host}")
                 break
-            
+
             except Exception as e:
                 attempt += 1
                 if attempt >= self._retry["max_attempts"]:
                     logger.error(f"Failed to connect to SSH at {self._host} after {attempt} attempts: {str(e)}")
                     raise
-                    
+
                 logger.warning(f"Connection attempt {attempt} failed, retrying in {self._retry['delay']}s")
                 time.sleep(self._retry["delay"])
 
@@ -118,16 +118,16 @@ class SSHClient:
 
     async def _read_response(self, size: int = BUFFER_SIZE) -> str:
         """Read response from terminal with proper buffer handling.
-        
+
         Args:
             size: Buffer size to read
-            
+
         Returns:
             Response string
         """
         if not self._terminal:
             raise ConnectionError("SSH not connected")
-            
+
         # Read in chunks until we get a complete response
         chunks = []
         while self._terminal.recv_ready():
@@ -135,28 +135,28 @@ class SSHClient:
             if not chunk:
                 break
             chunks.append(chunk)
-            
+
         # Combine and decode
         response = b"".join(chunks).decode("utf8")
         return response
 
     async def _send_raw(self, data: str) -> None:
         """Send raw data to terminal.
-        
+
         Args:
             data: Data to send
         """
         if not self._terminal:
             raise ConnectionError("SSH not connected")
-            
+
         self._terminal.send(data)
 
     async def _send_command(self, command: str) -> List[str]:
         """Send command and get response with queueing.
-        
+
         Args:
             command: Command to send
-            
+
         Returns:
             List of response lines
         """
@@ -165,13 +165,13 @@ class SSHClient:
             await self._command_queue.put(command)
         except asyncio.QueueFull:
             raise RuntimeError(f"Command queue full ({self._command_queue.qsize()} commands)")
-            
+
         # Wait for lock
         async with self._command_lock:
             try:
                 # Get command from queue
                 command = await self._command_queue.get()
-                
+
                 # Send command
                 await self._send_raw(command)
                 await asyncio.sleep(self._command_timeout)

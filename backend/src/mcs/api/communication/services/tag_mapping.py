@@ -67,7 +67,7 @@ class TagMappingService:
         """Load tag mapping configuration."""
         try:
             # Load tag configuration from YAML file
-            config_path = os.path.join("config", "tags.yaml")
+            config_path = os.path.join("backend", "config", "tags.yaml")
             if not os.path.exists(config_path):
                 raise FileNotFoundError(f"Tag configuration file not found: {config_path}")
                 
@@ -331,3 +331,43 @@ class TagMappingService:
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
                 message=error_msg
             )
+
+    def scale_value(self, internal_tag: str, raw_value: Any) -> Any:
+        """Scale raw PLC value to internal value based on tag configuration.
+        
+        Args:
+            internal_tag: Internal tag name
+            raw_value: Raw PLC value
+            
+        Returns:
+            Scaled value
+        """
+        if not self.is_running:
+            raise create_error(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                message=f"{self.service_name} service not running"
+            )
+
+        if internal_tag not in self._tag_map:
+            logger.error(f"Tag not found in mapping: {internal_tag}")
+            return raw_value
+
+        tag_info = self._tag_map[internal_tag]
+        scaling = tag_info.get("scaling")
+
+        if not scaling:
+            return raw_value
+
+        if scaling == "12bit_dac":
+            # Convert 12-bit DAC value (0-4095) to range
+            range_min = tag_info.get("range", [0.0, 100.0])[0]
+            range_max = tag_info.get("range", [0.0, 100.0])[1]
+            return range_min + (range_max - range_min) * (raw_value / 4095.0)
+
+        elif scaling == "12bit_linear":
+            # Already scaled by PLC, just return as is
+            return raw_value
+
+        else:
+            logger.warning(f"Unknown scaling type {scaling} for tag {internal_tag}")
+            return raw_value

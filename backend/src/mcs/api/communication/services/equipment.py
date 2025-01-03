@@ -1,6 +1,6 @@
 """Equipment service implementation."""
 
-from typing import Dict, Any, Optional, Callable, List
+from typing import Dict, Any, Callable
 from datetime import datetime
 from fastapi import status
 from loguru import logger
@@ -9,7 +9,7 @@ from mcs.utils.errors import create_error
 from mcs.utils.health import ServiceHealth, ComponentHealth
 from mcs.api.communication.services.tag_cache import TagCacheService
 from mcs.api.communication.models.equipment import (
-    GasState, VacuumState, FeederState, NozzleState, EquipmentState
+    GasState, VacuumState, EquipmentState
 )
 
 

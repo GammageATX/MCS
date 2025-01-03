@@ -6,7 +6,7 @@ import yaml
 import uvicorn
 from loguru import logger
 
-from mcs.api.communication.communication_app import create_communication_app
+from mcs.api.communication.communication_app import create_communication_service  # noqa: F401
 from mcs.utils.errors import create_error
 
 
@@ -49,14 +49,14 @@ def setup_logging():
 def load_config():
     """Load service configuration."""
     try:
-        config_path = os.path.join("config", "communication.yaml")
+        config_path = os.path.join("backend", "config", "communication.yaml")
         if not os.path.exists(config_path):
             logger.warning(f"Config file not found at {config_path}, using defaults")
             return {
                 "service": {
                     "version": "1.0.0",
                     "host": "0.0.0.0",
-                    "port": 8006,
+                    "port": 8003,
                     "history_retention_days": 30
                 }
             }
@@ -85,7 +85,7 @@ def main():
         
         # Get config from environment or use defaults
         host = os.getenv("COMMUNICATION_HOST", service_config.get("host", "0.0.0.0"))
-        port = int(os.getenv("COMMUNICATION_PORT", service_config.get("port", 8006)))
+        port = int(os.getenv("COMMUNICATION_PORT", service_config.get("port", 8003)))
         reload = os.getenv("COMMUNICATION_RELOAD", "false").lower() == "true"
         
         # Log startup configuration
@@ -95,7 +95,7 @@ def main():
         
         # Run service
         uvicorn.run(
-            "mcs.api.communication.communication_app:create_communication_app",
+            "mcs.api.communication.communication_app:create_communication_service",
             host=host,
             port=port,
             reload=reload,

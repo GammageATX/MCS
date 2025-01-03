@@ -56,7 +56,6 @@ Build a comprehensive control system for a novel micro cold spray coating proces
 - Communication Service (Port 8003)
 - Process Service (Port 8004)
 - Data Collection Service (Port 8005)
-- Validation Service (Port 8006)
 
 #### Configuration Management
 

@@ -1,6 +1,5 @@
 """Motion control endpoints."""
 
-from typing import Dict, Any
 from fastapi import APIRouter, Request, WebSocket, WebSocketDisconnect, status
 from loguru import logger
 import asyncio

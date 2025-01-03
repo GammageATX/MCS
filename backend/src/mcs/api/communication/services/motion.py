@@ -1,6 +1,6 @@
 """Motion service implementation."""
 
-from typing import Dict, Any, Optional, Callable, List
+from typing import Dict, Any, Callable
 from datetime import datetime
 from fastapi import status as http_status
 from loguru import logger

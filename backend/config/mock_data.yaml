@@ -11,6 +11,12 @@ plc_tags:
   FeederSwitch: true # Feeder gas line valve
   NozzleSelect: false # Active nozzle selection (false=1, true=2)
 
+  # Feeder Control
+  P6: 500 # Feeder 1 frequency (Hz)
+  P10: false # Feeder 1 running state
+  P106: 500 # Feeder 2 frequency (Hz)
+  P110: false # Feeder 2 running state
+
   # Vacuum Control
   MechPumpStart: false # Mechanical pump running
   MechPumpStop: false # Mechanical pump stopped

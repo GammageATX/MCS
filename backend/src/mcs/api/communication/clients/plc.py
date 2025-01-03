@@ -7,7 +7,7 @@ from productivity import ProductivityPLC
 
 class PLCClient:
     """Client for communicating with Productivity PLC."""
-    
+
     def __init__(self, config: Dict[str, Any]):
         """Initialize PLC client.
         

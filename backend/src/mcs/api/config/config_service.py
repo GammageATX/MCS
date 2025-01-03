@@ -4,10 +4,10 @@ import os
 import json
 import yaml
 from datetime import datetime
-from typing import Dict, List, Optional, Any, Union
+from typing import Dict, Any
 from loguru import logger
 
-from fastapi import status, HTTPException
+from fastapi import status
 from mcs.utils.errors import create_error
 from mcs.utils.health import ServiceHealth, ComponentHealth
 from mcs.api.config.services.file_service import FileService

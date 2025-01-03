@@ -1,11 +1,9 @@
 """Communication API endpoints."""
 
 from typing import Dict, Any
-from fastapi import APIRouter, Request, WebSocket, WebSocketDisconnect, status
+from fastapi import APIRouter, WebSocket, WebSocketDisconnect, status
 from loguru import logger
 import asyncio
-
-from mcs.utils.errors import create_error
 
 
 router = APIRouter()
