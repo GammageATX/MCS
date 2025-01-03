@@ -1,7 +1,9 @@
 # Micro Cold Spray (MCS) Project Overview
 
 ## Project Goal
+
 Build a comprehensive control system for a novel micro cold spray coating process that:
+
 - Aerosolizes submicron-sized powders
 - Operates in vacuum environment
 - Uses converging-diverging nozzle
@@ -11,6 +13,7 @@ Build a comprehensive control system for a novel micro cold spray coating proces
 ## Architecture
 
 ### Hardware Components
+
 1. **Gas Management System**
    - Pneumatic valves
    - Mass flow controllers
@@ -38,22 +41,25 @@ Build a comprehensive control system for a novel micro cold spray coating proces
 ### Software Architecture
 
 #### Frontend (React + TypeScript)
+
 - Modern React application with TypeScript
 - Component-based architecture with shadcn/ui
 - Real-time monitoring and control interface
 - WebSocket integration for live updates
 
 #### Backend (FastAPI + Python)
+
 - Multiple microservices architecture:
-  - UI Service (Port 8000)
-  - Configuration Service (Port 8001)
-  - State Service (Port 8002)
-  - Communication Service (Port 8003)
-  - Process Service (Port 8004)
-  - Data Collection Service (Port 8005)
-  - Validation Service (Port 8006)
+- UI Service (Port 8000)
+- Configuration Service (Port 8001)
+- State Service (Port 8002)
+- Communication Service (Port 8003)
+- Process Service (Port 8004)
+- Data Collection Service (Port 8005)
+- Validation Service (Port 8006)
 
 #### Configuration Management
+
 1. **Component Configuration**
    - Nozzle properties
    - Powder properties
@@ -91,6 +97,7 @@ Build a comprehensive control system for a novel micro cold spray coating proces
    - Performance metrics collection
 
 ## Technical Requirements
+
 - Type-safe communication between frontend and backend
 - Real-time data processing and visualization
 - Secure hardware control interfaces
@@ -98,6 +105,7 @@ Build a comprehensive control system for a novel micro cold spray coating proces
 - Extensive system logging and monitoring
 
 ## Development Guidelines
+
 1. **Code Requirements**
    - TypeScript types in shared/
    - API documentation with OpenAPI
@@ -110,4 +118,4 @@ Build a comprehensive control system for a novel micro cold spray coating proces
    - Strict type checking
    - Clear documentation
    - Component isolation
-   - Error handling best practices 
+   - Error handling best practices

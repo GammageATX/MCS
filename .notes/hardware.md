@@ -1,7 +1,9 @@
 # Hardware Documentation
 
 ## System Overview
+
 The micro cold spray system is a specialized coating process that:
+
 - Uses submicron-sized powder particles
 - Operates in a controlled vacuum environment
 - Employs a converging-diverging nozzle design
@@ -11,100 +13,115 @@ The micro cold spray system is a specialized coating process that:
 ## Hardware Components
 
 ### 1. Gas Management System
+
 **Purpose:** Control and regulate aerosol gas flow to nozzle
 
 #### Components
+
 - **Pneumatic Valves**
-  - Main gas valve
-  - Feeder gas valve
-  - Safety shutoff valves
+- Main gas valve
+- Feeder gas valve
+- Safety shutoff valves
 
 - **Mass Flow Controllers**
-  - Main gas flow control
-  - Feeder gas flow control
-  - Flow rate monitoring
+- Main gas flow control
+- Feeder gas flow control
+- Flow rate monitoring
 
 #### Safety Requirements
+
 - Pressure relief mechanisms
 - Emergency shutoff capability
 - Flow rate limits and alarms
 - Leak detection
 
 ### 2. Vacuum System
+
 **Purpose:** Maintain and regulate vacuum chamber environment
 
 #### Components
+
 - **Vacuum Pumps**
-  - Mechanical pump
-  - Booster pump
-  - Pressure monitoring
+- Mechanical pump
+- Booster pump
+- Pressure monitoring
 
 - **Gate Valve**
-  - Chamber isolation
-  - Emergency venting
-  - Pressure control
+- Chamber isolation
+- Emergency venting
+- Pressure control
 
 #### Safety Requirements
+
 - Pressure monitoring at multiple points
 - Emergency venting capability
 - Pump protection interlocks
 - Chamber pressure limits
 
 ### 3. Spray Control System
+
 **Purpose:** Control spray process and pattern generation
 
 #### Components
+
 - **Nozzle Assembly**
-  - Converging-diverging design
-  - Multiple nozzle capability
-  - Shutter mechanism
+- Converging-diverging design
+- Multiple nozzle capability
+- Shutter mechanism
 
 - **Substrate Stage**
-  - Multi-axis motion control
-  - Position feedback
-  - Pattern execution
+- Multi-axis motion control
+- Position feedback
+- Pattern execution
 
 #### Safety Requirements
+
 - Position limit switches
 - Collision avoidance
 - Emergency stop capability
 - Motion interlocks
 
 ### 4. Powder Management System
+
 **Purpose:** Control powder feed and conditioning
 
 #### Components
+
 - **Deagglomerator**
-  - Motor control
-  - Speed regulation
-  - Powder conditioning
+- Motor control
+- Speed regulation
+- Powder conditioning
 
 - **3-Way Valves**
-  - Flow path control
-  - System switching
-  - Dual hardware setup support
+- Flow path control
+- System switching
+- Dual hardware setup support
 
 #### Safety Requirements
+
 - Powder containment
 - Motor overload protection
 - Emergency purge capability
 - Contamination prevention
 
 ### 5. External Powder Feeder
+
 **Purpose:** Precise powder feed rate control
 
 #### Components
+
 - **PLC Control System**
-  - SSH interface
-  - Feed rate regulation
-  - Status monitoring
+- SSH interface
+- Feed rate regulation
+- Status monitoring
 
 - **Feed Mechanism**
-  - Powder transport
-  - Rate control
-  - Feed verification
+- Powder transport
+- Rate control
+- Feed verification
 
 #### Safety Requirements
+
 - Feed rate limits
 - Powder level monitoring
 - System isolation capability
@@ -113,6 +130,7 @@ The micro cold spray system is a specialized coating process that:
 ## Hardware Safety Interlocks
 
 ### System-wide Safety Requirements
+
 1. **Emergency Stop System**
    - Immediate process halt
    - Safe state transition
@@ -132,6 +150,7 @@ The micro cold spray system is a specialized coating process that:
    - Power monitoring
 
 ### Operational Safety Checks
+
 1. **Startup Sequence**
    - Component initialization order
    - System verification
@@ -153,6 +172,7 @@ The micro cold spray system is a specialized coating process that:
 ## Maintenance Requirements
 
 ### Regular Maintenance
+
 1. **Daily Checks**
    - Pressure readings
    - Flow verification
@@ -172,6 +192,7 @@ The micro cold spray system is a specialized coating process that:
    - Performance validation
 
 ### Calibration Requirements
+
 1. **Flow Controllers**
    - Flow rate verification
    - Zero point calibration
@@ -188,4 +209,4 @@ The micro cold spray system is a specialized coating process that:
    - Pressure sensors
    - Temperature sensors
    - Position sensors
-   - Flow sensors 
+   - Flow sensors

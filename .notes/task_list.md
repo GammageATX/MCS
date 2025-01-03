@@ -3,6 +3,7 @@
 ## Current Sprint
 
 ### High Priority
+
 - [ ] Service Architecture Setup
   - [x] Create monorepo structure
   - [x] Configure shared types
@@ -34,6 +35,7 @@
     - [ ] Hardware switching logic
 
 ### Medium Priority
+
 - [ ] Process Control Features
   - [ ] Configuration Management
     - [ ] Nozzle configuration
@@ -59,6 +61,7 @@
     - [ ] Real-time graphs
 
 ### Low Priority
+
 - [ ] System Documentation
   - [ ] API Documentation
     - [ ] OpenAPI specs
@@ -70,11 +73,13 @@
     - [ ] Troubleshooting guide
 
 ## Completed Tasks
+
 - [x] Initial project setup
 - [x] Basic repository structure
 - [x] Shared type definitions
 
 ## Backlog
+
 1. Advanced Features
    - Motion control improvements
    - Advanced pattern generation
@@ -91,7 +96,8 @@
    - Remote monitoring capabilities
 
 ## Notes
+
 - All services must follow standardized service pattern
 - Hardware control requires comprehensive safety checks
 - Real-time features need proper error handling
-- Documentation must be updated with each feature 
+- Documentation must be updated with each feature

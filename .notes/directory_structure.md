@@ -1,7 +1,8 @@
 # MCS Project Directory Structure
 
 ## Root Directory
-```
+
+```directory_structure
 mcs/
 ├── .notes/                 # Project documentation and planning
 │   ├── project_overview.md # Project goals and architecture
@@ -43,6 +44,7 @@ mcs/
 ```
 
 ## Key Files
+
 - `.cursorrules` - AI assistant configuration
 - `.cursorignore` - Files to ignore in AI analysis
 - `package.json` - Root package configuration
@@ -50,7 +52,8 @@ mcs/
 - `README.md` - Project overview and setup instructions
 
 ## Notes
+
 - All feature-specific code should be in appropriate feature directories
 - Shared types must be in shared/src/types
 - Tests should mirror the structure of the code they test
-- Documentation should be kept up to date with code changes 
+- Documentation should be kept up to date with code changes
