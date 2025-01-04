@@ -175,36 +175,62 @@ class MotionService:
                 message=error_msg
             )
 
-    async def health(self) -> ServiceHealth:
-        """Get service health status."""
+    async def _get_component_health(self) -> Dict[str, ComponentHealth]:
+        """Get health status of all components."""
         try:
-            # Check component health
-            tag_cache_ok = self._tag_cache is not None and self._tag_cache.is_running
-            controller_ok = self.is_running
+            # Get current motion state
+            status = await self.get_status()
             
-            # Build component statuses
             components = {
                 "tag_cache": ComponentHealth(
-                    status="ok" if tag_cache_ok else "error",
-                    error=None if tag_cache_ok else "Tag cache not initialized or not running"
-                ),
-                "controller": ComponentHealth(
-                    status="ok" if controller_ok else "error",
-                    error=None if controller_ok else "Motion controller not initialized"
+                    status="ok" if self._tag_cache and self._tag_cache.is_running else "error",
+                    error=None if self._tag_cache and self._tag_cache.is_running else "Tag cache not running"
                 )
             }
             
-            # Overall status is error if any component is in error
-            overall_status = "error" if any(c.status == "error" for c in components.values()) else "ok"
+            if status:
+                # Check module status
+                components["module"] = ComponentHealth(
+                    status="ok" if status.module_ready else "error",
+                    error=None if status.module_ready else "Motion module not ready"
+                )
+                
+                # Check axis status
+                for axis_name, axis in [("x", status.x_axis), ("y", status.y_axis), ("z", status.z_axis)]:
+                    components[f"{axis_name}_axis"] = ComponentHealth(
+                        status="ok" if not axis.error and axis.homed else "error",
+                        error="Not homed" if not axis.homed else "Axis error" if axis.error else None
+                    )
+            else:
+                components["status"] = ComponentHealth(
+                    status="error",
+                    error="Motion status not available"
+                )
+            
+            return components
+            
+        except Exception as e:
+            logger.error(f"Failed to get component health: {str(e)}")
+            return {
+                "error": ComponentHealth(
+                    status="error",
+                    error=f"Failed to get component health: {str(e)}"
+                )
+            }
+
+    async def health(self) -> ServiceHealth:
+        """Get service health status."""
+        try:
+            component_healths = await self._get_component_health()
             
             return ServiceHealth(
-                status=overall_status,
+                status="ok" if all(h.status == "ok" for h in component_healths.values()) else "error",
                 service=self.service_name,
                 version=self.version,
                 is_running=self.is_running,
                 uptime=self.uptime,
-                error=None if overall_status == "ok" else "One or more components in error state",
-                components=components
+                error=None if all(h.status == "ok" for h in component_healths.values()) else "One or more components in error state",
+                components=component_healths
             )
             
         except Exception as e:
@@ -217,8 +243,7 @@ class MotionService:
                 is_running=False,
                 uptime=self.uptime,
                 error=error_msg,
-                components={name: ComponentHealth(status="error", error=error_msg)
-                            for name in ["tag_cache", "controller"]}
+                components={"error": ComponentHealth(status="error", error=error_msg)}
             )
 
     async def get_position(self) -> Position:
@@ -413,7 +438,7 @@ class MotionService:
                 )
 
             # Set current position as home
-            await self._tag_cache.set_tag("motion.motion_control.set_home", True)
+            await self._tag_cache.set_tag("motion.set_home", True)
 
             # Notify state change
             await self._notify_state_changed()

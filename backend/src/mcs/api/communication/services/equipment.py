@@ -177,8 +177,8 @@ class EquipmentService:
                 message=error_msg
             )
 
-    async def health(self) -> ServiceHealth:
-        """Get service health status."""
+    async def _get_component_health(self) -> Dict[str, ComponentHealth]:
+        """Get health status of all components."""
         try:
             # Get current equipment state
             equipment_state = await self.get_equipment_state()
@@ -186,108 +186,125 @@ class EquipmentService:
             # Check component health
             tag_cache_ok = self._tag_cache is not None and self._tag_cache.is_running
             
-            # Gas control health based on actual state
-            gas_ok = True
-            gas_error = None
-            if equipment_state and equipment_state.gas:
-                gas = equipment_state.gas
-                # Only check flows if they are active (non-zero setpoint)
-                if gas.main_flow > 0:
-                    main_flow_error = abs(gas.main_flow - gas.main_flow_measured) / gas.main_flow > 0.1  # 10% tolerance
-                else:
-                    main_flow_error = False
-                    
-                if gas.feeder_flow > 0:
-                    feeder_flow_error = abs(gas.feeder_flow - gas.feeder_flow_measured) / gas.feeder_flow > 0.1  # 10% tolerance
-                else:
-                    feeder_flow_error = False
-                    
-                if main_flow_error or feeder_flow_error:
-                    gas_ok = False
-                    gas_error = "Flow rates out of tolerance"
-            else:
-                gas_ok = False
-                gas_error = "Gas state not available"
-                
-            # Vacuum system health based on actual state
-            vacuum_ok = True
-            vacuum_error = None
-            if equipment_state and equipment_state.vacuum:
-                vacuum = equipment_state.vacuum
-                # Check vacuum system state
-                if vacuum.chamber_pressure > 1000:
-                    vacuum_ok = False
-                    vacuum_error = "Chamber pressure too high"
-            else:
-                vacuum_ok = False
-                vacuum_error = "Vacuum state not available"
-                
-            # Motion system health based on actual state
-            motion_ok = True
-            motion_error = None
-            if equipment_state and equipment_state.hardware:
-                hardware = equipment_state.hardware
-                if not hardware.motion_enabled:
-                    motion_ok = False
-                    motion_error = "Motion system disabled"
-                elif not hardware.position_valid:
-                    motion_ok = False
-                    motion_error = "Position tracking invalid"
-            else:
-                motion_ok = False
-                motion_error = "Hardware state not available"
-                
-            # Pressure monitoring health based on actual state
-            pressure_ok = True
-            pressure_error = None
-            if equipment_state and equipment_state.pressure:
-                pressure = equipment_state.pressure
-                # Check if any pressures are out of safe range
-                if pressure.main_supply < 50 or pressure.main_supply > 150:
-                    pressure_ok = False
-                    pressure_error = "Main supply pressure out of range"
-                elif pressure.nozzle > 1000:
-                    pressure_ok = False
-                    pressure_error = "Nozzle pressure too high"
-            else:
-                pressure_ok = False
-                pressure_error = "Pressure state not available"
-            
-            # Build component statuses
             components = {
                 "tag_cache": ComponentHealth(
                     status="ok" if tag_cache_ok else "error",
                     error=None if tag_cache_ok else "Tag cache not initialized or not running"
-                ),
-                "gas_control": ComponentHealth(
-                    status="ok" if gas_ok else "error",
-                    error=gas_error
-                ),
-                "vacuum": ComponentHealth(
-                    status="ok" if vacuum_ok else "error",
-                    error=vacuum_error
-                ),
-                "motion": ComponentHealth(
-                    status="ok" if motion_ok else "error",
-                    error=motion_error
-                ),
-                "pressure": ComponentHealth(
-                    status="ok" if pressure_ok else "error",
-                    error=pressure_error
                 )
             }
             
-            # Overall status is error if any component is in error
-            overall_status = "error" if any(c.status == "error" for c in components.values()) else "ok"
+            # Only check subsystems if we have equipment state
+            if equipment_state:
+                # Gas control health
+                gas_ok = True
+                gas_error = None
+                if equipment_state.gas:
+                    gas = equipment_state.gas
+                    # Only check flows if they are active (non-zero setpoint)
+                    if gas.main_flow > 0:
+                        main_flow_error = abs(gas.main_flow - gas.main_flow_measured) / gas.main_flow > 0.1
+                        if main_flow_error:
+                            gas_ok = False
+                            gas_error = "Main flow out of tolerance"
+                    
+                    if gas.feeder_flow > 0:
+                        feeder_flow_error = abs(gas.feeder_flow - gas.feeder_flow_measured) / gas.feeder_flow > 0.1
+                        if feeder_flow_error:
+                            gas_ok = False
+                            gas_error = gas_error or "Feeder flow out of tolerance"
+                else:
+                    gas_ok = False
+                    gas_error = "Gas state not available"
+                
+                components["gas"] = ComponentHealth(
+                    status="ok" if gas_ok else "error",
+                    error=gas_error
+                )
+                
+                # Vacuum system health
+                vacuum_ok = True
+                vacuum_error = None
+                if equipment_state.vacuum:
+                    vacuum = equipment_state.vacuum
+                    if vacuum.chamber_pressure > 1000:
+                        vacuum_ok = False
+                        vacuum_error = "Chamber pressure too high"
+                else:
+                    vacuum_ok = False
+                    vacuum_error = "Vacuum state not available"
+                
+                components["vacuum"] = ComponentHealth(
+                    status="ok" if vacuum_ok else "error",
+                    error=vacuum_error
+                )
+                
+                # Hardware health
+                hardware_ok = True
+                hardware_error = None
+                if equipment_state.hardware:
+                    hardware = equipment_state.hardware
+                    if not hardware.motion_enabled:
+                        hardware_ok = False
+                        hardware_error = "Motion system disabled"
+                    elif not hardware.position_valid:
+                        hardware_ok = False
+                        hardware_error = "Position tracking invalid"
+                else:
+                    hardware_ok = False
+                    hardware_error = "Hardware state not available"
+                
+                components["hardware"] = ComponentHealth(
+                    status="ok" if hardware_ok else "error",
+                    error=hardware_error
+                )
+                
+                # Safety health
+                safety_ok = True
+                safety_error = None
+                if equipment_state.safety:
+                    safety = equipment_state.safety
+                    if not safety.interlocks_ok:
+                        safety_ok = False
+                        safety_error = "Interlocks not satisfied"
+                    elif not safety.limits_ok:
+                        safety_ok = False
+                        safety_error = "Motion limits exceeded"
+                    elif safety.emergency_stop:
+                        safety_ok = False
+                        safety_error = "Emergency stop active"
+                else:
+                    safety_ok = False
+                    safety_error = "Safety state not available"
+                
+                components["safety"] = ComponentHealth(
+                    status="ok" if safety_ok else "error",
+                    error=safety_error
+                )
+            
+            return components
+            
+        except Exception as e:
+            logger.error(f"Failed to get component health: {str(e)}")
+            return {
+                "error": ComponentHealth(
+                    status="error",
+                    error=f"Failed to get component health: {str(e)}"
+                )
+            }
+
+    async def health(self) -> ServiceHealth:
+        """Get service health status."""
+        try:
+            component_healths = await self._get_component_health()
             
             return ServiceHealth(
-                status=overall_status,
+                status="ok" if all(h.status == "ok" for h in component_healths.values()) else "error",
                 service=self.service_name,
                 version=self.version,
                 is_running=self.is_running,
                 uptime=self.uptime,
-                error=None if overall_status == "ok" else "One or more components in error state",
-                components=components
+                error=None if all(h.status == "ok" for h in component_healths.values()) else "One or more components in error state",
+                components=component_healths
             )
             
         except Exception as e:
@@ -300,8 +317,7 @@ class EquipmentService:
                 is_running=False,
                 uptime=self.uptime,
                 error=error_msg,
-                components={name: ComponentHealth(status="error", error=error_msg)
-                            for name in ["tag_cache", "gas_control", "vacuum", "motion", "pressure"]}
+                components={"error": ComponentHealth(status="error", error=error_msg)}
             )
 
     async def get_equipment_state(self) -> EquipmentState:

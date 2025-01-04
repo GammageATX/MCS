@@ -1,0 +1,6 @@
+{
+    // Disable PowerShell script analysis (linting)
+    "powershell.codeAnalysis": {
+        "enable": false
+    }
+} 

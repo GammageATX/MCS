@@ -28,7 +28,7 @@ class MockPLCClient:
         # Initialize mock tag values from mock_data.yaml
         self._plc_tags = self._mock_data.get("plc_tags", {}).copy()  # Make a copy
         logger.info(f"Mock client initialized with {len(self._plc_tags)} tags")
-        logger.debug(f"Initial mock tag values: {self._plc_tags}")
+        logger.debug(f"Available mock tags: {list(self._plc_tags.keys())}")
 
     async def connect(self) -> None:
         """Simulate connection."""
@@ -62,12 +62,19 @@ class MockPLCClient:
             
         Returns:
             Mock tag value
+            
+        Raises:
+            KeyError: If tag not found in mock data
         """
         if not self._connected:
             raise ConnectionError("Mock client not connected")
             
-        # Return mock value if exists, otherwise 0
-        value = self._plc_tags.get(tag, 0)
+        # Check if tag exists
+        if tag not in self._plc_tags:
+            logger.warning(f"Tag not found in mock data: {tag}")
+            raise KeyError(f"Tag not found: {tag}")
+            
+        value = self._plc_tags[tag]
         logger.debug(f"Read mock tag {tag} = {value}")
         return value
 
@@ -94,22 +101,37 @@ class MockPLCClient:
         return self._connected
 
     async def get(self, tags: List[str]) -> Dict[str, Any]:
-        """Read multiple mock tag values."""
+        """Read multiple mock tag values.
+        
+        Args:
+            tags: List of tags to read
+            
+        Returns:
+            Dict mapping tag names to values
+            
+        Note:
+            Tags not found in mock data will be skipped with a warning
+        """
         if not self._connected:
             raise ConnectionError("Mock client not connected")
             
         # Return mock values for all requested tags
         values = {}
+        missing_tags = []
         for tag in tags:
-            value = self._plc_tags.get(tag)
-            if value is None:
-                logger.warning(f"No mock value found for tag: {tag}")
-                continue  # Skip missing tags instead of defaulting to 0
-            values[tag] = value
-            logger.debug(f"Read mock tag {tag} = {value}")
+            if tag not in self._plc_tags:
+                missing_tags.append(tag)
+                continue
+            values[tag] = self._plc_tags[tag]
             
-        logger.debug(f"Requested tags: {tags}")
-        logger.debug(f"Returning values: {values}")
+        if missing_tags:
+            logger.warning(f"Tags not found in mock data: {missing_tags}")
+            logger.debug(f"Available mock tags: {list(self._plc_tags.keys())}")
+            
+        if not values:
+            logger.error("No valid tags found in request")
+            
+        logger.debug(f"Read {len(values)} mock tags")
         return values
 
     async def _simulate_updates(self) -> None:

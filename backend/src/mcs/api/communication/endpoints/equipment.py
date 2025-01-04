@@ -32,7 +32,7 @@ async def get_state(request: Request) -> EquipmentState:
                 message="Service not running"
             )
 
-        state = await service.get_state()
+        state = await service.equipment.get_equipment_state()
         return state
 
     except Exception as e:

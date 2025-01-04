@@ -5,6 +5,7 @@ import yaml
 from typing import Dict, Any, Optional
 from datetime import datetime
 from fastapi import status
+from fastapi.exceptions import HTTPException
 from loguru import logger
 
 from mcs.utils.errors import create_error
@@ -199,31 +200,56 @@ class TagMappingService:
                 message=error_msg
             )
 
-    async def health(self) -> ServiceHealth:
-        """Get service health status."""
+    async def _get_component_health(self) -> Dict[str, ComponentHealth]:
+        """Get health status of all components."""
         try:
-            # Check tag mapping status
-            mapping_ok = len(self._tag_map) > 0
-            
-            # Build component statuses
             components = {
+                "config": ComponentHealth(
+                    status="ok" if os.path.exists(os.path.join("backend", "config", "tags.yaml")) else "error",
+                    error=None if os.path.exists(os.path.join("backend", "config", "tags.yaml")) else "Tag configuration file not found"
+                ),
                 "mapping": ComponentHealth(
-                    status="ok" if mapping_ok else "error",
-                    error=None if mapping_ok else "No tag mappings loaded"
+                    status="ok" if len(self._tag_map) > 0 else "error",
+                    error=None if len(self._tag_map) > 0 else "No tag mappings loaded"
                 )
             }
             
-            # Overall status is error if any component is in error
-            overall_status = "error" if any(c.status == "error" for c in components.values()) else "ok"
+            # Add detailed mapping stats
+            mapped_tags = sum(1 for tag_info in self._tag_map.values() if tag_info.get("mapped", False))
+            components["mapped_tags"] = ComponentHealth(
+                status="ok" if mapped_tags > 0 else "warning",
+                error=None if mapped_tags > 0 else "No mapped tags found",
+                details={
+                    "total_tags": len(self._tag_map),
+                    "mapped_tags": mapped_tags,
+                    "unmapped_tags": len(self._tag_map) - mapped_tags
+                }
+            )
+            
+            return components
+            
+        except Exception as e:
+            logger.error(f"Failed to get component health: {str(e)}")
+            return {
+                "error": ComponentHealth(
+                    status="error",
+                    error=f"Failed to get component health: {str(e)}"
+                )
+            }
+
+    async def health(self) -> ServiceHealth:
+        """Get service health status."""
+        try:
+            component_healths = await self._get_component_health()
             
             return ServiceHealth(
-                status=overall_status,
+                status="ok" if all(h.status == "ok" for h in component_healths.values()) else "error",
                 service=self.service_name,
                 version=self.version,
                 is_running=self.is_running,
                 uptime=self.uptime,
-                error=None if overall_status == "ok" else "One or more components in error state",
-                components=components
+                error=None if all(h.status == "ok" for h in component_healths.values()) else "One or more components in error state",
+                components=component_healths
             )
             
         except Exception as e:
@@ -236,7 +262,7 @@ class TagMappingService:
                 is_running=False,
                 uptime=self.uptime,
                 error=error_msg,
-                components={"mapping": ComponentHealth(status="error", error=error_msg)}
+                components={"error": ComponentHealth(status="error", error=error_msg)}
             )
 
     def get_plc_tag(self, internal_tag: str) -> Optional[str]:
@@ -341,6 +367,9 @@ class TagMappingService:
             
         Returns:
             Scaled value
+            
+        Raises:
+            HTTPException: If service not running or tag not found
         """
         if not self.is_running:
             raise create_error(
@@ -348,26 +377,69 @@ class TagMappingService:
                 message=f"{self.service_name} service not running"
             )
 
+        # Validate tag exists
         if internal_tag not in self._tag_map:
-            logger.error(f"Tag not found in mapping: {internal_tag}")
-            return raw_value
+            error_msg = f"Tag not found in mapping: {internal_tag}"
+            logger.error(error_msg)
+            raise create_error(
+                status_code=status.HTTP_404_NOT_FOUND,
+                message=error_msg
+            )
 
-        tag_info = self._tag_map[internal_tag]
-        scaling = tag_info.get("scaling")
+        try:
+            tag_info = self._tag_map[internal_tag]
+            scaling = tag_info.get("scaling")
 
-        if not scaling:
-            return raw_value
+            if not scaling:
+                return raw_value
 
-        if scaling == "12bit_dac":
-            # Convert 12-bit DAC value (0-4095) to range
-            range_min = tag_info.get("range", [0.0, 100.0])[0]
-            range_max = tag_info.get("range", [0.0, 100.0])[1]
-            return range_min + (range_max - range_min) * (raw_value / 4095.0)
+            # Validate raw value type
+            if not isinstance(raw_value, (int, float)):
+                error_msg = f"Invalid raw value type for {internal_tag}: {type(raw_value)}"
+                logger.error(error_msg)
+                raise create_error(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    message=error_msg
+                )
 
-        elif scaling == "12bit_linear":
-            # Already scaled by PLC, just return as is
-            return raw_value
+            if scaling == "12bit_dac":
+                # Validate raw value range
+                if not 0 <= raw_value <= 4095:
+                    error_msg = f"Raw value {raw_value} out of range for 12-bit DAC"
+                    logger.error(error_msg)
+                    raise create_error(
+                        status_code=status.HTTP_400_BAD_REQUEST,
+                        message=error_msg
+                    )
+                    
+                # Get range with validation
+                range_info = tag_info.get("range")
+                if not range_info or not isinstance(range_info, list) or len(range_info) != 2:
+                    error_msg = f"Invalid range configuration for {internal_tag}"
+                    logger.error(error_msg)
+                    raise create_error(
+                        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                        message=error_msg
+                    )
+                    
+                range_min, range_max = range_info
+                return range_min + (range_max - range_min) * (raw_value / 4095.0)
 
-        else:
-            logger.warning(f"Unknown scaling type {scaling} for tag {internal_tag}")
-            return raw_value
+            elif scaling == "12bit_linear":
+                # Already scaled by PLC, just return as is
+                return raw_value
+
+            else:
+                error_msg = f"Unknown scaling type {scaling} for tag {internal_tag}"
+                logger.warning(error_msg)
+                return raw_value
+
+        except Exception as e:
+            if not isinstance(e, HTTPException):
+                error_msg = f"Failed to scale value for {internal_tag}: {str(e)}"
+                logger.error(error_msg)
+                raise create_error(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    message=error_msg
+                )
+            raise

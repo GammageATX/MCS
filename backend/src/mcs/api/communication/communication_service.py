@@ -64,6 +64,26 @@ class CommunicationService:
         """Get service uptime."""
         return (datetime.now() - self._start_time).total_seconds() if self._start_time else 0.0
 
+    @property
+    def equipment(self) -> EquipmentService:
+        """Get equipment service."""
+        return self._equipment
+
+    @property
+    def motion(self) -> MotionService:
+        """Get motion service."""
+        return self._motion
+
+    @property
+    def tag_cache(self) -> TagCacheService:
+        """Get tag cache service."""
+        return self._tag_cache
+
+    @property
+    def tag_mapping(self) -> TagMappingService:
+        """Get tag mapping service."""
+        return self._tag_mapping
+
     async def initialize(self) -> None:
         """Initialize service."""
         try:

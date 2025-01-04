@@ -97,34 +97,43 @@ class TagCacheService:
             
             # Get all mapped PLC tags
             plc_tags = []
-            for tag_info in self._tag_mapping._tag_map.values():
+            internal_to_plc = {}  # Track mapping for error reporting
+            for internal_tag, tag_info in self._tag_mapping._tag_map.items():
                 if tag_info.get("mapped", False) and tag_info.get("plc_tag"):
-                    plc_tags.append(tag_info["plc_tag"])
+                    plc_tag = tag_info["plc_tag"]
+                    plc_tags.append(plc_tag)
+                    internal_to_plc[plc_tag] = internal_tag
+            
+            logger.info(f"Found {len(plc_tags)} mapped PLC tags")
             
             # Get initial values
             if plc_tags:
                 try:
                     values = await self._plc_client.get(plc_tags)
-                    logger.debug(f"Initial PLC values: {values}")
+                    logger.debug(f"Retrieved {len(values)} initial PLC values")
                     
                     # Store both PLC and internal tag values
-                    for internal_tag, tag_info in self._tag_mapping._tag_map.items():
-                        if tag_info.get("mapped", False):
-                            plc_tag = tag_info.get("plc_tag")
-                            if plc_tag in values:
-                                raw_value = values[plc_tag]
-                                # Store raw PLC tag value
-                                self._cache[plc_tag] = raw_value
-                                # Store scaled internal tag value
-                                scaled_value = self._tag_mapping.scale_value(internal_tag, raw_value)
-                                self._cache[internal_tag] = scaled_value
-                                logger.debug(f"Initialized {internal_tag} = {scaled_value} (PLC: {plc_tag} = {raw_value})")
+                    for plc_tag, value in values.items():
+                        internal_tag = internal_to_plc[plc_tag]
+                        # Store raw PLC tag value
+                        self._cache[plc_tag] = value
+                        # Store scaled internal tag value
+                        scaled_value = self._tag_mapping.scale_value(internal_tag, value)
+                        self._cache[internal_tag] = scaled_value
+                        logger.debug(f"Initialized {internal_tag} = {scaled_value} (PLC: {plc_tag} = {value})")
+                        
+                    # Log any missing tags
+                    missing_tags = set(plc_tags) - set(values.keys())
+                    if missing_tags:
+                        missing_internal = [internal_to_plc[t] for t in missing_tags]
+                        logger.warning(f"Missing PLC tags: {missing_tags}")
+                        logger.warning(f"Corresponding internal tags: {missing_internal}")
+                        
                 except Exception as e:
                     logger.error(f"Failed to get initial PLC values: {e}")
                     raise
             
-            logger.info(f"{self.service_name} service initialized")
-            logger.debug(f"Initial cache contents: {self._cache}")
+            logger.info(f"{self.service_name} service initialized with {len(self._cache)} cached values")
             
         except Exception as e:
             error_msg = f"Failed to initialize {self.service_name} service: {str(e)}"
@@ -205,41 +214,59 @@ class TagCacheService:
                 message=error_msg
             )
 
-    async def health(self) -> ServiceHealth:
-        """Get service health status."""
+    async def _get_component_health(self) -> Dict[str, ComponentHealth]:
+        """Get health status of all components."""
         try:
-            # Check component health
-            cache_ok = self.is_running and isinstance(self._cache, dict)
-            plc_ok = self._plc_client is not None
-            mapping_ok = self._tag_mapping is not None
-            
-            # Build component statuses
             components = {
-                "cache": ComponentHealth(
-                    status="ok" if cache_ok else "error",
-                    error=None if cache_ok else "Cache not initialized"
-                ),
                 "plc_client": ComponentHealth(
-                    status="ok" if plc_ok else "error",
-                    error=None if plc_ok else "PLC client not initialized"
+                    status="ok" if self._plc_client and self._plc_client.is_connected() else "error",
+                    error=None if self._plc_client and self._plc_client.is_connected() else "PLC client not connected"
                 ),
                 "tag_mapping": ComponentHealth(
-                    status="ok" if mapping_ok else "error",
-                    error=None if mapping_ok else "Tag mapping not initialized"
+                    status="ok" if self._tag_mapping and self._tag_mapping.is_running else "error",
+                    error=None if self._tag_mapping and self._tag_mapping.is_running else "Tag mapping not running"
+                ),
+                "cache": ComponentHealth(
+                    status="ok" if isinstance(self._cache, dict) else "error",
+                    error=None if isinstance(self._cache, dict) else "Cache not initialized"
+                ),
+                "polling": ComponentHealth(
+                    status="ok" if self._polling_task and not self._polling_task.done() else "error",
+                    error=None if self._polling_task and not self._polling_task.done() else "Polling task not running"
                 )
             }
             
-            # Overall status is error if any component is in error
-            overall_status = "error" if any(c.status == "error" for c in components.values()) else "ok"
+            # Add SSH client status if configured
+            if self._ssh_client:
+                components["ssh_client"] = ComponentHealth(
+                    status="ok" if self._ssh_client.is_connected() else "error",
+                    error=None if self._ssh_client.is_connected() else "SSH client not connected"
+                )
+            
+            return components
+            
+        except Exception as e:
+            logger.error(f"Failed to get component health: {str(e)}")
+            return {
+                "error": ComponentHealth(
+                    status="error",
+                    error=f"Failed to get component health: {str(e)}"
+                )
+            }
+
+    async def health(self) -> ServiceHealth:
+        """Get service health status."""
+        try:
+            component_healths = await self._get_component_health()
             
             return ServiceHealth(
-                status=overall_status,
+                status="ok" if all(h.status == "ok" for h in component_healths.values()) else "error",
                 service=self.service_name,
                 version=self.version,
                 is_running=self.is_running,
                 uptime=self.uptime,
-                error=None if overall_status == "ok" else "One or more components in error state",
-                components=components
+                error=None if all(h.status == "ok" for h in component_healths.values()) else "One or more components in error state",
+                components=component_healths
             )
             
         except Exception as e:
@@ -252,8 +279,7 @@ class TagCacheService:
                 is_running=False,
                 uptime=self.uptime,
                 error=error_msg,
-                components={name: ComponentHealth(status="error", error=error_msg)
-                            for name in ["cache", "plc_client", "tag_mapping"]}
+                components={"error": ComponentHealth(status="error", error=error_msg)}
             )
 
     def add_state_callback(self, callback: Callable[[str, Any], None]) -> None:
@@ -342,53 +368,92 @@ class TagCacheService:
     async def _poll_tags(self) -> None:
         """Poll PLC tags and update cache."""
         prev_values = {}  # Track previous values to reduce logging
+        consecutive_errors = 0  # Track consecutive errors for backoff
+        MAX_CONSECUTIVE_ERRORS = 3  # Max errors before maximum delay
         
         while self._is_running:
             try:
-                # Get all tag values
-                for tag in self._cache.keys():
-                    # Get tag mapping info
-                    tag_info = self._tag_mapping.get_tag_info(tag)
-                    if not tag_info:
-                        continue
+                # Get all mapped PLC tags
+                plc_tags = []
+                internal_to_plc = {}  # Track mapping for error reporting
+                for internal_tag, tag_info in self._tag_mapping._tag_map.items():
+                    if tag_info.get("mapped", False) and tag_info.get("plc_tag"):
+                        plc_tag = tag_info["plc_tag"]
+                        plc_tags.append(plc_tag)
+                        internal_to_plc[plc_tag] = internal_tag
 
-                    # Check if tag is mapped to PLC or SSH
-                    is_plc_tag = "plc_tag" in tag_info
-                    is_ssh_tag = tag.startswith("ssh.")
+                if not plc_tags:
+                    logger.warning("No mapped PLC tags found")
+                    await asyncio.sleep(self._polling["interval"])
+                    continue
 
+                # Get all tag values in one batch
+                try:
+                    values = await self._plc_client.get(plc_tags)
+                    if not values:
+                        raise ValueError("No values returned from PLC")
+                        
+                    # Reset error counter on success
+                    consecutive_errors = 0
+                    
+                except Exception as e:
+                    consecutive_errors += 1
+                    error_msg = f"Failed to read PLC tags: {str(e)}"
+                    logger.error(error_msg)
+                    
+                    # Increase delay after multiple consecutive errors, up to max
+                    delay = self._polling["interval"] * (2 ** min(consecutive_errors - 1, MAX_CONSECUTIVE_ERRORS))
+                    logger.warning(f"Backing off for {delay} seconds after {consecutive_errors} consecutive errors")
+                    await asyncio.sleep(delay)
+                    continue
+                
+                # Update cache with new values
+                for plc_tag, value in values.items():
+                    internal_tag = internal_to_plc[plc_tag]
+                    
                     try:
-                        if is_plc_tag:
-                            # Read from PLC
-                            plc_tag = tag_info["plc_tag"]
-                            value = await self._plc_client.read_tag(plc_tag)
-                        elif is_ssh_tag and self._ssh_client:
-                            # Read from SSH
-                            ssh_tag = tag.replace("ssh.", "")  # Remove ssh. prefix
-                            value = await self._ssh_client.read_tag(ssh_tag)
-                        else:
-                            # Internal tag - skip polling
-                            continue
-
-                        # Only log and update if value changed
-                        if tag not in prev_values or value != prev_values[tag]:
-                            self._cache[tag] = value
-                            prev_values[tag] = value
-                            logger.debug(f"Updated tag {tag} = {value}")
-
+                        # Only update and log if value changed
+                        if plc_tag not in prev_values or value != prev_values[plc_tag]:
+                            # Store raw PLC tag value
+                            self._cache[plc_tag] = value
+                            # Store scaled internal tag value
+                            scaled_value = self._tag_mapping.scale_value(internal_tag, value)
+                            self._cache[internal_tag] = scaled_value
+                            prev_values[plc_tag] = value
+                            logger.debug(f"Updated tag {internal_tag} = {scaled_value} (PLC: {plc_tag} = {value})")
+                            
                     except Exception as e:
-                        logger.error(f"Error polling tag {tag}: {str(e)}")
-                        continue
+                        logger.error(f"Error updating tag {internal_tag}: {str(e)}")
+                        # Continue with other tags
+
+                # Log any missing tags
+                missing_tags = set(plc_tags) - set(values.keys())
+                if missing_tags:
+                    missing_internal = [internal_to_plc[t] for t in missing_tags]
+                    logger.warning(f"Missing PLC tags: {missing_tags}")
+                    logger.warning(f"Corresponding internal tags: {missing_internal}")
 
                 # Update equipment states
-                await self._update_equipment_states()
+                try:
+                    await self._update_equipment_states()
+                except Exception as e:
+                    logger.error(f"Error updating equipment states: {str(e)}")
+                    # Continue polling even if state update fails
                         
                 await asyncio.sleep(self._polling["interval"])
                 
             except asyncio.CancelledError:
+                logger.info("Polling task cancelled")
                 break
+                
             except Exception as e:
-                logger.error(f"Error polling tags: {str(e)}")
-                await asyncio.sleep(1.0)  # Delay before retry
+                consecutive_errors += 1
+                logger.error(f"Error in polling loop: {str(e)}")
+                
+                # Increase delay after multiple consecutive errors, up to max
+                delay = self._polling["interval"] * (2 ** min(consecutive_errors - 1, MAX_CONSECUTIVE_ERRORS))
+                logger.warning(f"Backing off for {delay} seconds after {consecutive_errors} consecutive errors")
+                await asyncio.sleep(delay)
 
     async def _update_equipment_states(self) -> None:
         """Update cached equipment states."""
