@@ -99,14 +99,17 @@ class TagCacheService:
                     plc_tag = tag_info["plc_tag"]
                     plc_tags.append(plc_tag)
                     internal_to_plc[plc_tag] = internal_tag
+                    logger.debug(f"Mapped internal tag {internal_tag} -> PLC tag {plc_tag}")
             
             logger.info(f"Found {len(plc_tags)} mapped PLC tags")
+            logger.debug(f"PLC tags: {plc_tags}")
+            logger.debug(f"Internal mappings: {internal_to_plc}")
             
             # Get initial values
             if plc_tags:
                 try:
                     values = await self._plc_client.get(plc_tags)
-                    logger.debug(f"Retrieved {len(values)} initial PLC values")
+                    logger.debug(f"Retrieved {len(values)} initial PLC values: {values}")
                     
                     # Store both PLC and internal tag values
                     for plc_tag, value in values.items():
@@ -130,6 +133,7 @@ class TagCacheService:
                     raise
             
             logger.info(f"{self.service_name} service initialized with {len(self._cache)} cached values")
+            logger.debug(f"Cache contents: {self._cache}")
             
         except Exception as e:
             error_msg = f"Failed to initialize {self.service_name} service: {str(e)}"
@@ -345,10 +349,12 @@ class TagCacheService:
                         plc_tag = tag_info["plc_tag"]
                         plc_tags.append(plc_tag)
                         internal_to_plc[plc_tag] = internal_tag
+                        logger.debug(f"Polling mapped tag: {internal_tag} -> {plc_tag}")
 
                 # Get current values
                 if plc_tags:
                     values = await self._plc_client.get(plc_tags)
+                    logger.debug(f"Polled values: {values}")
                     
                     # Process each value
                     for plc_tag, value in values.items():
@@ -366,7 +372,7 @@ class TagCacheService:
                             
                             # If internal value changed, notify subscribers and callbacks
                             if old_value != scaled_value:
-                                logger.debug(f"Tag changed: {internal_tag} = {scaled_value}")
+                                logger.debug(f"Tag changed: {internal_tag} = {scaled_value} (PLC: {plc_tag} = {value})")
                                 
                                 # Notify tag subscribers
                                 self._notify_tag_subscribers(internal_tag, scaled_value)
@@ -421,7 +427,10 @@ class TagCacheService:
         """
         for callback in self._state_callbacks:
             try:
-                callback(state_type, state)
+                if asyncio.iscoroutinefunction(callback):
+                    asyncio.create_task(callback(state_type, state))
+                else:
+                    callback(state_type, state)
             except Exception as e:
                 logger.error(f"Error in state callback: {str(e)}")
 
@@ -473,11 +482,14 @@ class TagCacheService:
             tag: Tag that changed
             value: New value
         """
-        # Notify tag-specific subscribers
+        # Create task for each subscriber to avoid blocking
         if tag in self._tag_subscribers:
             for callback in self._tag_subscribers[tag]:
                 try:
-                    callback(tag, value)
+                    if asyncio.iscoroutinefunction(callback):
+                        asyncio.create_task(callback(tag, value))
+                    else:
+                        callback(tag, value)
                 except Exception as e:
                     logger.error(f"Error in tag subscriber for {tag}: {str(e)}")
         
@@ -485,6 +497,9 @@ class TagCacheService:
         if "*" in self._tag_subscribers:
             for callback in self._tag_subscribers["*"]:
                 try:
-                    callback(tag, value)
+                    if asyncio.iscoroutinefunction(callback):
+                        asyncio.create_task(callback(tag, value))
+                    else:
+                        callback(tag, value)
                 except Exception as e:
                     logger.error(f"Error in global tag subscriber: {str(e)}")

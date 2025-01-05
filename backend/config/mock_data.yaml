@@ -26,25 +26,27 @@ plc_tags:
   "Open": true # Gate valve open position
   "Partial": false # Gate valve partial position
   "VentSwitch": false # Chamber vent valve
+  "ChamberPressure": 2.5 # Chamber vacuum pressure (torr)
 
   # Pressure Measurements
-  "ChamberPressure": 5.1 # Chamber vacuum pressure (torr)
-  "MainGasPressure": 100.0 # Main gas supply pressure (psi)
+  "MainGasPressure": 80.0 # Main gas supply pressure (psi)
+  "RegulatorPressure": 60.0 # Regulator pressure (psi)
+  "NozzlePressure": 55.0 # Nozzle pressure (psi)
   "FeederPressure": 500.0 # Powder feeder pressure (torr)
-  "NozzlePressure": 501.0 # Nozzle pressure (torr)
-  "RegulatorPressure": 80.0 # Regulator pressure (psi)
+
+  # Motion Control
+  "AMC.Ax1Position": 0.0 # X axis position (mm)
+  "AMC.Ax2Position": 0.0 # Y axis position (mm)
+  "AMC.Ax3Position": 10.0 # Z axis position (mm)
+  "AMC.Ax1AxisStatus": 4 # X axis status
+  "AMC.Ax2AxisStatus": 4 # Y axis status
+  "AMC.Ax3AxisStatus": 4 # Z axis status
 
   # Shutter Control
   "Shutter": false # Nozzle shutter solenoid
 
   # Motion Control Status
   "AMC.ModuleStatus": true # Motion controller ready status
-  "AMC.Ax1Position": 50.0 # X axis position (mm)
-  "AMC.Ax2Position": 50.0 # Y axis position (mm)
-  "AMC.Ax3Position": 10.0 # Z axis position (mm)
-  "AMC.Ax1AxisStatus": 4 # X axis status (4 = Initialization Complete)
-  "AMC.Ax2AxisStatus": 4 # Y axis status
-  "AMC.Ax3AxisStatus": 4 # Z axis status
 
   # Motion Parameters
   "XAxis.Velocity": 10.0 # X axis velocity (mm/s)

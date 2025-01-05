@@ -259,10 +259,67 @@ class InternalStateService:
             bool: True if tag affects rule
         """
         if rule["type"] == "comparison":
-            return tag == rule["tag"]
+            rule_tag = rule["tag"]
+            if "{1|2}" in rule_tag:
+                # Check if tag matches either variant
+                return tag == rule_tag.replace("{1|2}", "1") or tag == rule_tag.replace("{1|2}", "2")
+            return tag == rule_tag
         elif rule["type"] == "multi_condition":
-            return any(tag == c["tag"] for c in rule["conditions"])
+            return any(
+                tag == c["tag"].replace("{1|2}", "1") or tag == c["tag"].replace("{1|2}", "2")
+                if "{1|2}" in c["tag"]
+                else tag == c["tag"]
+                for c in rule["conditions"]
+            )
         return False
+
+    async def _get_tag_value(self, tag_pattern: str) -> Any:
+        """Get tag value, handling wildcard patterns.
+        
+        Args:
+            tag_pattern: Tag pattern that may include {1|2} wildcards
+            
+        Returns:
+            Tag value or None if not found
+        """
+        # Handle {1|2} pattern
+        if "{1|2}" in tag_pattern:
+            # Try both variants
+            for i in [1, 2]:
+                tag = tag_pattern.replace("{1|2}", str(i))
+                value = await self._tag_cache.get_tag(tag)
+                if value is not None:
+                    logger.debug(f"Found value for wildcard tag {tag_pattern} -> {tag} = {value}")
+                    return value
+            logger.warning(f"No value found for wildcard tag pattern: {tag_pattern}")
+            return None
+        else:
+            value = await self._tag_cache.get_tag(tag_pattern)
+            if value is None:
+                logger.warning(f"No value found for tag: {tag_pattern}")
+            else:
+                logger.debug(f"Found value for tag {tag_pattern} = {value}")
+            return value
+
+    async def _resolve_value(self, value: Any) -> Any:
+        """Resolve a value that may contain a placeholder.
+        
+        Args:
+            value: Value to resolve, may be a placeholder like {tag.name}
+            
+        Returns:
+            Resolved value
+        """
+        if isinstance(value, str) and value.startswith("{") and value.endswith("}"):
+            # This is a placeholder, get the actual value from tag cache
+            tag = value[1:-1]  # Remove { and }
+            resolved = await self._tag_cache.get_tag(tag)
+            if resolved is None:
+                logger.warning(f"Could not resolve placeholder {value} - tag {tag} not found")
+                return None
+            logger.debug(f"Resolved placeholder {value} -> {resolved}")
+            return resolved
+        return value
 
     async def _evaluate_state(self, state: str) -> None:
         """Evaluate a single internal state.
@@ -278,42 +335,64 @@ class InternalStateService:
                 
             # Get current value based on rule type
             if rule["type"] == "comparison":
-                tag_value = await self._tag_cache.get_tag(rule["tag"])
+                tag_value = await self._get_tag_value(rule["tag"])
                 if tag_value is None:
                     logger.warning(f"No value for tag: {rule['tag']}")
                     return
                     
+                # Convert values to float for numeric comparisons
+                try:
+                    tag_value = float(tag_value)
+                    compare_value = await self._resolve_value(rule["value"])
+                    if compare_value is None:
+                        return
+                    compare_value = float(compare_value)
+                except (TypeError, ValueError) as e:
+                    logger.error(f"Failed to convert values for comparison: {e}")
+                    return
+                    
                 operator = rule.get("operator", "equal")
                 if operator == "greater_than":
-                    new_value = tag_value > rule["value"]
+                    new_value = tag_value > compare_value
                 elif operator == "less_than":
-                    new_value = tag_value < rule["value"]
+                    new_value = tag_value < compare_value
                 elif operator == "greater_than_equal":
-                    new_value = tag_value >= rule["value"]
+                    new_value = tag_value >= compare_value
                 elif operator == "less_than_equal":
-                    new_value = tag_value <= rule["value"]
+                    new_value = tag_value <= compare_value
                 else:  # equal
-                    new_value = tag_value == rule["value"]
+                    new_value = tag_value == compare_value
                     
             elif rule["type"] == "multi_condition":
                 values = []
                 for condition in rule["conditions"]:
-                    tag_value = await self._tag_cache.get_tag(condition["tag"])
+                    tag_value = await self._get_tag_value(condition["tag"])
                     if tag_value is None:
                         logger.warning(f"No value for tag: {condition['tag']}")
                         return
                         
+                    # Convert values to float for numeric comparisons
+                    try:
+                        tag_value = float(tag_value)
+                        compare_value = await self._resolve_value(condition["value"])
+                        if compare_value is None:
+                            return
+                        compare_value = float(compare_value)
+                    except (TypeError, ValueError) as e:
+                        logger.error(f"Failed to convert values for comparison: {e}")
+                        return
+                        
                     operator = condition.get("operator", "equal")
                     if operator == "greater_than":
-                        values.append(tag_value > condition["value"])
+                        values.append(tag_value > compare_value)
                     elif operator == "less_than":
-                        values.append(tag_value < condition["value"])
+                        values.append(tag_value < compare_value)
                     elif operator == "greater_than_equal":
-                        values.append(tag_value >= condition["value"])
+                        values.append(tag_value >= compare_value)
                     elif operator == "less_than_equal":
-                        values.append(tag_value <= condition["value"])
+                        values.append(tag_value <= compare_value)
                     else:  # equal
-                        values.append(tag_value == condition["value"])
+                        values.append(tag_value == compare_value)
                         
                 new_value = all(values)
                 
