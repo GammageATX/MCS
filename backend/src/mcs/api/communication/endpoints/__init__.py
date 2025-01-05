@@ -5,8 +5,14 @@ from fastapi import APIRouter, WebSocket, WebSocketDisconnect, status
 from loguru import logger
 import asyncio
 
+from mcs.api.communication.endpoints.equipment import router as equipment_router
+from mcs.api.communication.endpoints.motion import router as motion_router
 
 router = APIRouter()
+
+# Include sub-routers
+router.include_router(equipment_router)
+router.include_router(motion_router)
 
 
 @router.websocket("/ws/state")

@@ -5,7 +5,7 @@ from fastapi import status
 from loguru import logger
 
 from mcs.utils.errors import create_error
-from mcs.utils.health import ServiceHealth, ComponentHealth
+from mcs.utils.health import ServiceHealth, ComponentHealth, HealthStatus, create_error_health
 from mcs.api.process.services import (
     PatternService,
     ParameterService,
@@ -113,50 +113,64 @@ class ProcessService:
     async def health(self) -> ServiceHealth:
         """Get service health status."""
         try:
-            # Get component health
-            components = {
-                "pattern": await self.pattern_service.health(),
-                "parameter": await self.parameter_service.health(),
-                "sequence": await self.sequence_service.health(),
-                "schema": await self.schema_service.health()
-            }
+            # Check critical components
+            components = {}
             
-            # Determine overall status
-            overall_status = "ok"
-            for component in components.values():
-                if component.status == "error":
-                    overall_status = "error"
-                    break
-                elif component.status == "degraded" and overall_status != "error":
-                    overall_status = "degraded"
+            # Pattern service (critical for process execution)
+            pattern_health = await self.pattern_service.health()
+            pattern_ok = pattern_health and pattern_health.status == HealthStatus.OK
+            components["pattern"] = ComponentHealth(
+                status=HealthStatus.OK if pattern_ok else HealthStatus.ERROR,
+                error=pattern_health.error if pattern_health else "Pattern service not available",
+                details=pattern_health.components if pattern_health else None
+            )
             
+            # Parameter service (critical for process configuration)
+            param_health = await self.parameter_service.health()
+            param_ok = param_health and param_health.status == HealthStatus.OK
+            components["parameter"] = ComponentHealth(
+                status=HealthStatus.OK if param_ok else HealthStatus.ERROR,
+                error=param_health.error if param_health else "Parameter service not available",
+                details=param_health.components if param_health else None
+            )
+            
+            # Sequence service (critical for process flow)
+            seq_health = await self.sequence_service.health()
+            seq_ok = seq_health and seq_health.status == HealthStatus.OK
+            components["sequence"] = ComponentHealth(
+                status=HealthStatus.OK if seq_ok else HealthStatus.ERROR,
+                error=seq_health.error if seq_health else "Sequence service not available",
+                details=seq_health.components if seq_health else None
+            )
+            
+            # Schema service (critical for validation)
+            schema_health = await self.schema_service.health()
+            schema_ok = schema_health and schema_health.status == HealthStatus.OK
+            components["schema"] = ComponentHealth(
+                status=HealthStatus.OK if schema_ok else HealthStatus.ERROR,
+                error=schema_health.error if schema_health else "Schema service not available",
+                details=schema_health.components if schema_health else None
+            )
+            
+            # Overall status is ERROR if any critical component is in error
+            overall_status = HealthStatus.ERROR if any(
+                c.status == HealthStatus.ERROR for c in components.values()
+            ) else HealthStatus.OK
+
             return ServiceHealth(
                 status=overall_status,
                 service=self._service_name,
                 version=self._version,
                 is_running=self.is_running,
                 uptime=self.uptime,
-                error=None if overall_status == "ok" else "One or more components in error state",
+                error="Critical component failure" if overall_status == HealthStatus.ERROR else None,
                 components=components
             )
             
         except Exception as e:
             error_msg = f"Health check failed: {str(e)}"
             logger.error(error_msg)
-            return ServiceHealth(
-                status="error",
-                service=self._service_name,
-                version=self._version,
-                is_running=False,
-                uptime=0.0,
-                error=error_msg,
-                components={
-                    "pattern": ComponentHealth(status="error", error=str(e)),
-                    "parameter": ComponentHealth(status="error", error=str(e)),
-                    "sequence": ComponentHealth(status="error", error=str(e)),
-                    "schema": ComponentHealth(status="error", error=str(e))
-                }
-            )
+            return create_error_health(self._service_name, self._version, error_msg)
 
     @property
     def uptime(self) -> float:

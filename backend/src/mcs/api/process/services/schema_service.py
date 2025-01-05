@@ -1,6 +1,7 @@
 """Schema service for process API."""
 
 import yaml
+import os
 from typing import Dict, Any, List
 from datetime import datetime
 from fastapi import status
@@ -8,7 +9,7 @@ from loguru import logger
 from pathlib import Path
 
 from mcs.utils.errors import create_error
-from mcs.utils.health import ServiceHealth, ComponentHealth
+from mcs.utils.health import ServiceHealth, ComponentHealth, HealthStatus, create_error_health
 
 
 class SchemaService:
@@ -24,7 +25,7 @@ class SchemaService:
         # Initialize components to None
         self._schemas: Dict[str, Dict] = {}
         self._failed_schemas = {}
-        self._schema_dir = Path("schemas/process")
+        self._schema_dir = Path("backend/src/mcs/api/process/schemas")
         
         logger.info(f"{self.service_name} service initialized")
 
@@ -151,29 +152,32 @@ class SchemaService:
     async def health(self) -> ServiceHealth:
         """Get service health status."""
         try:
-            # Attempt recovery of failed schemas
-            await self._attempt_recovery()
+            # Check critical components
+            schemas_loaded = bool(self._schemas)
+            dir_exists = self._schema_dir.exists()
+            dir_writable = dir_exists and os.access(self._schema_dir, os.W_OK)
             
-            # Check component health
+            # Build component status focusing on critical components
             components = {
                 "schemas": ComponentHealth(
-                    status="ok" if self._schemas else "error",
-                    error=None if self._schemas else "No schemas loaded"
+                    status=HealthStatus.OK if schemas_loaded and dir_exists and dir_writable else HealthStatus.ERROR,
+                    error=None if schemas_loaded and dir_exists and dir_writable else "Schema system not operational",
+                    details={
+                        "total_schemas": len(self._schemas),
+                        "loaded_schemas": list(self._schemas.keys()),
+                        "failed_schemas": list(self._failed_schemas.keys()),
+                        "recovery_attempts": len(self._failed_schemas),
+                        "directory": {
+                            "path": str(self._schema_dir),
+                            "exists": dir_exists,
+                            "writable": dir_writable
+                        }
+                    }
                 )
             }
             
-            # Add failed schemas component if any exist
-            if self._failed_schemas:
-                failed_list = ", ".join(self._failed_schemas.keys())
-                components["failed_schemas"] = ComponentHealth(
-                    status="error",
-                    error=f"Failed schemas: {failed_list}"
-                )
-            
-            # Overall status is error only if no schemas loaded
-            overall_status = "error" if not self._schemas else "ok"
-            if not self.is_running:
-                overall_status = "error"
+            # Overall status is ERROR if schema system is not operational
+            overall_status = HealthStatus.ERROR if not (schemas_loaded and dir_exists and dir_writable) else HealthStatus.OK
             
             return ServiceHealth(
                 status=overall_status,
@@ -181,22 +185,14 @@ class SchemaService:
                 version=self.version,
                 is_running=self.is_running,
                 uptime=self.uptime,
-                error=None if overall_status == "ok" else "One or more components in error state",
+                error="Critical component failure" if overall_status == HealthStatus.ERROR else None,
                 components=components
             )
             
         except Exception as e:
             error_msg = f"Health check failed: {str(e)}"
             logger.error(error_msg)
-            return ServiceHealth(
-                status="error",
-                service=self.service_name,
-                version=self.version,
-                is_running=False,
-                uptime=self.uptime,
-                error=error_msg,
-                components={"schemas": ComponentHealth(status="error", error=error_msg)}
-            )
+            return create_error_health(self.service_name, self.version, error_msg)
 
     async def list_schemas(self) -> List[str]:
         """List available schemas."""

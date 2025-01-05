@@ -1,12 +1,12 @@
 """Equipment control endpoints."""
 
-from typing import Literal
+from typing import Dict, Literal
 from fastapi import APIRouter, Request, WebSocket, WebSocketDisconnect, status
 from loguru import logger
 import asyncio
 
 from mcs.utils.errors import create_error
-from mcs.api.communication.models.equipment import (
+from mcs.api.communication.models import (
     EquipmentState,
     GasFlowRequest,
     GasValveRequest,
@@ -252,81 +252,55 @@ async def websocket_equipment_state(websocket: WebSocket):
 
         # Create queue for state updates
         queue = asyncio.Queue()
+        internal_queue = asyncio.Queue()
         
         # Subscribe to equipment state updates
         def state_changed(state: dict):
             asyncio.create_task(queue.put(state))
+            
+        def internal_state_changed(states: Dict[str, bool]):
+            asyncio.create_task(internal_queue.put(states))
         
-        # Register callback
+        # Register callbacks
         service.equipment.on_state_changed(state_changed)
+        service.internal_state.on_equipment_state_changed(internal_state_changed)
 
         try:
             # Send initial state
             initial_state = await service.get_state()
+            initial_internal = await service.internal_state.get_equipment_states()
+            
             await websocket.send_json({
-                "type": "state_update",
-                "data": {
-                    "equipment": {
-                        "gas": {
-                            "main_flow": initial_state.gas.main_flow,
-                            "main_flow_measured": initial_state.gas.main_flow_measured,
-                            "feeder_flow": initial_state.gas.feeder_flow,
-                            "feeder_flow_measured": initial_state.gas.feeder_flow_measured,
-                            "main_valve": initial_state.gas.main_valve,
-                            "feeder_valve": initial_state.gas.feeder_valve
-                        },
-                        "vacuum": {
-                            "chamber_pressure": initial_state.vacuum.chamber_pressure,
-                            "gate_valve": initial_state.vacuum.gate_valve,
-                            "mech_pump": initial_state.vacuum.mech_pump,
-                            "booster_pump": initial_state.vacuum.booster_pump,
-                            "vent_valve": initial_state.vacuum.vent_valve
-                        },
-                        "feeder1": initial_state.feeder1,
-                        "feeder2": initial_state.feeder2,
-                        "deagg1": initial_state.deagg1,
-                        "deagg2": initial_state.deagg2,
-                        "nozzle": {
-                            "active_nozzle": initial_state.nozzle.active_nozzle,
-                            "shutter_open": initial_state.nozzle.shutter_open
-                        },
-                        "pressures": {
-                            "chamber": initial_state.pressures.chamber,
-                            "feeder": initial_state.pressures.feeder,
-                            "main_supply": initial_state.pressures.main_supply,
-                            "nozzle": initial_state.pressures.nozzle,
-                            "regulator": initial_state.pressures.regulator
-                        }
-                    },
-                    "motion": {
-                        "position": {
-                            "x": initial_state.motion.position.x,
-                            "y": initial_state.motion.position.y,
-                            "z": initial_state.motion.position.z
-                        },
-                        "status": {
-                            "x_axis": initial_state.motion.status.x_axis,
-                            "y_axis": initial_state.motion.status.y_axis,
-                            "z_axis": initial_state.motion.status.z_axis,
-                            "module_ready": initial_state.motion.status.module_ready
-                        }
-                    },
-                    "safety": {
-                        "hardware": initial_state.safety.hardware,
-                        "process": initial_state.safety.process,
-                        "safety": initial_state.safety.safety
-                    }
-                }
+                "state": initial_state.dict(),
+                "internal_states": initial_internal
             })
 
             # Wait for state updates
             while True:
                 try:
-                    state = await queue.get()
+                    # Wait for either state update
+                    done, pending = await asyncio.wait(
+                        [
+                            asyncio.create_task(queue.get()),
+                            asyncio.create_task(internal_queue.get())
+                        ],
+                        return_when=asyncio.FIRST_COMPLETED
+                    )
+                    
+                    # Cancel pending tasks
+                    for task in pending:
+                        task.cancel()
+                    
+                    # Get latest states
+                    equipment_state = await service.get_state()
+                    internal_states = await service.internal_state.get_equipment_states()
+                    
+                    # Send update
                     await websocket.send_json({
-                        "type": "state_update",
-                        "data": state
+                        "state": equipment_state.dict(),
+                        "internal_states": internal_states
                     })
+
                 except WebSocketDisconnect:
                     logger.info("Equipment WebSocket client disconnected")
                     break
@@ -335,8 +309,9 @@ async def websocket_equipment_state(websocket: WebSocket):
                     break
 
         finally:
-            # Unregister callback when connection closes
+            # Unregister callbacks when connection closes
             service.equipment.remove_state_changed_callback(state_changed)
+            service.internal_state.remove_equipment_state_changed_callback(internal_state_changed)
 
     except Exception as e:
         logger.error(f"Failed to handle equipment WebSocket connection: {str(e)}")
@@ -452,4 +427,72 @@ async def close_shutter(request: Request):
         raise create_error(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             message=f"Failed to close shutter: {str(e)}"
+        )
+
+
+# Equipment internal state endpoints
+@router.get("/internal_states", response_model=Dict[str, bool])
+async def get_equipment_internal_states(request: Request) -> Dict[str, bool]:
+    """Get all equipment-related internal states.
+    
+    Returns:
+        Dict mapping state names to current values for states like:
+        - gas_flow_stable
+        - powder_feed_active
+        - process_ready
+        etc.
+    """
+    try:
+        service = request.app.state.service
+        if not service.is_running:
+            raise create_error(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                message="Service not running"
+            )
+
+        states = await service.internal_state.get_equipment_states()
+        return states
+
+    except Exception as e:
+        error_msg = "Failed to get equipment internal states"
+        logger.error(f"{error_msg}: {str(e)}")
+        raise create_error(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            message=f"{error_msg}: {str(e)}"
+        )
+
+
+@router.get("/internal_states/{state_name}", response_model=bool)
+async def get_equipment_internal_state(request: Request, state_name: str) -> bool:
+    """Get single equipment-related internal state.
+    
+    Args:
+        state_name: Name of internal state to get
+        
+    Returns:
+        Current state value
+    """
+    try:
+        service = request.app.state.service
+        if not service.is_running:
+            raise create_error(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                message="Service not running"
+            )
+
+        state = await service.internal_state.get_equipment_state(state_name)
+        if state is None:
+            raise create_error(
+                status_code=status.HTTP_404_NOT_FOUND,
+                message=f"State '{state_name}' not found"
+            )
+            
+        return state
+
+    except Exception as e:
+        error_msg = f"Failed to get equipment internal state {state_name}"
+        logger.error(f"{error_msg}: {str(e)}")
+        raise create_error(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            message=f"{error_msg}: {str(e)}"
         )

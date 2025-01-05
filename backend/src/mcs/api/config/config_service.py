@@ -9,15 +9,15 @@ from loguru import logger
 
 from fastapi import status
 from mcs.utils.errors import create_error
-from mcs.utils.health import ServiceHealth, ComponentHealth
+from mcs.utils.health import ServiceHealth, ComponentHealth, HealthStatus, create_error_health
 from mcs.api.config.services.file_service import FileService
 from mcs.api.config.services.format_service import FormatService
 from mcs.api.config.services.schema_service import SchemaService
 import jsonschema
 
 
-# Default paths
-DEFAULT_CONFIG_PATH = os.path.join(os.getcwd(), "backend", "config")
+# Default paths - relative to project root
+DEFAULT_CONFIG_PATH = "backend/config"
 DEFAULT_SCHEMA_PATH = os.path.join(DEFAULT_CONFIG_PATH, "schemas")
 
 
@@ -136,7 +136,7 @@ class ConfigService:
                 "components": {
                     "file": {
                         "version": "1.0.0",
-                        "base_path": DEFAULT_CONFIG_PATH
+                        "base_path": os.path.join("backend", "config")
                     },
                     "format": {
                         "version": "1.0.0",
@@ -144,7 +144,7 @@ class ConfigService:
                     },
                     "schema": {
                         "version": "1.0.0",
-                        "schema_path": DEFAULT_SCHEMA_PATH
+                        "schema_path": os.path.join("backend", "config", "schemas")
                     }
                 }
             }
@@ -253,63 +253,82 @@ class ConfigService:
     async def health(self) -> ServiceHealth:
         """Get service health status."""
         try:
-            # Attempt recovery of failed configs
-            await self._attempt_recovery()
+            # Check critical components
+            components = {}
             
-            # Get health from all services
-            file_health = await self._file.health() if self._file else None
-            format_health = await self._format.health() if self._format else None
-            schema_health = await self._schema.health() if self._schema else None
-            
-            # Build component statuses
-            components = {
-                "file": ComponentHealth(
-                    status=file_health.status if file_health else "error",
-                    error=file_health.error if file_health else "Component not initialized"
-                ),
-                "format": ComponentHealth(
-                    status=format_health.status if format_health else "error",
-                    error=format_health.error if format_health else "Component not initialized"
-                ),
-                "schema": ComponentHealth(
-                    status=schema_health.status if schema_health else "error",
-                    error=schema_health.error if schema_health else "Component not initialized"
+            # File service (critical for config access)
+            if self._file:
+                file_health = await self._file.health()
+                file_ok = file_health and file_health.status == HealthStatus.OK
+                components["file"] = ComponentHealth(
+                    status=HealthStatus.OK if file_ok else HealthStatus.ERROR,
+                    error=file_health.error if file_health else "File service not initialized",
+                    details={
+                        "base_path": self._config["components"]["file"]["base_path"],
+                        "recovery_attempts": len(self._failed_configs.get("file", []))
+                    }
                 )
-            }
-            
-            # Add failed configs component if any exist
-            if self._failed_configs:
-                failed_list = ", ".join(self._failed_configs.keys())
-                components["failed_configs"] = ComponentHealth(
-                    status="error",
-                    error=f"Failed configurations: {failed_list}"
+            else:
+                components["file"] = ComponentHealth(
+                    status=HealthStatus.ERROR,
+                    error=self._failed_configs.get("file", "File service not initialized")
                 )
             
-            # Overall status is error only if all components failed
-            overall_status = "error" if not any([self._file, self._format, self._schema]) else "ok"
+            # Schema service (critical for validation)
+            if self._schema:
+                schema_health = await self._schema.health()
+                schema_ok = schema_health and schema_health.status == HealthStatus.OK
+                components["schema"] = ComponentHealth(
+                    status=HealthStatus.OK if schema_ok else HealthStatus.ERROR,
+                    error=schema_health.error if schema_health else "Schema service not initialized",
+                    details={
+                        "schema_path": self._config["components"]["schema"]["schema_path"],
+                        "recovery_attempts": len(self._failed_configs.get("schema", []))
+                    }
+                )
+            else:
+                components["schema"] = ComponentHealth(
+                    status=HealthStatus.ERROR,
+                    error=self._failed_configs.get("schema", "Schema service not initialized")
+                )
             
+            # Format service (critical for parsing)
+            if self._format:
+                format_health = await self._format.health()
+                format_ok = format_health and format_health.status == HealthStatus.OK
+                components["format"] = ComponentHealth(
+                    status=HealthStatus.OK if format_ok else HealthStatus.ERROR,
+                    error=format_health.error if format_health else "Format service not initialized",
+                    details={
+                        "enabled_formats": self._config["components"]["format"]["enabled_formats"],
+                        "recovery_attempts": len(self._failed_configs.get("format", []))
+                    }
+                )
+            else:
+                components["format"] = ComponentHealth(
+                    status=HealthStatus.ERROR,
+                    error=self._failed_configs.get("format", "Format service not initialized")
+                )
+            
+            # Overall status is ERROR if any critical component is in error
+            overall_status = HealthStatus.ERROR if any(
+                c.status == HealthStatus.ERROR for c in components.values()
+            ) else HealthStatus.OK
+
             return ServiceHealth(
                 status=overall_status,
                 service=self.service_name,
                 version=self.version,
                 is_running=self.is_running,
                 uptime=self.uptime,
-                error=None if overall_status == "ok" else "One or more components in error state",
+                error="Critical component failure" if overall_status == HealthStatus.ERROR else None,
                 components=components
             )
             
         except Exception as e:
             error_msg = f"Health check failed: {str(e)}"
             logger.error(error_msg)
-            return ServiceHealth(
-                status="error",
-                service=self.service_name,
-                version=self.version,
-                is_running=False,
-                uptime=self.uptime,
-                error=error_msg,
-                components={}
-            )
+            return create_error_health(self.service_name, self.version, error_msg)
 
     async def list_configs(self) -> list:
         """List available configurations."""

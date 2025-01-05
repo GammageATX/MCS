@@ -6,7 +6,7 @@ from fastapi import status as http_status
 from loguru import logger
 
 from mcs.utils.errors import create_error
-from mcs.utils.health import ServiceHealth, ComponentHealth
+from mcs.utils.health import ServiceHealth, ComponentHealth, HealthStatus, create_error_health
 from mcs.api.communication.services.tag_cache import TagCacheService
 from mcs.api.communication.models.motion import Position, SystemStatus, AxisStatus
 
@@ -178,33 +178,42 @@ class MotionService:
     async def _get_component_health(self) -> Dict[str, ComponentHealth]:
         """Get health status of all components."""
         try:
-            # Get current motion state
-            status = await self.get_status()
-            
+            # Check tag cache status
+            tag_cache_ok = self._tag_cache and self._tag_cache.is_running
             components = {
                 "tag_cache": ComponentHealth(
-                    status="ok" if self._tag_cache and self._tag_cache.is_running else "error",
-                    error=None if self._tag_cache and self._tag_cache.is_running else "Tag cache not running"
+                    status=HealthStatus.OK if tag_cache_ok else HealthStatus.ERROR,
+                    error=None if tag_cache_ok else "Tag cache not running"
                 )
             }
             
-            if status:
-                # Check module status
-                components["module"] = ComponentHealth(
-                    status="ok" if status.module_ready else "error",
-                    error=None if status.module_ready else "Motion module not ready"
-                )
-                
-                # Check axis status
-                for axis_name, axis in [("x", status.x_axis), ("y", status.y_axis), ("z", status.z_axis)]:
-                    components[f"{axis_name}_axis"] = ComponentHealth(
-                        status="ok" if not axis.error and axis.homed else "error",
-                        error="Not homed" if not axis.homed else "Axis error" if axis.error else None
+            # Check motion system status
+            try:
+                status = await self.get_status()
+                if status:
+                    # Check motion module
+                    components["module"] = ComponentHealth(
+                        status=HealthStatus.OK if status.module_ready else HealthStatus.ERROR,
+                        error=None if status.module_ready else "Motion module not ready"
                     )
-            else:
+                    
+                    # Check critical axes
+                    for axis_name, axis in [("x", status.x_axis), ("y", status.y_axis), ("z", status.z_axis)]:
+                        axis_ok = not axis.error and axis.homed
+                        components[f"{axis_name}_axis"] = ComponentHealth(
+                            status=HealthStatus.OK if axis_ok else HealthStatus.ERROR,
+                            error="Not homed" if not axis.homed else "Axis error" if axis.error else None
+                        )
+                else:
+                    components["status"] = ComponentHealth(
+                        status=HealthStatus.ERROR,
+                        error="Motion status not available"
+                    )
+            except Exception as e:
+                logger.error(f"Failed to get motion status: {str(e)}")
                 components["status"] = ComponentHealth(
-                    status="error",
-                    error="Motion status not available"
+                    status=HealthStatus.ERROR,
+                    error=f"Failed to get motion status: {str(e)}"
                 )
             
             return components
@@ -213,7 +222,7 @@ class MotionService:
             logger.error(f"Failed to get component health: {str(e)}")
             return {
                 "error": ComponentHealth(
-                    status="error",
+                    status=HealthStatus.ERROR,
                     error=f"Failed to get component health: {str(e)}"
                 )
             }
@@ -221,30 +230,27 @@ class MotionService:
     async def health(self) -> ServiceHealth:
         """Get service health status."""
         try:
-            component_healths = await self._get_component_health()
+            components = await self._get_component_health()
             
+            # Overall status is ERROR if any critical component is in error
+            overall_status = HealthStatus.ERROR if any(
+                c.status == HealthStatus.ERROR for c in components.values()
+            ) else HealthStatus.OK
+
             return ServiceHealth(
-                status="ok" if all(h.status == "ok" for h in component_healths.values()) else "error",
+                status=overall_status,
                 service=self.service_name,
                 version=self.version,
                 is_running=self.is_running,
                 uptime=self.uptime,
-                error=None if all(h.status == "ok" for h in component_healths.values()) else "One or more components in error state",
-                components=component_healths
+                error="Critical component failure" if overall_status == HealthStatus.ERROR else None,
+                components=components
             )
             
         except Exception as e:
             error_msg = f"Health check failed: {str(e)}"
             logger.error(error_msg)
-            return ServiceHealth(
-                status="error",
-                service=self.service_name,
-                version=self.version,
-                is_running=False,
-                uptime=self.uptime,
-                error=error_msg,
-                components={"error": ComponentHealth(status="error", error=error_msg)}
-            )
+            return create_error_health(self.service_name, self.version, error_msg)
 
     async def get_position(self) -> Position:
         """Get current position."""

@@ -1,15 +1,17 @@
 """Motion control endpoints."""
 
+from typing import Dict
 from fastapi import APIRouter, Request, WebSocket, WebSocketDisconnect, status
 from loguru import logger
 import asyncio
 
 from mcs.utils.errors import create_error
-from mcs.api.communication.models.motion import (
+from mcs.api.communication.models import (
     Position,
     SystemStatus,
     JogRequest,
-    MoveRequest
+    MoveRequest,
+    MotionState
 )
 
 router = APIRouter(prefix="/motion", tags=["motion"])
@@ -71,22 +73,20 @@ async def get_status(request: Request) -> SystemStatus:
 
 @router.websocket("/ws/state")
 async def websocket_motion_state(websocket: WebSocket):
-    """WebSocket endpoint for motion state updates.
-    Uses event subscription to push updates only when state changes."""
+    """WebSocket endpoint for motion state updates."""
     try:
-        # Get service from app state
         service = websocket.app.state.service
         if not service.is_running:
             await websocket.close(code=status.WS_1013_TRY_AGAIN_LATER)
             return
 
-        # Accept connection
         await websocket.accept()
         logger.info("Motion WebSocket client connected")
 
         # Create queues for state updates
         position_queue = asyncio.Queue()
         status_queue = asyncio.Queue()
+        internal_queue = asyncio.Queue()
         
         # Subscribe to state updates
         def position_changed(pos: Position):
@@ -94,31 +94,35 @@ async def websocket_motion_state(websocket: WebSocket):
             
         def status_changed(status: SystemStatus):
             asyncio.create_task(status_queue.put(status))
+            
+        def internal_state_changed(states: Dict[str, bool]):
+            asyncio.create_task(internal_queue.put(states))
         
         # Register callbacks
         service.motion.on_position_changed(position_changed)
         service.motion.on_status_changed(status_changed)
+        service.internal_state.on_motion_state_changed(internal_state_changed)
 
         try:
             # Send initial state
             position = await service.motion.get_position()
             system_status = await service.motion.get_status()
+            internal_states = await service.internal_state.get_motion_states()
+            
             await websocket.send_json({
-                "type": "motion_state",
-                "data": {
-                    "position": position.dict(),
-                    "status": system_status.dict()
-                }
+                "state": MotionState(position=position, status=system_status).dict(),
+                "internal_states": internal_states
             })
 
             # Wait for state updates
             while True:
                 try:
-                    # Wait for either position or status update
+                    # Wait for any state update
                     done, pending = await asyncio.wait(
                         [
                             asyncio.create_task(position_queue.get()),
-                            asyncio.create_task(status_queue.get())
+                            asyncio.create_task(status_queue.get()),
+                            asyncio.create_task(internal_queue.get())
                         ],
                         return_when=asyncio.FIRST_COMPLETED
                     )
@@ -127,17 +131,15 @@ async def websocket_motion_state(websocket: WebSocket):
                     for task in pending:
                         task.cancel()
                     
-                    # Get latest position and status
+                    # Get latest states
                     position = await service.motion.get_position()
                     system_status = await service.motion.get_status()
+                    internal_states = await service.internal_state.get_motion_states()
                     
                     # Send update
                     await websocket.send_json({
-                        "type": "motion_state",
-                        "data": {
-                            "position": position.dict(),
-                            "status": system_status.dict()
-                        }
+                        "state": MotionState(position=position, status=system_status).dict(),
+                        "internal_states": internal_states
                     })
 
                 except WebSocketDisconnect:
@@ -151,6 +153,7 @@ async def websocket_motion_state(websocket: WebSocket):
             # Unregister callbacks when connection closes
             service.motion.remove_position_changed_callback(position_changed)
             service.motion.remove_status_changed_callback(status_changed)
+            service.internal_state.remove_motion_state_changed_callback(internal_state_changed)
 
     except Exception as e:
         logger.error(f"Failed to handle motion WebSocket connection: {str(e)}")
@@ -220,4 +223,70 @@ async def move_to_home(request: Request):
         raise create_error(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             message=f"Failed to move to home: {str(e)}"
+        )
+
+
+@router.get("/internal_states", response_model=Dict[str, bool])
+async def get_motion_internal_states(request: Request) -> Dict[str, bool]:
+    """Get all motion-related internal states.
+    
+    Returns:
+        Dict mapping state names to current values for states like:
+        - position_valid
+        - motion_enabled
+        etc.
+    """
+    try:
+        service = request.app.state.service
+        if not service.is_running:
+            raise create_error(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                message="Service not running"
+            )
+
+        states = await service.internal_state.get_motion_states()
+        return states
+
+    except Exception as e:
+        error_msg = "Failed to get motion internal states"
+        logger.error(f"{error_msg}: {str(e)}")
+        raise create_error(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            message=f"{error_msg}: {str(e)}"
+        )
+
+
+@router.get("/internal_states/{state_name}", response_model=bool)
+async def get_motion_internal_state(request: Request, state_name: str) -> bool:
+    """Get single motion-related internal state.
+    
+    Args:
+        state_name: Name of internal state to get
+        
+    Returns:
+        Current state value
+    """
+    try:
+        service = request.app.state.service
+        if not service.is_running:
+            raise create_error(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                message="Service not running"
+            )
+
+        state = await service.internal_state.get_motion_state(state_name)
+        if state is None:
+            raise create_error(
+                status_code=status.HTTP_404_NOT_FOUND,
+                message=f"State '{state_name}' not found"
+            )
+            
+        return state
+
+    except Exception as e:
+        error_msg = f"Failed to get motion internal state {state_name}"
+        logger.error(f"{error_msg}: {str(e)}")
+        raise create_error(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            message=f"{error_msg}: {str(e)}"
         )

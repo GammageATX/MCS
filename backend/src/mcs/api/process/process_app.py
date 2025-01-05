@@ -6,6 +6,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from loguru import logger
 
+from mcs.utils.errors import create_error  # noqa: F401 - used in error handlers and endpoints
 from mcs.api.process.process_service import ProcessService
 
 

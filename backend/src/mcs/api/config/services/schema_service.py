@@ -9,7 +9,7 @@ from loguru import logger
 import jsonschema
 
 from mcs.utils.errors import create_error
-from mcs.utils.health import ServiceHealth, ComponentHealth
+from mcs.utils.health import ServiceHealth, ComponentHealth, HealthStatus, create_error_health
 
 
 class SchemaService:
@@ -57,8 +57,15 @@ class SchemaService:
     async def initialize(self) -> None:
         """Initialize service."""
         try:
-            # Create schema directory if it doesn't exist
-            os.makedirs(self._schema_path, exist_ok=True)
+            # Verify schema directory exists
+            if not os.path.exists(self._schema_path):
+                error_msg = f"Schema directory does not exist: {self._schema_path}"
+                logger.error(error_msg)
+                raise create_error(
+                    status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                    message=error_msg
+                )
+            
             logger.info(f"Using schema path: {self._schema_path}")
             
             # Load schemas from files
@@ -152,59 +159,45 @@ class SchemaService:
     async def health(self) -> ServiceHealth:
         """Get service health status."""
         try:
-            # Attempt recovery of failed schemas
-            await self._attempt_recovery()
-            
-            # Check component health
+            # Check critical components
             path_exists = os.path.exists(self._schema_path) if self._schema_path else False
             path_writable = os.access(self._schema_path, os.W_OK) if path_exists else False
             schemas_loaded = self._schemas is not None and len(self._schemas) > 0
             
-            # Build component status
+            # Build component status focusing on critical components
             components = {
-                "schema_dir": ComponentHealth(
-                    status="ok" if path_exists and path_writable else "error",
-                    error=None if path_exists and path_writable else "Schema directory not accessible"
-                ),
                 "schemas": ComponentHealth(
-                    status="ok" if schemas_loaded else "error",
-                    error=None if schemas_loaded else "No schemas loaded"
+                    status=HealthStatus.OK if path_exists and path_writable and schemas_loaded else HealthStatus.ERROR,
+                    error=None if path_exists and path_writable and schemas_loaded else "Schema system not operational",
+                    details={
+                        "path": self._schema_path,
+                        "path_exists": path_exists,
+                        "path_writable": path_writable,
+                        "total_schemas": len(self._schemas or {}),
+                        "loaded_schemas": list(self._schemas.keys()) if self._schemas else [],
+                        "failed_schemas": list(self._failed_schemas.keys()),
+                        "recovery_attempts": len(self._failed_schemas)
+                    }
                 )
             }
             
-            # Add failed schemas component if any exist
-            if self._failed_schemas:
-                failed_list = ", ".join(self._failed_schemas.keys())
-                components["failed_schemas"] = ComponentHealth(
-                    status="error",
-                    error=f"Failed to load schemas: {failed_list}"
-                )
-            
-            # Overall status is error only if no schemas loaded
-            overall_status = "error" if not schemas_loaded else "ok"
-            
+            # Overall status is ERROR if schema system is not operational
+            overall_status = HealthStatus.ERROR if not (path_exists and path_writable and schemas_loaded) else HealthStatus.OK
+
             return ServiceHealth(
                 status=overall_status,
                 service=self.service_name,
                 version=self.version,
                 is_running=self.is_running,
                 uptime=self.uptime,
-                error=None if overall_status == "ok" else "One or more components in error state",
+                error="Critical component failure" if overall_status == HealthStatus.ERROR else None,
                 components=components
             )
             
         except Exception as e:
             error_msg = f"Health check failed: {str(e)}"
             logger.error(error_msg)
-            return ServiceHealth(
-                status="error",
-                service=self.service_name,
-                version=self.version,
-                is_running=False,
-                uptime=self.uptime,
-                error=error_msg,
-                components={"error": ComponentHealth(status="error", error=error_msg)}
-            )
+            return create_error_health(self.service_name, self.version, error_msg)
 
     def get_schema(self, name: str) -> Optional[Dict[str, Any]]:
         """Get schema by name.

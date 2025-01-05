@@ -458,7 +458,6 @@ tag_groups:
       mapped: true
       plc_tag: Shutter
       type: bool
-
   safety:
     approach_z:
       access: read/write

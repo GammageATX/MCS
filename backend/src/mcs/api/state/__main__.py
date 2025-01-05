@@ -63,7 +63,7 @@ def main():
         # Setup logging
         setup_logging()
         logger.info("Starting state service...")
-
+        
         # Create service
         app = create_state_service()
         

@@ -28,6 +28,12 @@ class SystemStatus(BaseModel):
     module_ready: bool = Field(..., description="Motion controller ready")
 
 
+class MotionState(BaseModel):
+    """Motion system state."""
+    position: Position = Field(..., description="Current position")
+    status: SystemStatus = Field(..., description="Motion system status")
+
+
 class JogRequest(BaseModel):
     """Jog motion request."""
     axis: str = Field(..., description="Axis to jog (x, y, z)")

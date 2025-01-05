@@ -6,7 +6,7 @@ from fastapi import status
 from loguru import logger
 
 from mcs.utils.errors import create_error
-from mcs.utils.health import ServiceHealth, ComponentHealth
+from mcs.utils.health import ServiceHealth, ComponentHealth, HealthStatus, create_error_health
 
 
 class FileService:
@@ -65,14 +65,15 @@ class FileService:
             # Initialize base path
             self._base_path = self._init_base_path
             
-            # Create base directory if it doesn't exist
-            try:
-                os.makedirs(self._base_path, exist_ok=True)
-                # If directory creation succeeds, remove from failed operations
-                self._failed_operations.pop("base_dir", None)
-            except Exception as e:
-                self._failed_operations["base_dir"] = str(e)
-                logger.error(f"Failed to create base directory: {e}")
+            # Verify base directory exists
+            if not os.path.exists(self._base_path):
+                error_msg = f"Base directory does not exist: {self._base_path}"
+                self._failed_operations["base_dir"] = error_msg
+                logger.error(error_msg)
+                raise create_error(
+                    status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                    message=error_msg
+                )
             
             logger.info(f"Using base path: {self._base_path}")
             logger.info(f"{self.service_name} service initialized")
@@ -148,52 +149,38 @@ class FileService:
     async def health(self) -> ServiceHealth:
         """Get service health status."""
         try:
-            # Attempt recovery of failed operations
-            await self._attempt_recovery()
-            
-            # Check component health
+            # Check critical components
             base_exists = os.path.exists(self._base_path) if self._base_path else False
             base_writable = os.access(self._base_path, os.W_OK) if base_exists else False
             
-            # Build component status
+            # Build component status focusing on critical components
             components = {
                 "base_dir": ComponentHealth(
-                    status="ok" if base_exists and base_writable else "error",
-                    error=None if base_exists and base_writable else "Base directory not accessible"
+                    status=HealthStatus.OK if base_exists and base_writable else HealthStatus.ERROR,
+                    error=None if base_exists and base_writable else "Base directory not accessible",
+                    details={
+                        "path": self._base_path,
+                        "exists": base_exists,
+                        "writable": base_writable,
+                        "recovery_attempts": len(self._failed_operations)
+                    }
                 )
             }
             
-            # Add failed operations component if any exist
-            if self._failed_operations:
-                failed_list = ", ".join(self._failed_operations.keys())
-                components["failed_operations"] = ComponentHealth(
-                    status="error",
-                    error=f"Failed operations: {failed_list}"
-                )
-            
-            # Overall status is error only if base directory is completely inaccessible
-            overall_status = "error" if not base_exists else "ok"
-            
+            # Overall status is ERROR if base directory is inaccessible
+            overall_status = HealthStatus.ERROR if not (base_exists and base_writable) else HealthStatus.OK
+
             return ServiceHealth(
                 status=overall_status,
                 service=self.service_name,
                 version=self.version,
                 is_running=self.is_running,
                 uptime=self.uptime,
-                error=None if overall_status == "ok" else "One or more components in error state",
+                error="Critical component failure" if overall_status == HealthStatus.ERROR else None,
                 components=components
             )
             
         except Exception as e:
             error_msg = f"Health check failed: {str(e)}"
             logger.error(error_msg)
-            return ServiceHealth(
-                status="error",
-                service=self.service_name,
-                version=self.version,
-                is_running=False,
-                uptime=self.uptime,
-                error=error_msg,
-                components={name: ComponentHealth(status="error", error=error_msg)
-                            for name in ["base_dir"]}
-            )
+            return create_error_health(self.service_name, self.version, error_msg)

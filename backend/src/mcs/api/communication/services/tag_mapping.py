@@ -9,7 +9,7 @@ from fastapi.exceptions import HTTPException
 from loguru import logger
 
 from mcs.utils.errors import create_error
-from mcs.utils.health import ServiceHealth, ComponentHealth
+from mcs.utils.health import ServiceHealth, ComponentHealth, HealthStatus, create_error_health
 
 
 def load_config() -> Dict[str, Any]:
@@ -18,7 +18,7 @@ def load_config() -> Dict[str, Any]:
     Returns:
         Dict[str, Any]: Configuration dictionary
     """
-    config_path = os.path.join("config", "tags.yaml")
+    config_path = os.path.join("backend", "config", "tags.yaml")
     if not os.path.exists(config_path):
         raise FileNotFoundError(f"Config file not found: {config_path}")
         
@@ -203,28 +203,21 @@ class TagMappingService:
     async def _get_component_health(self) -> Dict[str, ComponentHealth]:
         """Get health status of all components."""
         try:
+            config_file = os.path.join("backend", "config", "tags.yaml")
+            config_exists = os.path.exists(config_file)
+            mappings_loaded = len(self._tag_map) > 0
+
             components = {
                 "config": ComponentHealth(
-                    status="ok" if os.path.exists(os.path.join("backend", "config", "tags.yaml")) else "error",
-                    error=None if os.path.exists(os.path.join("backend", "config", "tags.yaml")) else "Tag configuration file not found"
+                    status=HealthStatus.OK if config_exists else HealthStatus.ERROR,
+                    error=None if config_exists else "Tag configuration file not found"
                 ),
                 "mapping": ComponentHealth(
-                    status="ok" if len(self._tag_map) > 0 else "error",
-                    error=None if len(self._tag_map) > 0 else "No tag mappings loaded"
+                    status=HealthStatus.OK if mappings_loaded else HealthStatus.ERROR,
+                    error=None if mappings_loaded else "No tag mappings loaded",
+                    details={"total_tags": len(self._tag_map)}
                 )
             }
-            
-            # Add detailed mapping stats
-            mapped_tags = sum(1 for tag_info in self._tag_map.values() if tag_info.get("mapped", False))
-            components["mapped_tags"] = ComponentHealth(
-                status="ok" if mapped_tags > 0 else "warning",
-                error=None if mapped_tags > 0 else "No mapped tags found",
-                details={
-                    "total_tags": len(self._tag_map),
-                    "mapped_tags": mapped_tags,
-                    "unmapped_tags": len(self._tag_map) - mapped_tags
-                }
-            )
             
             return components
             
@@ -232,7 +225,7 @@ class TagMappingService:
             logger.error(f"Failed to get component health: {str(e)}")
             return {
                 "error": ComponentHealth(
-                    status="error",
+                    status=HealthStatus.ERROR,
                     error=f"Failed to get component health: {str(e)}"
                 )
             }
@@ -240,30 +233,27 @@ class TagMappingService:
     async def health(self) -> ServiceHealth:
         """Get service health status."""
         try:
-            component_healths = await self._get_component_health()
+            components = await self._get_component_health()
             
+            # Overall status is ERROR if any component is in error
+            overall_status = HealthStatus.ERROR if any(
+                c.status == HealthStatus.ERROR for c in components.values()
+            ) else HealthStatus.OK
+
             return ServiceHealth(
-                status="ok" if all(h.status == "ok" for h in component_healths.values()) else "error",
+                status=overall_status,
                 service=self.service_name,
                 version=self.version,
                 is_running=self.is_running,
                 uptime=self.uptime,
-                error=None if all(h.status == "ok" for h in component_healths.values()) else "One or more components in error state",
-                components=component_healths
+                error="Critical component failure" if overall_status == HealthStatus.ERROR else None,
+                components=components
             )
             
         except Exception as e:
             error_msg = f"Health check failed: {str(e)}"
             logger.error(error_msg)
-            return ServiceHealth(
-                status="error",
-                service=self.service_name,
-                version=self.version,
-                is_running=False,
-                uptime=self.uptime,
-                error=error_msg,
-                components={"error": ComponentHealth(status="error", error=error_msg)}
-            )
+            return create_error_health(self.service_name, self.version, error_msg)
 
     def get_plc_tag(self, internal_tag: str) -> Optional[str]:
         """Get PLC tag name for internal tag."""
@@ -308,7 +298,7 @@ class TagMappingService:
         return None
 
     def get_tag_type(self, internal_tag: str) -> Optional[str]:
-        """Get tag type."""
+        """Get tag type for internal tag."""
         if not self.is_running:
             raise create_error(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
@@ -316,6 +306,7 @@ class TagMappingService:
             )
 
         if internal_tag not in self._tag_map:
+            logger.error(f"Tag not found in mapping: {internal_tag}")
             return None
             
         return self._tag_map[internal_tag].get("type")

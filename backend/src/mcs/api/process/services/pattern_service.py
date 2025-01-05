@@ -6,9 +6,10 @@ from datetime import datetime
 from fastapi import status
 from loguru import logger
 from pathlib import Path
+import os
 
 from mcs.utils.errors import create_error
-from mcs.utils.health import ServiceHealth, ComponentHealth
+from mcs.utils.health import ServiceHealth, ComponentHealth, HealthStatus, create_error_health
 from mcs.api.process.models.process_models import (
     Pattern,
     PatternType
@@ -172,53 +173,48 @@ class PatternService:
     async def health(self) -> ServiceHealth:
         """Get service health status."""
         try:
-            # Attempt recovery if there are failed patterns
-            if self._failed_patterns:
-                await self._attempt_recovery()
+            # Check critical components
+            patterns_loaded = self._patterns is not None and len(self._patterns) > 0
+            pattern_dir = Path("data/patterns")
+            dir_exists = pattern_dir.exists()
+            dir_writable = dir_exists and os.access(pattern_dir, os.W_OK)
             
-            # Check component health
+            # Build component status focusing on critical components
             components = {
                 "patterns": ComponentHealth(
-                    status="ok" if self._patterns else "error",
-                    error=None if self._patterns else "No patterns loaded"
+                    status=HealthStatus.OK if patterns_loaded and dir_exists and dir_writable else HealthStatus.ERROR,
+                    error=None if patterns_loaded and dir_exists and dir_writable else "Pattern system not operational",
+                    details={
+                        "total_patterns": len(self._patterns or {}),
+                        "loaded_patterns": list(self._patterns.keys()) if self._patterns else [],
+                        "failed_patterns": list(self._failed_patterns.keys()),
+                        "recovery_attempts": len(self._failed_patterns),
+                        "directory": {
+                            "path": str(pattern_dir),
+                            "exists": dir_exists,
+                            "writable": dir_writable
+                        }
+                    }
                 )
             }
             
-            # Add failed patterns component if any exist
-            if self._failed_patterns:
-                failed_list = ", ".join(self._failed_patterns.keys())
-                components["failed_patterns"] = ComponentHealth(
-                    status="error",
-                    error=f"Failed to load patterns: {failed_list}"
-                )
-            
-            # Overall status is error only if no patterns loaded
-            overall_status = "error" if not self._patterns else "ok"
-            if not self.is_running:
-                overall_status = "error"
-            
+            # Overall status is ERROR if pattern system is not operational
+            overall_status = HealthStatus.ERROR if not (patterns_loaded and dir_exists and dir_writable) else HealthStatus.OK
+
             return ServiceHealth(
                 status=overall_status,
                 service=self.service_name,
                 version=self.version,
                 is_running=self.is_running,
                 uptime=self.uptime,
-                error=None if overall_status == "ok" else "One or more components in error state",
+                error="Critical component failure" if overall_status == HealthStatus.ERROR else None,
                 components=components
             )
             
         except Exception as e:
             error_msg = f"Health check failed: {str(e)}"
             logger.error(error_msg)
-            return ServiceHealth(
-                status="error",
-                service=self.service_name,
-                version=self.version,
-                is_running=False,
-                uptime=self.uptime,
-                error=error_msg,
-                components={"patterns": ComponentHealth(status="error", error=error_msg)}
-            )
+            return create_error_health(self.service_name, self.version, error_msg)
 
     async def list_patterns(self) -> List[Pattern]:
         """List available patterns."""

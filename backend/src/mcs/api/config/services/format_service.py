@@ -6,7 +6,7 @@ from fastapi import status
 from loguru import logger
 
 from mcs.utils.errors import create_error
-from mcs.utils.health import ServiceHealth, ComponentHealth
+from mcs.utils.health import ServiceHealth, ComponentHealth, HealthStatus, create_error_health
 
 
 class FormatService:
@@ -146,52 +146,47 @@ class FormatService:
     async def health(self) -> ServiceHealth:
         """Get service health status."""
         try:
-            # Attempt recovery of failed formatters
-            await self._attempt_recovery()
-            
-            # Check component health
+            # Check critical components
             components = {}
-            formatters_loaded = False
+            
+            # Check formatters (critical for parsing)
+            formatters_ok = True
+            loaded_formatters = []
+            failed_formatters = []
             
             for fmt in self._enabled_formats or []:
                 is_loaded = fmt in self._formatters
-                formatters_loaded = formatters_loaded or is_loaded
-                components[fmt] = ComponentHealth(
-                    status="ok" if is_loaded else "error",
-                    error=None if is_loaded else f"Formatter not loaded for {fmt}"
-                )
+                if is_loaded:
+                    loaded_formatters.append(fmt)
+                else:
+                    failed_formatters.append(fmt)
+                    formatters_ok = False
             
-            # Add failed formatters component if any exist
-            if self._failed_formatters:
-                failed_list = ", ".join(self._failed_formatters.keys())
-                components["failed_formatters"] = ComponentHealth(
-                    status="error",
-                    error=f"Failed formatters: {failed_list}"
-                )
+            components["formatters"] = ComponentHealth(
+                status=HealthStatus.OK if formatters_ok else HealthStatus.ERROR,
+                error=None if formatters_ok else f"Failed to load formatters: {', '.join(failed_formatters)}",
+                details={
+                    "enabled": self._enabled_formats,
+                    "loaded": loaded_formatters,
+                    "failed": failed_formatters,
+                    "recovery_attempts": len(self._failed_formatters)
+                }
+            )
             
-            # Overall status is error only if no formatters loaded
-            overall_status = "error" if not formatters_loaded else "ok"
-            
+            # Overall status is ERROR if no formatters loaded
+            overall_status = HealthStatus.ERROR if not formatters_ok else HealthStatus.OK
+
             return ServiceHealth(
                 status=overall_status,
                 service=self.service_name,
                 version=self.version,
                 is_running=self.is_running,
                 uptime=self.uptime,
-                error=None if overall_status == "ok" else "One or more components in error state",
+                error="Critical component failure" if overall_status == HealthStatus.ERROR else None,
                 components=components
             )
             
         except Exception as e:
             error_msg = f"Health check failed: {str(e)}"
             logger.error(error_msg)
-            return ServiceHealth(
-                status="error",
-                service=self.service_name,
-                version=self.version,
-                is_running=False,
-                uptime=self.uptime,
-                error=error_msg,
-                components={name: ComponentHealth(status="error", error=error_msg)
-                            for name in self._enabled_formats or []}
-            )
+            return create_error_health(self.service_name, self.version, error_msg)

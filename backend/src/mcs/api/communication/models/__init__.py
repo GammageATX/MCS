@@ -11,7 +11,8 @@ from mcs.api.communication.models.equipment import (
     VacuumPumpRequest,
     GateValveRequest,
     ShutterRequest,
-    FeederRequest
+    FeederRequest,
+    DeagglomeratorRequest
 )
 
 from mcs.api.communication.models.motion import (
@@ -19,7 +20,8 @@ from mcs.api.communication.models.motion import (
     AxisStatus,
     SystemStatus,
     JogRequest,
-    MoveRequest
+    MoveRequest,
+    MotionState
 )
 
 __all__ = [
@@ -35,11 +37,13 @@ __all__ = [
     "GateValveRequest",
     "ShutterRequest",
     "FeederRequest",
+    "DeagglomeratorRequest",
 
     # Motion models
     "Position",
     "AxisStatus",
     "SystemStatus",
     "JogRequest",
-    "MoveRequest"
+    "MoveRequest",
+    "MotionState"
 ]

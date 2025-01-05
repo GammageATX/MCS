@@ -2,13 +2,16 @@
 
 from typing import Dict, Any
 from datetime import datetime
+from pathlib import Path
 from fastapi import status
 from loguru import logger
+import yaml
 
 from mcs.utils.errors import create_error
-from mcs.utils.health import ServiceHealth, ComponentHealth
+from mcs.utils.health import ServiceHealth, ComponentHealth, HealthStatus, create_error_health
 from mcs.api.communication.services import (
     EquipmentService,
+    InternalStateService,
     MotionService,
     TagCacheService,
     TagMappingService
@@ -18,6 +21,25 @@ from mcs.api.communication.clients import (
     PLCClient,
     SSHClient
 )
+
+
+def load_config() -> Dict[str, Any]:
+    """Load service configuration.
+
+    Returns:
+        Dict[str, Any]: Configuration dictionary
+
+    Raises:
+        FileNotFoundError: If config file not found
+    """
+    config_path = Path("backend/config/communication.yaml")
+    if not config_path.exists():
+        raise FileNotFoundError(f"Config file not found: {config_path}")
+
+    with open(config_path) as f:
+        config = yaml.safe_load(f)
+
+    return config
 
 
 class CommunicationService:
@@ -41,6 +63,7 @@ class CommunicationService:
         self._tag_cache = None
         self._equipment = None
         self._motion = None
+        self._internal_state = None
 
         logger.info(f"{self._service_name} service initialized")
 
@@ -84,6 +107,11 @@ class CommunicationService:
         """Get tag mapping service."""
         return self._tag_mapping
 
+    @property
+    def internal_state(self) -> InternalStateService:
+        """Get internal state service."""
+        return self._internal_state
+
     async def initialize(self) -> None:
         """Initialize service."""
         try:
@@ -109,20 +137,27 @@ class CommunicationService:
             self._tag_cache = TagCacheService(self._config, plc_client, ssh_client, self._tag_mapping)  # Depends on tag_mapping
             self._equipment = EquipmentService(self._config)  # Depends on tag_cache
             self._motion = MotionService(self._config)  # Depends on tag_cache
+            self._internal_state = InternalStateService(self._config)  # Depends on tag_cache and tag_mapping
 
-            # Set tag cache dependencies before initializing services
+            # Initialize tag cache first (needed by all other services)
+            await self._tag_cache.initialize()
+            await self._tag_cache.start()
+
+            # Set dependencies for other services
             self._equipment.set_tag_cache(self._tag_cache)
             self._motion.set_tag_cache(self._tag_cache)
+            self._internal_state.set_tag_cache(self._tag_cache)
+            self._internal_state.set_tag_mapping(self._tag_mapping)
 
-            # Initialize and start services in dependency order
-            await self._tag_cache.initialize()
-            await self._tag_cache.start()  # Start tag_cache before equipment needs it
-
+            # Initialize and start remaining services in order
             await self._equipment.initialize()
-            await self._equipment.start()  # Start equipment before motion needs it
+            await self._equipment.start()
 
             await self._motion.initialize()
-            await self._motion.start()  # Start motion last
+            await self._motion.start()
+
+            await self._internal_state.initialize()
+            await self._internal_state.start()
 
             logger.info(f"{self.service_name} service initialized")
 
@@ -175,12 +210,14 @@ class CommunicationService:
                 )
 
             # 1. Stop services in reverse dependency order
+            await self._internal_state.stop()
             await self._motion.stop()
             await self._equipment.stop()
             await self._tag_cache.stop()
             await self._tag_mapping.stop()
 
             # 2. Clear service references
+            self._internal_state = None
             self._motion = None
             self._equipment = None
             self._tag_cache = None
@@ -203,75 +240,55 @@ class CommunicationService:
     async def health(self) -> ServiceHealth:
         """Get service health status."""
         try:
-            # Get health from components
+            # Get health from critical components
             tag_mapping_health = await self._tag_mapping.health() if self._tag_mapping else None
             tag_cache_health = await self._tag_cache.health() if self._tag_cache else None
             equipment_health = await self._equipment.health() if self._equipment else None
             motion_health = await self._motion.health() if self._motion else None
+            internal_state_health = await self._internal_state.health() if self._internal_state else None
 
-            # Track component states and recovery attempts
+            # Track critical component states
             components = {}
             
-            # Tag Mapping Component
+            # Tag Mapping (Critical - needed for all operations)
             components["tag_mapping"] = ComponentHealth(
-                status="ok" if tag_mapping_health and tag_mapping_health.status == "ok" else "error",
+                status=HealthStatus.OK if tag_mapping_health and tag_mapping_health.status == HealthStatus.OK else HealthStatus.ERROR,
                 error=tag_mapping_health.error if tag_mapping_health else "Component not initialized",
-                details={
-                    "is_initialized": self._tag_mapping is not None,
-                    "is_running": tag_mapping_health.is_running if tag_mapping_health else False,
-                    "uptime": tag_mapping_health.uptime if tag_mapping_health else 0
-                }
+                details={"is_initialized": self._tag_mapping is not None}
             )
 
-            # Tag Cache Component
+            # Tag Cache (Critical - needed for hardware communication)
             components["tag_cache"] = ComponentHealth(
-                status="ok" if tag_cache_health and tag_cache_health.status == "ok" else "error",
+                status=HealthStatus.OK if tag_cache_health and tag_cache_health.status == HealthStatus.OK else HealthStatus.ERROR,
                 error=tag_cache_health.error if tag_cache_health else "Component not initialized",
-                details={
-                    "is_initialized": self._tag_cache is not None,
-                    "is_running": tag_cache_health.is_running if tag_cache_health else False,
-                    "uptime": tag_cache_health.uptime if tag_cache_health else 0,
-                    "connection_state": tag_cache_health.components["plc_client"].status if tag_cache_health and "plc_client" in tag_cache_health.components else "unknown"
-                }
+                details={"plc_connected": tag_cache_health.components["plc_client"].status == HealthStatus.OK if tag_cache_health and "plc_client" in tag_cache_health.components else False}
             )
 
-            # Equipment Component
+            # Equipment (Critical hardware systems)
             components["equipment"] = ComponentHealth(
-                status="ok" if equipment_health and equipment_health.status == "ok" else "warning" if equipment_health and any(c.status == "ok" for c in equipment_health.components.values()) else "error",
+                status=HealthStatus.OK if equipment_health and equipment_health.status == HealthStatus.OK else HealthStatus.ERROR,
                 error=equipment_health.error if equipment_health else "Component not initialized",
-                details={
-                    "is_initialized": self._equipment is not None,
-                    "is_running": equipment_health.is_running if equipment_health else False,
-                    "uptime": equipment_health.uptime if equipment_health else 0,
-                    "plc_connected": equipment_health.components["plc_client"].status == "ok" if equipment_health and "plc_client" in equipment_health.components else False,
-                    "feeder_status": equipment_health.components["feeder"].status if equipment_health and "feeder" in equipment_health.components else "unknown",
-                    "vacuum_status": equipment_health.components["vacuum"].status if equipment_health and "vacuum" in equipment_health.components else "unknown",
-                    "motion_status": equipment_health.components["motion"].status if equipment_health and "motion" in equipment_health.components else "unknown"
-                }
+                details={"is_initialized": self._equipment is not None}
             )
 
-            # Motion Component
+            # Motion (Critical for pattern execution)
             components["motion"] = ComponentHealth(
-                status="ok" if motion_health and motion_health.status == "ok" else "warning" if motion_health and any(c.status == "ok" for c in motion_health.components.values()) else "error",
+                status=HealthStatus.OK if motion_health and motion_health.status == HealthStatus.OK else HealthStatus.ERROR,
                 error=motion_health.error if motion_health else "Component not initialized",
-                details={
-                    "is_initialized": self._motion is not None,
-                    "is_running": motion_health.is_running if motion_health else False,
-                    "uptime": motion_health.uptime if motion_health else 0,
-                    "module_ready": motion_health.components["module"].status == "ok" if motion_health and "module" in motion_health.components else False,
-                    "axes_status": {
-                        axis: motion_health.components[f"{axis}_axis"].status if motion_health and f"{axis}_axis" in motion_health.components else "unknown"
-                        for axis in ["x", "y", "z"]
-                    }
-                }
+                details={"is_initialized": self._motion is not None}
             )
 
-            # Determine overall status - ok if core functionality available, warning if degraded, error if critical failure
-            has_critical = any(c.status == "error" for c in [components["tag_mapping"], components["tag_cache"]])
-            has_warning = any(c.status == "warning" for c in components.values())
-            has_working = any(c.status == "ok" for c in [components["equipment"], components["motion"]])
+            # Internal State (Critical for operation)
+            components["internal_state"] = ComponentHealth(
+                status=HealthStatus.OK if internal_state_health and internal_state_health.status == HealthStatus.OK else HealthStatus.ERROR,
+                error=internal_state_health.error if internal_state_health else "Component not initialized",
+                details={"is_initialized": self._internal_state is not None}
+            )
 
-            overall_status = "error" if has_critical or not has_working else "warning" if has_warning else "ok"
+            # Overall status is error if any critical component is in error
+            overall_status = HealthStatus.ERROR if any(
+                c.status == HealthStatus.ERROR for c in components.values()
+            ) else HealthStatus.OK
 
             return ServiceHealth(
                 status=overall_status,
@@ -279,22 +296,11 @@ class CommunicationService:
                 version=self.version,
                 is_running=self.is_running,
                 uptime=self.uptime,
-                error=None if overall_status == "ok" else "Degraded operation" if overall_status == "warning" else "Critical component failure",
-                mode=self._mode,
+                error=None if overall_status == HealthStatus.OK else "Critical component error",
                 components=components
             )
 
         except Exception as e:
             error_msg = f"Health check failed: {str(e)}"
             logger.error(error_msg)
-            return ServiceHealth(
-                status="error",
-                service=self.service_name,
-                version=self.version,
-                is_running=False,
-                uptime=self.uptime,
-                error=error_msg,
-                mode=self._mode,
-                components={name: ComponentHealth(status="error", error=error_msg)
-                            for name in ["tag_mapping", "tag_cache", "equipment", "motion"]}
-            )
+            return create_error_health(self.service_name, self.version, error_msg)

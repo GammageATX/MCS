@@ -1,77 +1,18 @@
 """Communication API application."""
 
-from pathlib import Path
-from typing import Dict, Any
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, status, Request
+from fastapi import FastAPI, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.exceptions import RequestValidationError
 from loguru import logger
-import yaml
-import sys
 
-from mcs.utils.health import ServiceHealth
+from mcs.utils.errors import create_error  # noqa: F401 - used in error handlers and endpoints
+from mcs.utils.health import ServiceHealth, HealthStatus, create_error_health
 from mcs.api.communication.endpoints import router as state_router
 from mcs.api.communication.endpoints.equipment import router as equipment_router
 from mcs.api.communication.endpoints.motion import router as motion_router
-from mcs.api.communication.communication_service import CommunicationService
-
-
-def setup_logging(log_level: str = "INFO") -> None:
-    """Setup logging configuration.
-
-    Args:
-        log_level: Log level to use
-    """
-    # Remove default handler
-    logger.remove()
-
-    # Add console handler with color
-    log_format = (
-        "<green>{time:YYYY-MM-DD HH:mm:ss}</green> | "
-        "<level>{level: <8}</level> | "
-        "<cyan>{name}</cyan>:<cyan>{function}</cyan>:<cyan>{line}</cyan> - "
-        "<level>{message}</level>"
-    )
-    logger.add(sys.stderr, format=log_format, level=log_level)
-
-    # Add file handler with rotation
-    log_dir = Path("logs")
-    log_dir.mkdir(exist_ok=True)
-
-    file_format = (
-        "{time:YYYY-MM-DD HH:mm:ss} | "
-        "{level: <8} | "
-        "{name}:{function}:{line} - "
-        "{message}"
-    )
-    logger.add(
-        str(log_dir / "communication.log"),
-        rotation="1 day",
-        retention="30 days",
-        format=file_format,
-        level="DEBUG"
-    )
-
-
-def load_config() -> Dict[str, Any]:
-    """Load service configuration.
-
-    Returns:
-        Dict[str, Any]: Configuration dictionary
-
-    Raises:
-        FileNotFoundError: If config file not found
-    """
-    config_path = Path("backend/config/communication.yaml")
-    if not config_path.exists():
-        raise FileNotFoundError(f"Config file not found: {config_path}")
-
-    with open(config_path) as f:
-        config = yaml.safe_load(f)
-
-    return config
+from mcs.api.communication.communication_service import CommunicationService, load_config
 
 
 @asynccontextmanager
@@ -79,24 +20,24 @@ async def lifespan(app: FastAPI):
     """Handle startup and shutdown events."""
     try:
         logger.info("Starting communication service...")
-
+        
         # Get service from app state
         service = app.state.service
-
+        
         # Initialize and start service
         await service.initialize()
         await service.start()
-
+        
         logger.info("Communication service started successfully")
-
+        
         yield  # Server is running
-
+        
         # Shutdown
         logger.info("Stopping communication service...")
         if hasattr(app.state, "service") and app.state.service.is_running:
             await app.state.service.stop()
             logger.info("Communication service stopped successfully")
-
+        
     except Exception as e:
         logger.error(f"Communication service startup failed: {e}")
         # Don't raise here - let the service start in degraded mode
@@ -112,23 +53,24 @@ async def lifespan(app: FastAPI):
 
 def create_communication_service() -> FastAPI:
     """Create communication service application.
-
+    
     Returns:
         FastAPI: Application instance
     """
     # Load config
     config = load_config()
-
-    # Setup logging
-    setup_logging(config["service"]["log_level"])
-
+    version = config.get("version", "1.0.0")
+    
     app = FastAPI(
         title="Communication Service",
         description="Service for hardware communication",
-        version=config["version"],
+        version=version,
+        docs_url="/docs",
+        redoc_url="/redoc",
+        openapi_url="/openapi.json",
         lifespan=lifespan
     )
-
+    
     # Add CORS middleware
     app.add_middleware(
         CORSMiddleware,
@@ -146,18 +88,18 @@ def create_communication_service() -> FastAPI:
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             content={"detail": exc.errors()},
         )
-
+    
     # Create service
     service = CommunicationService(config)
-
+    
     # Add routers
     app.include_router(state_router)
     app.include_router(equipment_router)
     app.include_router(motion_router)
-
+    
     # Store service in app state
     app.state.service = service
-
+    
     @app.get("/health", response_model=ServiceHealth)
     async def health() -> ServiceHealth:
         """Get service health status."""
@@ -165,33 +107,32 @@ def create_communication_service() -> FastAPI:
             # Check if service exists and is initialized
             if not hasattr(app.state, "service"):
                 return ServiceHealth(
-                    status="starting",
+                    status=HealthStatus.STARTING,
                     service="communication",
-                    version=config["version"],
+                    version=version,
                     is_running=False,
                     uptime=0.0,
                     error="Service initializing",
-                    mode=config.get("mode", "normal"),
                     components={}
                 )
-
+            
             return await app.state.service.health()
-
+            
         except Exception as e:
             error_msg = f"Health check failed: {str(e)}"
             logger.error(error_msg)
-            return ServiceHealth(
-                status="error",
-                service="communication",
-                version=config["version"],
-                is_running=False,
-                uptime=0.0,
-                error=error_msg,
-                mode=config.get("mode", "normal"),
-                components={
-                    "serial": {"status": "error", "error": error_msg},
-                    "protocol": {"status": "error", "error": error_msg}
-                }
-            )
-
+            return create_error_health("communication", version, error_msg)
+    
+    @app.post("/start")
+    async def start():
+        """Start service."""
+        await app.state.service.start()
+        return {"status": "started"}
+    
+    @app.post("/stop")
+    async def stop():
+        """Stop service."""
+        await app.state.service.stop()
+        return {"status": "stopped"}
+    
     return app

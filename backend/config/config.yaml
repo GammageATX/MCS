@@ -14,7 +14,7 @@ service:
 components:
   file:
     version: "1.0.0"
-    base_path: "config"
+    base_path: "backend/config"
   format:
     version: "1.0.0"
     enabled_formats:

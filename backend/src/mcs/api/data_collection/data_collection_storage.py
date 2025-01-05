@@ -7,7 +7,7 @@ from loguru import logger
 import asyncpg
 
 from mcs.utils.errors import create_error
-from mcs.utils.health import ServiceHealth, ComponentHealth
+from mcs.utils.health import ServiceHealth, ComponentHealth, HealthStatus, create_error_health
 
 
 class DataCollectionStorage:
@@ -141,56 +141,53 @@ class DataCollectionStorage:
     async def health(self) -> ServiceHealth:
         """Get service health status."""
         try:
-            # Check component health
+            # Check critical components
             pool_ok = self._pool is not None
             db_ok = False
+            pool_stats = None
             
             if pool_ok:
                 try:
                     async with self._pool.acquire() as conn:
                         await conn.execute("SELECT 1")
                         db_ok = True
+                        pool_stats = {
+                            "min_size": self._pool.get_min_size(),
+                            "max_size": self._pool.get_max_size(),
+                            "size": len(self._pool._holders),  # Current pool size
+                            "free": len(self._pool._queue._queue)  # Available connections
+                        }
                 except Exception as e:
                     logger.error(f"Database health check failed: {e}")
             
-            # Build component statuses
+            # Build component statuses focusing on critical components
             components = {
-                "pool": ComponentHealth(
-                    status="ok" if pool_ok else "error",
-                    error=None if pool_ok else "Connection pool not initialized"
-                ),
                 "database": ComponentHealth(
-                    status="ok" if db_ok else "error",
-                    error=None if db_ok else "Database connection failed"
+                    status=HealthStatus.OK if db_ok else HealthStatus.ERROR,
+                    error=None if db_ok else "Database connection failed",
+                    details=pool_stats
                 )
             }
             
-            # Overall status is error if any component is in error
-            overall_status = "error" if any(c.status == "error" for c in components.values()) else "ok"
-            
+            # Overall status is ERROR if any critical component is in error
+            overall_status = HealthStatus.ERROR if any(
+                c.status == HealthStatus.ERROR for c in components.values()
+            ) else HealthStatus.OK
+
             return ServiceHealth(
                 status=overall_status,
                 service=self.service_name,
                 version=self.version,
                 is_running=self.is_running,
                 uptime=self.uptime,
-                error=None if overall_status == "ok" else "One or more components in error state",
+                error="Critical component failure" if overall_status == HealthStatus.ERROR else None,
                 components=components
             )
             
         except Exception as e:
             error_msg = f"Health check failed: {str(e)}"
             logger.error(error_msg)
-            return ServiceHealth(
-                status="error",
-                service=self.service_name,
-                version=self.version,
-                is_running=False,
-                uptime=self.uptime,
-                error=error_msg,
-                components={name: ComponentHealth(status="error", error=error_msg)
-                            for name in ["pool", "database"]}
-            )
+            return create_error_health(self.service_name, self.version, error_msg)
 
     async def execute(self, query: str, *args) -> None:
         """Execute database query.

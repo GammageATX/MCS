@@ -16,7 +16,7 @@ import time
 from functools import wraps
 
 from mcs.utils.errors import create_error
-from mcs.utils.health import ServiceHealth, ComponentHealth
+from mcs.utils.health import ServiceHealth, ComponentHealth, HealthStatus, create_simple_health, create_error_health
 
 
 # Simple cache implementation
@@ -103,11 +103,11 @@ async def check_service_health(url: str, service_name: str = None) -> ServiceHea
                     health = ServiceHealth(**data)
                     
                     # Update running status based on actual service state
-                    if health.status == "starting":
+                    if health.status == HealthStatus.STARTING:
                         health.is_running = True  # Service is alive but initializing
-                    elif health.status == "ok":
+                    elif health.status == HealthStatus.OK:
                         health.is_running = True  # Service is fully operational
-                    elif health.status == "error":
+                    elif health.status == HealthStatus.ERROR:
                         health.is_running = False  # Service has errors
                     else:
                         health.is_running = False  # Unknown state
@@ -115,38 +115,38 @@ async def check_service_health(url: str, service_name: str = None) -> ServiceHea
                     return health
                     
                 return ServiceHealth(
-                    status="error",
+                    status=HealthStatus.ERROR,
                     service=service_name or "unknown",
                     version="1.0.0",
                     is_running=False,
                     uptime=0.0,
                     error=f"Service returned status {response.status}",
                     mode="normal",
-                    components={"main": ComponentHealth(status="error", error="Service unavailable")}
+                    components={"main": ComponentHealth(status=HealthStatus.ERROR, error="Service unavailable")}
                 )
     except aiohttp.ClientError as e:
         logger.error(f"Failed to connect to {service_name} service: {e}")
         return ServiceHealth(
-            status="error",
+            status=HealthStatus.ERROR,
             service=service_name or "unknown",
             version="1.0.0",
             is_running=False,
             uptime=0.0,
             error=f"Connection error: {str(e)}",
             mode="normal",
-            components={"main": ComponentHealth(status="error", error="Connection failed")}
+            components={"main": ComponentHealth(status=HealthStatus.ERROR, error="Connection failed")}
         )
     except Exception as e:
         logger.error(f"Unexpected error checking {service_name} health: {e}")
         return ServiceHealth(
-            status="error",
+            status=HealthStatus.ERROR,
             service=service_name or "unknown",
             version="1.0.0",
             is_running=False,
             uptime=0.0,
             error=str(e),
             mode="normal",
-            components={"main": ComponentHealth(status="error", error="Unexpected error")}
+            components={"main": ComponentHealth(status=HealthStatus.ERROR, error="Unexpected error")}
         )
 
 
@@ -161,7 +161,7 @@ async def check_dependencies() -> Dict[str, bool]:
     for service in dependencies.keys():
         url = getattr(api_urls, service)
         health = await check_service_health(url, service)
-        dependencies[service] = health.status == "ok"
+        dependencies[service] = health.status == HealthStatus.OK
         
     return dependencies
 
@@ -258,27 +258,16 @@ def create_app() -> FastAPI:
             """Get UI service health status."""
             try:
                 uptime = (datetime.now() - start_time).total_seconds()
-                return ServiceHealth(
-                    status="ok",
-                    service="ui",
+                return create_simple_health(
+                    service_name="ui",
                     version=app.version,
                     is_running=True,
-                    uptime=uptime,
-                    error=None,
-                    components={"main": ComponentHealth(status="ok", error=None)}
+                    uptime=uptime
                 )
             except Exception as e:
                 error_msg = f"Health check failed: {str(e)}"
                 logger.error(error_msg)
-                return ServiceHealth(
-                    status="error",
-                    service="ui",
-                    version=app.version,
-                    is_running=False,
-                    uptime=0.0,
-                    error=error_msg,
-                    components={"main": ComponentHealth(status="error", error=error_msg)}
-                )
+                return create_error_health("ui", app.version, error_msg)
 
         @app.get(
             "/monitoring/services/status",
@@ -287,7 +276,7 @@ def create_app() -> FastAPI:
                 status.HTTP_500_INTERNAL_SERVER_ERROR: {"description": "Internal server error"}
             }
         )
-        @cache(expire=5)  # Cache for 5 seconds
+        @cache(expire_seconds=5)  # Cache for 5 seconds
         async def get_services_status() -> Dict[str, ServiceStatus]:
             """Get status of all services."""
             services: Dict[str, ServiceStatus] = {}
@@ -306,14 +295,9 @@ def create_app() -> FastAPI:
                     health = await check_service_health(url, service_name)
                     port = int(str(url).split(":")[-1])  # Handle HttpUrl type
                     
-                    # Map service status to display status
-                    display_status = "ok"  # Default to ok
+                    # Map health status to display status
                     if health.is_running:
-                        display_status = "ok"
-                    elif health.status == "starting":
-                        display_status = "starting"
-                    elif health.status == "error":
-                        display_status = "error"
+                        display_status = "ok" if health.status == HealthStatus.OK else str(health.status)
                     else:
                         display_status = "stopped"
                     

@@ -3,7 +3,7 @@
 from typing import Literal
 from pydantic import BaseModel, Field
 
-from mcs.api.communication.models.motion import Position, SystemStatus
+from mcs.api.communication.models.motion import MotionState
 
 
 class GasState(BaseModel):
@@ -51,12 +51,6 @@ class PressureState(BaseModel):
     regulator: float = Field(..., description="Regulator pressure")
 
 
-class MotionState(BaseModel):
-    """Motion system state."""
-    position: Position = Field(..., description="Current position")
-    status: SystemStatus = Field(..., description="Motion system status")
-
-
 class HardwareState(BaseModel):
     """Hardware status."""
     motion_enabled: bool = Field(..., description="Motion system enabled")
@@ -71,13 +65,6 @@ class ProcessState(BaseModel):
     process_ready: bool = Field(..., description="Process ready to start")
 
 
-class SafetyState(BaseModel):
-    """Safety system state."""
-    emergency_stop: bool = Field(..., description="E-stop status")
-    interlocks_ok: bool = Field(..., description="Interlock status")
-    limits_ok: bool = Field(..., description="Limit switch status")
-
-
 class EquipmentState(BaseModel):
     """Equipment state."""
     gas: GasState = Field(..., description="Gas system state")
@@ -89,14 +76,6 @@ class EquipmentState(BaseModel):
     motion: MotionState = Field(..., description="Motion system state")
     hardware: HardwareState = Field(..., description="Hardware status")
     process: ProcessState = Field(..., description="Process status")
-    safety: SafetyState = Field(..., description="Safety system state")
-
-
-class SystemState(BaseModel):
-    """Complete system state."""
-    equipment: EquipmentState = Field(..., description="Equipment state")
-    motion: MotionState = Field(..., description="Motion state")
-    safety: dict = Field(..., description="Safety state")
 
 
 # Request Models

@@ -48,18 +48,11 @@ interface HardwareState {
   position_valid: boolean;
 }
 
-interface SafetyState {
-  emergency_stop: boolean;
-  interlocks_ok: boolean;
-  limits_ok: boolean;
-}
-
 interface EquipmentState {
   motion: MotionState;
   gas: GasState;
   vacuum: VacuumState;
   hardware: HardwareState;
-  safety: SafetyState;
 }
 
 interface WebSocketContextType {

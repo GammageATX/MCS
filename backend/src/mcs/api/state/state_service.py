@@ -8,7 +8,7 @@ from fastapi import status
 from loguru import logger
 
 from mcs.utils.errors import create_error
-from mcs.utils.health import ServiceHealth, ComponentHealth
+from mcs.utils.health import ServiceHealth, ComponentHealth, HealthStatus, create_error_health
 
 
 def load_config() -> Dict[str, Any]:
@@ -207,61 +207,54 @@ class StateService:
             # Attempt recovery of failed transitions
             await self._attempt_recovery()
             
-            # Check component health
-            config_ok = self._config is not None
+            # Check critical components
+            components = {}
+            
+            # State Machine (Critical - core functionality)
             state_machine_ok = bool(self._state_machine)
+            components["state_machine"] = ComponentHealth(
+                status=HealthStatus.OK if state_machine_ok else HealthStatus.ERROR,
+                error=None if state_machine_ok else "State machine not initialized",
+                details={"states": len(self._state_machine) if self._state_machine else 0}
+            )
+            
+            # Current State (Critical - required for operation)
             state_ok = self._current_state is not None
+            components["state"] = ComponentHealth(
+                status=HealthStatus.OK if state_ok else HealthStatus.ERROR,
+                error=None if state_ok else "Current state not set",
+                details={
+                    "current": self._current_state,
+                    "history_entries": len(self._history)
+                }
+            )
             
-            # Build component statuses
-            components = {
-                "config": ComponentHealth(
-                    status="ok" if config_ok else "error",
-                    error=None if config_ok else "Configuration not loaded"
-                ),
-                "state_machine": ComponentHealth(
-                    status="ok" if state_machine_ok else "error",
-                    error=None if state_machine_ok else "State machine not initialized"
-                ),
-                "state": ComponentHealth(
-                    status="ok" if state_ok else "error",
-                    error=None if state_ok else "Current state not set"
-                )
-            }
-            
-            # Add failed transitions component if any exist
+            # Failed Transitions (Important for monitoring)
             if self._failed_transitions:
                 failed_list = ", ".join(self._failed_transitions.keys())
-                components["failed_transitions"] = ComponentHealth(
-                    status="error",
-                    error=f"Failed transitions: {failed_list}"
+                components["transitions"] = ComponentHealth(
+                    status=HealthStatus.ERROR,
+                    error=f"Failed transitions: {failed_list}",
+                    details={"count": len(self._failed_transitions)}
                 )
             
-            # Overall status is error only if state machine is completely invalid
-            overall_status = "error" if not state_machine_ok else "ok"
-            
+            # Overall status is error if state machine is invalid
+            overall_status = HealthStatus.ERROR if not state_machine_ok else HealthStatus.OK
+
             return ServiceHealth(
                 status=overall_status,
                 service=self.service_name,
                 version=self.version,
                 is_running=self.is_running,
                 uptime=self.uptime,
-                error=None if overall_status == "ok" else "One or more components in error state",
+                error="State machine failure" if overall_status == HealthStatus.ERROR else None,
                 components=components
             )
             
         except Exception as e:
             error_msg = f"Health check failed: {str(e)}"
             logger.error(error_msg)
-            return ServiceHealth(
-                status="error",
-                service=self.service_name,
-                version=self.version,
-                is_running=False,
-                uptime=self.uptime,
-                error=error_msg,
-                components={name: ComponentHealth(status="error", error=error_msg)
-                            for name in ["config", "state_machine", "state"]}
-            )
+            return create_error_health(self.service_name, self.version, error_msg)
 
     async def get_valid_transitions(self) -> List[str]:
         """Get valid state transitions from current state."""

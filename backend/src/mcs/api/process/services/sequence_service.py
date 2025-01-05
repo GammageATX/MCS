@@ -6,9 +6,10 @@ from datetime import datetime
 from fastapi import status
 from loguru import logger
 from pathlib import Path
+import os
 
 from mcs.utils.errors import create_error
-from mcs.utils.health import ServiceHealth, ComponentHealth
+from mcs.utils.health import ServiceHealth, ComponentHealth, HealthStatus, create_error_health
 from mcs.api.process.models.process_models import (
     Sequence,
     StatusType
@@ -173,67 +174,56 @@ class SequenceService:
     async def health(self) -> ServiceHealth:
         """Get service health status."""
         try:
-            # Attempt recovery of failed sequences
-            await self._attempt_recovery()
+            # Check critical components
+            sequences_loaded = self._sequences is not None and len(self._sequences) > 0
+            sequence_dir = Path("data/sequences")
+            dir_exists = sequence_dir.exists()
+            dir_writable = dir_exists and os.access(sequence_dir, os.W_OK)
             
-            # Check component health
-            sequence_status = "ok"
-            sequence_error = None
-            
-            if self._sequence_status == StatusType.ERROR:
-                sequence_status = "error"
-                sequence_error = "Sequence in error state"
-            elif self._sequence_status == StatusType.RUNNING:
-                sequence_status = "degraded"
-                sequence_error = "Sequence in progress"
-            
+            # Build component status focusing on critical components
             components = {
-                "sequence": ComponentHealth(
-                    status=sequence_status,
-                    error=sequence_error
-                ),
                 "sequences": ComponentHealth(
-                    status="ok" if self._sequences is not None and len(self._sequences) > 0 else "error",
-                    error=None if self._sequences is not None and len(self._sequences) > 0 else "No sequences loaded"
+                    status=HealthStatus.OK if sequences_loaded and dir_exists and dir_writable else HealthStatus.ERROR,
+                    error=None if sequences_loaded and dir_exists and dir_writable else "Sequence system not operational",
+                    details={
+                        "total_sequences": len(self._sequences or {}),
+                        "loaded_sequences": list(self._sequences.keys()) if self._sequences else [],
+                        "failed_sequences": list(self._failed_sequences.keys()),
+                        "recovery_attempts": len(self._failed_sequences),
+                        "directory": {
+                            "path": str(sequence_dir),
+                            "exists": dir_exists,
+                            "writable": dir_writable
+                        },
+                        "execution": {
+                            "active_sequence": self._active_sequence,
+                            "status": self._sequence_status.value if self._sequence_status else None
+                        }
+                    }
                 )
             }
             
-            # Add failed sequences component if any exist
-            if self._failed_sequences:
-                failed_list = ", ".join(self._failed_sequences.keys())
-                components["failed_sequences"] = ComponentHealth(
-                    status="error",
-                    error=f"Failed sequences: {failed_list}"
-                )
-            
-            # Overall status is error only if no sequences loaded
-            overall_status = "error" if not self._sequences or len(self._sequences) == 0 else "ok"
-            if not self.is_running:
-                overall_status = "error"
-            
+            # Overall status is ERROR if sequence system is not operational
+            # or if active sequence is in error state
+            overall_status = HealthStatus.ERROR if (
+                not (sequences_loaded and dir_exists and dir_writable)
+                or self._sequence_status == StatusType.ERROR  # noqa: W503
+            ) else HealthStatus.OK
+
             return ServiceHealth(
                 status=overall_status,
                 service=self.service_name,
                 version=self.version,
                 is_running=self.is_running,
                 uptime=self.uptime,
-                error=None if overall_status == "ok" else "One or more components in error state",
+                error="Critical component failure" if overall_status == HealthStatus.ERROR else None,
                 components=components
             )
             
         except Exception as e:
             error_msg = f"Health check failed: {str(e)}"
             logger.error(error_msg)
-            return ServiceHealth(
-                status="error",
-                service=self.service_name,
-                version=self.version,
-                is_running=False,
-                uptime=self.uptime,
-                error=error_msg,
-                components={name: ComponentHealth(status="error", error=error_msg)
-                            for name in ["sequence", "sequences"]}
-            )
+            return create_error_health(self.service_name, self.version, error_msg)
 
     async def list_sequences(self) -> List[Sequence]:
         """List available sequences.

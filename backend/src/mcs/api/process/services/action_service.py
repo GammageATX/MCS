@@ -7,7 +7,7 @@ from fastapi import status
 from loguru import logger
 
 from mcs.utils.errors import create_error
-from mcs.utils.health import ServiceHealth, ComponentHealth
+from mcs.utils.health import ServiceHealth, ComponentHealth, HealthStatus, create_error_health
 from mcs.api.process.models import StatusType
 
 
@@ -131,51 +131,51 @@ class ActionService:
     async def health(self) -> ServiceHealth:
         """Get service health status."""
         try:
-            # Check component health
-            action_status = "ok"
-            action_error = None
+            # Check critical components
+            config_path = os.path.join("backend", "config", "process.yaml")
+            config_exists = os.path.exists(config_path)
+            config_readable = config_exists and os.access(config_path, os.R_OK)
             
-            if self._action_status == StatusType.ERROR:
-                action_status = "error"
-                action_error = "Action in error state"
-            elif self._action_status == StatusType.RUNNING:
-                action_status = "degraded"
-                action_error = "Action in progress"
-            
+            # Build component status focusing on critical components
             components = {
                 "action": ComponentHealth(
-                    status=action_status,
-                    error=action_error
+                    status=HealthStatus.OK if config_exists and config_readable else HealthStatus.ERROR,
+                    error=None if config_exists and config_readable else "Action system not operational",
+                    details={
+                        "config": {
+                            "path": config_path,
+                            "exists": config_exists,
+                            "readable": config_readable
+                        },
+                        "execution": {
+                            "current_action": self._current_action,
+                            "status": self._action_status.value if self._action_status else None
+                        }
+                    }
                 )
             }
             
-            # Overall status is error if any component is in error state
-            overall_status = "error" if any(c.status == "error" for c in components.values()) else "ok"
-            if not self.is_running:
-                overall_status = "error"
-            
+            # Overall status is ERROR if action system is not operational
+            # or if current action is in error state
+            overall_status = HealthStatus.ERROR if (
+                not (config_exists and config_readable)
+                or self._action_status == StatusType.ERROR  # noqa: W503
+            ) else HealthStatus.OK
+
             return ServiceHealth(
                 status=overall_status,
                 service=self.service_name,
                 version=self.version,
                 is_running=self.is_running,
                 uptime=self.uptime,
-                error=None if overall_status == "ok" else "One or more components in error state",
+                error="Critical component failure" if overall_status == HealthStatus.ERROR else None,
                 components=components
             )
             
         except Exception as e:
             error_msg = f"Health check failed: {str(e)}"
             logger.error(error_msg)
-            return ServiceHealth(
-                status="error",
-                service=self.service_name,
-                version=self.version,
-                is_running=False,
-                uptime=self.uptime,
-                error=error_msg,
-                components={"action": ComponentHealth(status="error", error=error_msg)}
-            )
+            return create_error_health(self.service_name, self.version, error_msg)
 
     async def start_action(self, action_id: str) -> StatusType:
         """Start action execution."""

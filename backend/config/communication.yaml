@@ -34,3 +34,63 @@ communication:
       version: "1.0.0"
     equipment:
       version: "1.0.0"
+
+internal_states:
+  rules:
+    powder_feed_on:
+      type: "comparison"
+      tag: "feeders.feeder{1|2}.frequency"
+      operator: "greater_than"
+      value: 0
+      description: "Powder feed system is running"
+
+    deagglomerator_on:
+      type: "comparison"
+      tag: "deagglomerators.deagg{1|2}.duty_cycle"
+      operator: "greater_than"
+      value: 35
+      description: "Deagglomerator is running"
+
+    flows_stable:
+      type: "multi_condition"
+      description: "Gas flows are stable"
+      conditions:
+      - tag: "gas_control.main_flow.measured"
+        value: true
+      - tag: "gas_control.feeder_flow.measured"
+        value: true
+
+    pressures_stable:
+      type: "multi_condition"
+      description: "System pressures are stable"
+      conditions:
+      - tag: "vacuum.chamber_pressure"
+        operator: "less_than"
+        value: 5.0
+      - tag: "pressure.main_supply_pressure"
+        operator: "greater_than"
+        value: 50.0
+
+    at_valid_position:
+      type: "multi_condition"
+      description: "System is at a valid position"
+      conditions:
+      - tag: "motion.position.z"
+        operator: "greater_than_equal"
+        value: "{safety.safe_z}"
+      - tag: "motion.status.z"
+        value: 4
+
+    at_trough_position:
+      type: "multi_condition"
+      description: "System is at trough position"
+      conditions:
+      - tag: "motion.position.x"
+        operator: "equal"
+        value: "{hardware.trough.x}"
+      - tag: "motion.position.y"
+        operator: "equal"
+        value: "{hardware.trough.y}"
+      - tag: "motion.position.z"
+        operator: "equal"
+        value: "{hardware.trough.z}"

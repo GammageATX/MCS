@@ -8,7 +8,7 @@ from fastapi.exceptions import RequestValidationError
 from loguru import logger
 
 from mcs.utils.errors import create_error  # noqa: F401 - used in error handlers and endpoints
-from mcs.utils.health import ServiceHealth
+from mcs.utils.health import ServiceHealth, HealthStatus, create_error_health
 from mcs.api.state.state_service import StateService, load_config
 
 
@@ -97,13 +97,12 @@ def create_state_service() -> FastAPI:
             # Check if service exists and is initialized
             if not hasattr(app.state, "service"):
                 return ServiceHealth(
-                    status="starting",
+                    status=HealthStatus.STARTING,
                     service="state",
                     version=version,
                     is_running=False,
                     uptime=0.0,
                     error="Service initializing",
-                    mode=config.get("mode", "normal"),
                     components={}
                 )
             
@@ -112,20 +111,7 @@ def create_state_service() -> FastAPI:
         except Exception as e:
             error_msg = f"Health check failed: {str(e)}"
             logger.error(error_msg)
-            return ServiceHealth(
-                status="error",
-                service="state",
-                version=version,
-                is_running=False,
-                uptime=0.0,
-                error=error_msg,
-                mode=config.get("mode", "normal"),
-                components={
-                    "config": {"status": "error", "error": error_msg},
-                    "state_machine": {"status": "error", "error": error_msg},
-                    "state": {"status": "error", "error": error_msg}
-                }
-            )
+            return create_error_health("state", version, error_msg)
     
     @app.post("/start")
     async def start():

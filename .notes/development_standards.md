@@ -104,9 +104,8 @@ async def stop(self):
                 status_code=status.HTTP_409_CONFLICT,
                 message="Service not running"
             )
-        # 1. Unregister from external services
-        # 2. Clear callbacks
-        # 3. Reset state
+        # 1. Stop components
+        # 2. Clear state
         self._is_running = False
         self._start_time = None
     except Exception as e:
@@ -142,29 +141,52 @@ raise create_error(
 async def health(self) -> ServiceHealth:
     """Get service health status."""
     try:
-        # Simple component health reporting
-        component_healths = {
+        # Basic service health check
+        return create_simple_health(
+            service_name=self.service_name,
+            version=self.version,
+            is_running=self.is_running,
+            uptime=self.uptime
+        )
+    except Exception as e:
+        return create_error_health(
+            service_name=self.service_name,
+            version=self.version,
+            error_msg=str(e)
+        )
+```
+
+For services with critical components:
+
+```python
+async def health(self) -> ServiceHealth:
+    """Get service health status."""
+    try:
+        # Check critical components
+        components = {
             "component_name": ComponentHealth(
-                status="ok" if component.is_connected else "error",
+                status=HealthStatus.OK if component.is_connected else HealthStatus.ERROR,
                 error=None if component.is_connected else "Component disconnected"
             )
-            for component in self._components
+            for component in self._critical_components
         }
         
+        # Overall status is error if any critical component is in error
+        overall_status = HealthStatus.ERROR if any(
+            c.status == HealthStatus.ERROR for c in components.values()
+        ) else HealthStatus.OK
+        
         return ServiceHealth(
-            status="ok" if any(h.status == "ok" for h in component_healths.values()) else "error",
+            status=overall_status,
             service=self.service_name,
             version=self.version,
             is_running=self.is_running,
             uptime=self.uptime,
-            components=component_healths
+            error=None if overall_status == HealthStatus.OK else "Critical component error",
+            components=components
         )
     except Exception as e:
-        return ServiceHealth(
-            status="error",
-            service=self.service_name,
-            error=str(e)
-        )
+        return create_error_health(self.service_name, self.version, str(e))
 ```
 
 ## Component Management
@@ -175,26 +197,12 @@ async def health(self) -> ServiceHealth:
 - Initialize services in dependency order
 - Handle optional dependencies gracefully
 
-### Self-Healing
+### Component Status
 
-1. Track failed components separately
-2. Attempt recovery during health checks
-3. Continue with partial functionality when possible
-4. Log all recovery attempts
-
-### Graceful Component Handling
-
-1. **Partial Operation**
-   - Services should continue running with disconnected components
-   - Track component status without aggressive reconnection
-   - Allow independent operation of separable systems
-   - Disable only affected functionality when component unavailable
-
-2. **Component Status**
-   - Simple connected/disconnected tracking
-   - No automatic recovery attempts
-   - Clear status indication
-   - Maintain operation of available components
+- Simple connected/disconnected tracking
+- No automatic recovery attempts
+- Clear status indication
+- Maintain operation of available components
 
 ## Testing Requirements
 

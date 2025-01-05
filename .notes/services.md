@@ -137,7 +137,7 @@ All services expose a health endpoint:
 ```json
 GET /health
 {
-  "status": "ok|error",
+  "status": "ok|error|starting|stopped",
   "service": "service_name",
   "version": "1.0.0",
   "is_running": true,
@@ -151,3 +151,5 @@ GET /health
   }
 }
 ```
+
+For UI and simple services, a basic health check is sufficient. For services with critical components (like Communication Service), component health should be included in the response.

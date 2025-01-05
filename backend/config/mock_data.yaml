@@ -4,37 +4,38 @@ version: "1.0.0"
 plc_tags:
   # Gas Control
   "AOS32-0.1.2.1": 2048 # Main gas flow setpoint (0-4095 = 0-100 SLPM)
-  MainFlowRate: 49.8 # Main gas flow measured (0-100 SLPM)
+  "MainFlowRate": 49.8 # Main gas flow measured (0-100 SLPM)
+  "MainFlowStable": true # Main gas flow stability indicator
   "AOS32-0.1.2.2": 2048 # Feeder gas flow setpoint (0-4095 = 0-10 SLPM)
-  FeederFlowRate: 4.9 # Feeder gas flow measured (0-10 SLPM)
-  MainSwitch: true # Main gas line valve
-  FeederSwitch: true # Feeder gas line valve
-  NozzleSelect: false # Active nozzle selection (false=1, true=2)
+  "FeederFlowRate": 4.9 # Feeder gas flow measured (0-10 SLPM)
+  "MainSwitch": true # Main gas line valve
+  "FeederSwitch": true # Feeder gas line valve
+  "NozzleSelect": false # Active nozzle selection (false=1, true=2)
 
   # Feeder Control
-  P6: 500 # Feeder 1 frequency (Hz)
-  P10: false # Feeder 1 running state
-  P106: 500 # Feeder 2 frequency (Hz)
-  P110: false # Feeder 2 running state
+  "P6": 500 # Feeder 1 frequency (Hz)
+  "P10": false # Feeder 1 running state
+  "P106": 500 # Feeder 2 frequency (Hz)
+  "P110": false # Feeder 2 running state
 
   # Vacuum Control
-  MechPumpStart: false # Mechanical pump running
-  MechPumpStop: false # Mechanical pump stopped
-  BoosterPumpStart: false # Booster pump running
-  BoosterPumpStop: false # Booster pump stopped
-  Open: true # Gate valve open position
-  Partial: false # Gate valve partial position
-  VentSwitch: false # Chamber vent valve
+  "MechPumpStart": false # Mechanical pump running
+  "MechPumpStop": false # Mechanical pump stopped
+  "BoosterPumpStart": false # Booster pump running
+  "BoosterPumpStop": false # Booster pump stopped
+  "Open": true # Gate valve open position
+  "Partial": false # Gate valve partial position
+  "VentSwitch": false # Chamber vent valve
 
   # Pressure Measurements
-  ChamberPressure: 5.1 # Chamber vacuum pressure (torr)
-  MainGasPressure: 100.0 # Main gas supply pressure (psi)
-  FeederPressure: 500.0 # Powder feeder pressure (torr)
-  NozzlePressure: 501.0 # Nozzle pressure (torr)
-  RegulatorPressure: 80.0 # Regulator pressure (psi)
+  "ChamberPressure": 5.1 # Chamber vacuum pressure (torr)
+  "MainGasPressure": 100.0 # Main gas supply pressure (psi)
+  "FeederPressure": 500.0 # Powder feeder pressure (torr)
+  "NozzlePressure": 501.0 # Nozzle pressure (torr)
+  "RegulatorPressure": 80.0 # Regulator pressure (psi)
 
   # Shutter Control
-  Shutter: false # Nozzle shutter solenoid
+  "Shutter": false # Nozzle shutter solenoid
 
   # Motion Control Status
   "AMC.ModuleStatus": true # Motion controller ready status
@@ -79,8 +80,8 @@ plc_tags:
   "AOS32-0.1.6.4": 500 # Deagglomerator 2 PWM frequency (Hz)
 
   # Control Triggers
-  MoveX: false # Trigger X axis move
-  MoveY: false # Trigger Y axis move
-  MoveZ: false # Trigger Z axis move
-  MoveXY: false # Trigger XY move
-  SetHome: false # Trigger set home position 
+  "MoveX": false # Trigger X axis move
+  "MoveY": false # Trigger Y axis move
+  "MoveZ": false # Trigger Z axis move
+  "MoveXY": false # Trigger XY move
+  "SetHome": false # Trigger set home position 

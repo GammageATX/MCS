@@ -6,9 +6,10 @@ from datetime import datetime
 from fastapi import status
 from loguru import logger
 from pathlib import Path
+import os
 
 from mcs.utils.errors import create_error
-from mcs.utils.health import ServiceHealth, ComponentHealth
+from mcs.utils.health import ServiceHealth, ComponentHealth, HealthStatus, create_error_health
 from mcs.api.process.models.process_models import (  # noqa: F401
     Parameter,
     Nozzle,  # noqa: F401 - used in type hints
@@ -171,52 +172,48 @@ class ParameterService:
     async def health(self) -> ServiceHealth:
         """Get service health status."""
         try:
-            # Attempt recovery of failed parameter sets
-            await self._attempt_recovery()
+            # Check critical components
+            params_loaded = self._parameters is not None and len(self._parameters) > 0
+            param_dir = Path("data/parameters")
+            dir_exists = param_dir.exists()
+            dir_writable = dir_exists and os.access(param_dir, os.W_OK)
             
-            # Check component health
+            # Build component status focusing on critical components
             components = {
                 "parameters": ComponentHealth(
-                    status="ok" if self._parameters is not None and len(self._parameters) > 0 else "error",
-                    error=None if self._parameters is not None and len(self._parameters) > 0 else "No parameters loaded"
+                    status=HealthStatus.OK if params_loaded and dir_exists and dir_writable else HealthStatus.ERROR,
+                    error=None if params_loaded and dir_exists and dir_writable else "Parameter system not operational",
+                    details={
+                        "total_parameters": len(self._parameters or {}),
+                        "loaded_parameters": list(self._parameters.keys()) if self._parameters else [],
+                        "failed_parameters": list(self._failed_parameters.keys()),
+                        "recovery_attempts": len(self._failed_parameters),
+                        "directory": {
+                            "path": str(param_dir),
+                            "exists": dir_exists,
+                            "writable": dir_writable
+                        }
+                    }
                 )
             }
             
-            # Add failed parameter sets component if any exist
-            if self._failed_parameters:
-                failed_list = ", ".join(self._failed_parameters.keys())
-                components["failed_parameters"] = ComponentHealth(
-                    status="error",
-                    error=f"Failed parameter sets: {failed_list}"
-                )
-            
-            # Overall status is error only if no parameters loaded
-            overall_status = "error" if not self._parameters or len(self._parameters) == 0 else "ok"
-            if not self.is_running:
-                overall_status = "error"
-            
+            # Overall status is ERROR if parameter system is not operational
+            overall_status = HealthStatus.ERROR if not (params_loaded and dir_exists and dir_writable) else HealthStatus.OK
+
             return ServiceHealth(
                 status=overall_status,
                 service=self.service_name,
                 version=self.version,
                 is_running=self.is_running,
                 uptime=self.uptime,
-                error=None if overall_status == "ok" else "One or more components in error state",
+                error="Critical component failure" if overall_status == HealthStatus.ERROR else None,
                 components=components
             )
             
         except Exception as e:
             error_msg = f"Health check failed: {str(e)}"
             logger.error(error_msg)
-            return ServiceHealth(
-                status="error",
-                service=self.service_name,
-                version=self.version,
-                is_running=False,
-                uptime=self.uptime,
-                error=error_msg,
-                components={"parameters": ComponentHealth(status="error", error=error_msg)}
-            )
+            return create_error_health(self.service_name, self.version, error_msg)
 
     async def list_parameters(self) -> List[Parameter]:
         """List available parameters."""
