@@ -34,6 +34,12 @@ Manages system state and transitions.
 
 Handles real-time communication and hardware control.
 
+**Key Requirements:**
+
+- Support independent operation of PLC and feeder systems
+- Hardware control endpoints work with partial system availability
+- Graceful handling of disconnected components
+
 #### WebSocket Endpoints
 
 - `WS /ws/state` - Real-time system state updates

@@ -138,9 +138,17 @@ raise create_error(
 async def health(self) -> ServiceHealth:
     """Get service health status."""
     try:
-        component_healths = await self._get_component_health()
+        # Simple component health reporting
+        component_healths = {
+            "component_name": ComponentHealth(
+                status="ok" if component.is_connected else "error",
+                error=None if component.is_connected else "Component disconnected"
+            )
+            for component in self._components
+        }
+        
         return ServiceHealth(
-            status="ok" if all(h.status == "ok" for h in component_healths.values()) else "error",
+            status="ok" if any(h.status == "ok" for h in component_healths.values()) else "error",
             service=self.service_name,
             version=self.version,
             is_running=self.is_running,
@@ -169,6 +177,20 @@ async def health(self) -> ServiceHealth:
 2. Attempt recovery during health checks
 3. Continue with partial functionality when possible
 4. Log all recovery attempts
+
+### Graceful Component Handling
+
+1. **Partial Operation**
+   - Services should continue running with disconnected components
+   - Track component status without aggressive reconnection
+   - Allow independent operation of separable systems
+   - Disable only affected functionality when component unavailable
+
+2. **Component Status**
+   - Simple connected/disconnected tracking
+   - No automatic recovery attempts
+   - Clear status indication
+   - Maintain operation of available components
 
 ## Testing Requirements
 
