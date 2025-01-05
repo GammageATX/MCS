@@ -1,8 +1,7 @@
 """Pattern service implementation."""
 
-import os
 import yaml
-from typing import Dict, Any, List, Optional
+from typing import List
 from datetime import datetime
 from fastapi import status
 from loguru import logger
@@ -12,7 +11,6 @@ from mcs.utils.errors import create_error
 from mcs.utils.health import ServiceHealth, ComponentHealth
 from mcs.api.process.models.process_models import (
     Pattern,
-    StatusType,
     PatternType
 )
 

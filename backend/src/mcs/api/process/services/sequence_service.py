@@ -1,7 +1,7 @@
 """Sequence service implementation."""
 
 import yaml
-from typing import Dict, Any, List, Optional
+from typing import List
 from datetime import datetime
 from fastapi import status
 from loguru import logger

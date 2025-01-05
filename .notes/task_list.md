@@ -6,12 +6,12 @@
 
 - [ ] Communication Service Enhancements
     - [ ] Implement missing hardware control endpoints
-        - [ ] Gas control endpoints
-        - [ ] Feeder control endpoints
-        - [ ] Deagglomerator control endpoints
-        - [ ] Nozzle control endpoints
-        - [ ] Vacuum control endpoints
-        - [ ] Motion control endpoints
+        - [x] Gas control endpoints
+        - [x] Feeder control endpoints
+        - [x] Deagglomerator control endpoint (via duty cycle 20-35%, fixed 500Hz frequency)
+        - [x] Nozzle control endpoints (shutter open/close)
+        - [x] Vacuum control endpoints (vent, mechanical pump, booster pump)
+        - [x] Motion control endpoints
     - [ ] Enhanced health check implementation
         - [ ] Component-level status tracking
         - [ ] Graceful component handling

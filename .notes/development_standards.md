@@ -26,8 +26,12 @@ async def lifespan(app: FastAPI):
         logger.error(f"Service startup failed: {e}")
         yield
 
-def create_service() -> FastAPI:
-    """Create and configure the FastAPI application."""
+def create_example_service() -> FastAPI:
+    """Create and configure the FastAPI application.
+    
+    Each service should follow the naming pattern create_*_service(),
+    except for the UI service which uses create_app().
+    """
     app = FastAPI(
         title="Service Name",
         description="Service description",

@@ -9,8 +9,7 @@ from loguru import logger
 
 from mcs.api.data_collection.data_collection_router import router
 from mcs.api.data_collection.data_collection_service import DataCollectionService
-from mcs.api.data_collection.data_collection_storage import DataCollectionStorage
-from mcs.utils.errors import create_error
+from mcs.utils.errors import create_error  # noqa: F401 - used in error handlers and endpoints
 from mcs.utils.health import ServiceHealth
 
 

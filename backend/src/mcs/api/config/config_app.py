@@ -10,7 +10,6 @@ from fastapi.responses import JSONResponse
 from fastapi.exceptions import RequestValidationError
 from loguru import logger
 
-from mcs.utils.errors import create_error
 from mcs.utils.health import ServiceHealth
 from mcs.api.config.config_service import ConfigService
 from mcs.api.config.endpoints.config_endpoints import router as config_router
@@ -23,7 +22,7 @@ def load_config() -> Dict[str, Any]:
         Dict[str, Any]: Configuration dictionary
     """
     try:
-        config_path = os.path.join("config", "config.yaml")
+        config_path = os.path.join("backend", "config", "config.yaml")
         if os.path.exists(config_path):
             with open(config_path, "r") as f:
                 return yaml.safe_load(f)

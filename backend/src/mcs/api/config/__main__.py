@@ -64,15 +64,9 @@ def main():
                 }
             }
         
-        # Import here to avoid circular imports
-        from mcs.api.config.config_app import create_config_service
-        
-        # Create app instance
-        app = create_config_service()
-        
         # Run service using config values
         uvicorn.run(
-            app,
+            "mcs.api.config.config_app:create_config_service",
             host=config["service"]["host"],
             port=config["service"]["port"],
             log_level=config["service"]["log_level"].lower(),

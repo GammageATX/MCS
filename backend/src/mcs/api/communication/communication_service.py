@@ -209,28 +209,69 @@ class CommunicationService:
             equipment_health = await self._equipment.health() if self._equipment else None
             motion_health = await self._motion.health() if self._motion else None
 
-            # Build component statuses
-            components = {
-                "tag_mapping": ComponentHealth(
-                    status="ok" if tag_mapping_health and tag_mapping_health.status == "ok" else "error",
-                    error=tag_mapping_health.error if tag_mapping_health else "Component not initialized"
-                ),
-                "tag_cache": ComponentHealth(
-                    status="ok" if tag_cache_health and tag_cache_health.status == "ok" else "error",
-                    error=tag_cache_health.error if tag_cache_health else "Component not initialized"
-                ),
-                "equipment": ComponentHealth(
-                    status="ok" if equipment_health and equipment_health.status == "ok" else "error",
-                    error=equipment_health.error if equipment_health else "Component not initialized"
-                ),
-                "motion": ComponentHealth(
-                    status="ok" if motion_health and motion_health.status == "ok" else "error",
-                    error=motion_health.error if motion_health else "Component not initialized"
-                )
-            }
+            # Track component states and recovery attempts
+            components = {}
+            
+            # Tag Mapping Component
+            components["tag_mapping"] = ComponentHealth(
+                status="ok" if tag_mapping_health and tag_mapping_health.status == "ok" else "error",
+                error=tag_mapping_health.error if tag_mapping_health else "Component not initialized",
+                details={
+                    "is_initialized": self._tag_mapping is not None,
+                    "is_running": tag_mapping_health.is_running if tag_mapping_health else False,
+                    "uptime": tag_mapping_health.uptime if tag_mapping_health else 0
+                }
+            )
 
-            # Overall status is error if any component is in error
-            overall_status = "error" if any(c.status == "error" for c in components.values()) else "ok"
+            # Tag Cache Component
+            components["tag_cache"] = ComponentHealth(
+                status="ok" if tag_cache_health and tag_cache_health.status == "ok" else "error",
+                error=tag_cache_health.error if tag_cache_health else "Component not initialized",
+                details={
+                    "is_initialized": self._tag_cache is not None,
+                    "is_running": tag_cache_health.is_running if tag_cache_health else False,
+                    "uptime": tag_cache_health.uptime if tag_cache_health else 0,
+                    "connection_state": tag_cache_health.components["plc_client"].status if tag_cache_health and "plc_client" in tag_cache_health.components else "unknown"
+                }
+            )
+
+            # Equipment Component
+            components["equipment"] = ComponentHealth(
+                status="ok" if equipment_health and equipment_health.status == "ok" else "warning" if equipment_health and any(c.status == "ok" for c in equipment_health.components.values()) else "error",
+                error=equipment_health.error if equipment_health else "Component not initialized",
+                details={
+                    "is_initialized": self._equipment is not None,
+                    "is_running": equipment_health.is_running if equipment_health else False,
+                    "uptime": equipment_health.uptime if equipment_health else 0,
+                    "plc_connected": equipment_health.components["plc_client"].status == "ok" if equipment_health and "plc_client" in equipment_health.components else False,
+                    "feeder_status": equipment_health.components["feeder"].status if equipment_health and "feeder" in equipment_health.components else "unknown",
+                    "vacuum_status": equipment_health.components["vacuum"].status if equipment_health and "vacuum" in equipment_health.components else "unknown",
+                    "motion_status": equipment_health.components["motion"].status if equipment_health and "motion" in equipment_health.components else "unknown"
+                }
+            )
+
+            # Motion Component
+            components["motion"] = ComponentHealth(
+                status="ok" if motion_health and motion_health.status == "ok" else "warning" if motion_health and any(c.status == "ok" for c in motion_health.components.values()) else "error",
+                error=motion_health.error if motion_health else "Component not initialized",
+                details={
+                    "is_initialized": self._motion is not None,
+                    "is_running": motion_health.is_running if motion_health else False,
+                    "uptime": motion_health.uptime if motion_health else 0,
+                    "module_ready": motion_health.components["module"].status == "ok" if motion_health and "module" in motion_health.components else False,
+                    "axes_status": {
+                        axis: motion_health.components[f"{axis}_axis"].status if motion_health and f"{axis}_axis" in motion_health.components else "unknown"
+                        for axis in ["x", "y", "z"]
+                    }
+                }
+            )
+
+            # Determine overall status - ok if core functionality available, warning if degraded, error if critical failure
+            has_critical = any(c.status == "error" for c in [components["tag_mapping"], components["tag_cache"]])
+            has_warning = any(c.status == "warning" for c in components.values())
+            has_working = any(c.status == "ok" for c in [components["equipment"], components["motion"]])
+
+            overall_status = "error" if has_critical or not has_working else "warning" if has_warning else "ok"
 
             return ServiceHealth(
                 status=overall_status,
@@ -238,7 +279,7 @@ class CommunicationService:
                 version=self.version,
                 is_running=self.is_running,
                 uptime=self.uptime,
-                error=None if overall_status == "ok" else "One or more components in error state",
+                error=None if overall_status == "ok" else "Degraded operation" if overall_status == "warning" else "Critical component failure",
                 mode=self._mode,
                 components=components
             )

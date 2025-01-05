@@ -79,10 +79,10 @@ class ProcessService:
         """Get service running state."""
         return self._is_running
 
-    async def shutdown(self) -> None:
-        """Shutdown service."""
+    async def stop(self) -> None:
+        """Stop service."""
         try:
-            logger.info("Shutting down process service...")
+            logger.info("Stopping process service...")
             
             # Stop sub-services
             if self.pattern_service.is_running:
@@ -96,52 +96,40 @@ class ProcessService:
             
             self._is_running = False
             self._start_time = None
-            logger.info("Process service shutdown complete")
+            logger.info("Process service stopped")
             
         except Exception as e:
-            error_msg = f"Failed to shutdown process service: {str(e)}"
+            error_msg = f"Failed to stop process service: {str(e)}"
             logger.error(error_msg)
             raise create_error(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
                 message=error_msg
             )
 
+    async def shutdown(self) -> None:
+        """Shutdown service (alias for stop)."""
+        await self.stop()
+
     async def health(self) -> ServiceHealth:
         """Get service health status."""
         try:
-            # Get component health status
-            pattern_health = await self.pattern_service.health()
-            parameter_health = await self.parameter_service.health()
-            sequence_health = await self.sequence_service.health()
-            schema_health = await self.schema_service.health()
-            
-            # Create components dict with ComponentHealth objects
+            # Get component health
             components = {
-                "pattern": ComponentHealth(
-                    status=pattern_health.status,
-                    error=pattern_health.error
-                ),
-                "parameter": ComponentHealth(
-                    status=parameter_health.status,
-                    error=parameter_health.error
-                ),
-                "sequence": ComponentHealth(
-                    status=sequence_health.status,
-                    error=sequence_health.error
-                ),
-                "schema": ComponentHealth(
-                    status=schema_health.status,
-                    error=schema_health.error
-                )
+                "pattern": await self.pattern_service.health(),
+                "parameter": await self.parameter_service.health(),
+                "sequence": await self.sequence_service.health(),
+                "schema": await self.schema_service.health()
             }
             
             # Determine overall status
             overall_status = "ok"
-            for comp in components.values():
-                if comp.status == "error":
+            for component in components.values():
+                if component.status == "error":
                     overall_status = "error"
                     break
-                
+                elif component.status == "degraded" and overall_status != "error":
+                    overall_status = "degraded"
+            
             return ServiceHealth(
                 status=overall_status,
                 service=self._service_name,

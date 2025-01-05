@@ -1,6 +1,5 @@
 """Configuration service endpoints."""
 
-from typing import Dict, Optional, Any
 from fastapi import APIRouter, Request, status, HTTPException
 from loguru import logger
 

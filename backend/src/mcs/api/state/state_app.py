@@ -1,8 +1,5 @@
 """State service application."""
 
-import os
-import yaml
-from typing import Dict, Any
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request, status
 from fastapi.middleware.cors import CORSMiddleware
@@ -10,7 +7,7 @@ from fastapi.responses import JSONResponse
 from fastapi.exceptions import RequestValidationError
 from loguru import logger
 
-from mcs.utils.errors import create_error
+from mcs.utils.errors import create_error  # noqa: F401 - used in error handlers and endpoints
 from mcs.utils.health import ServiceHealth
 from mcs.api.state.state_service import StateService, load_config
 

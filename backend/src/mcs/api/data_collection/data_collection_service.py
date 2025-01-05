@@ -2,7 +2,7 @@
 
 import os
 import yaml
-from typing import List, Optional, Dict, Any
+from typing import Dict, Any, Optional
 from datetime import datetime
 from fastapi import status
 from loguru import logger
@@ -10,7 +10,6 @@ from loguru import logger
 from mcs.utils.errors import create_error
 from mcs.utils.health import ServiceHealth, ComponentHealth
 from mcs.api.data_collection.data_collection_storage import DataCollectionStorage
-from mcs.api.data_collection.data_collection_models import SprayEvent
 
 
 def load_config() -> Dict[str, Any]:
@@ -19,7 +18,7 @@ def load_config() -> Dict[str, Any]:
     Returns:
         Dict[str, Any]: Configuration dictionary
     """
-    config_path = os.path.join("config", "data_collection.yaml")
+    config_path = os.path.join("backend", "config", "data_collection.yaml")
     if not os.path.exists(config_path):
         raise FileNotFoundError(f"Config file not found: {config_path}")
         

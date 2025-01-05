@@ -1,6 +1,6 @@
 """Format service implementation."""
 
-from typing import Dict, Any, Optional, List
+from typing import List
 from datetime import datetime
 from fastapi import status
 from loguru import logger

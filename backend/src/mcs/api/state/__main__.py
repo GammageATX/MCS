@@ -6,7 +6,7 @@ import uvicorn
 from loguru import logger
 
 from mcs.api.state.state_app import create_state_service
-from mcs.utils.errors import create_error
+from mcs.utils.errors import create_error  # noqa: F401 - used in error handlers and endpoints
 
 
 def setup_logging():

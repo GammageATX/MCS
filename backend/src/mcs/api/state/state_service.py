@@ -17,7 +17,7 @@ def load_config() -> Dict[str, Any]:
     Returns:
         Dict[str, Any]: Configuration dictionary
     """
-    config_path = os.path.join("config", "state.yaml")
+    config_path = os.path.join("backend", "config", "state.yaml")
     if not os.path.exists(config_path):
         raise FileNotFoundError(f"Config file not found: {config_path}")
         

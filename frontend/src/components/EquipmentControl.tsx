@@ -62,12 +62,11 @@ export default function EquipmentControl() {
     if (!connected) return;
     try {
       let endpoint = '';
-      let method = 'POST';
+      let method = 'PUT';
       
       switch (component) {
         case 'gate':
           endpoint = '/vacuum/gate';
-          method = 'PUT';
           break;
         case 'vent':
           endpoint = `/vacuum/vent/${action}`;
@@ -80,8 +79,7 @@ export default function EquipmentControl() {
 
       const response = await fetch(`${COMM_SERVICE}${endpoint}`, {
         method,
-        headers: { 'Content-Type': 'application/json' },
-        body: component === 'gate' ? JSON.stringify({ position: action }) : undefined
+        headers: { 'Content-Type': 'application/json' }
       });
 
       if (!response.ok) {
@@ -124,18 +122,10 @@ export default function EquipmentControl() {
   const controlDeagglomerator = async (id: 1 | 2, action: 'speed' | 'set', value: number) => {
     if (!connected) return;
     try {
-      const endpoint = action === 'speed' 
-        ? `/deagg/${id}/speed`
-        : `/deagg/${id}/set`;
-
-      const body = action === 'speed'
-        ? { speed: value }
-        : { duty_cycle: value, frequency: 500 }; // Default frequency
-
-      const response = await fetch(`${COMM_SERVICE}${endpoint}`, {
-        method: 'POST',
+      const response = await fetch(`${COMM_SERVICE}/deagg/${id}/speed`, {
+        method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body)
+        body: JSON.stringify({ duty_cycle: value })
       });
 
       if (!response.ok) {
@@ -151,7 +141,7 @@ export default function EquipmentControl() {
     try {
       if (action === 'select') {
         const response = await fetch(`${COMM_SERVICE}/nozzle/select`, {
-          method: 'POST',
+          method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ nozzle_id: value })
         });
@@ -161,7 +151,7 @@ export default function EquipmentControl() {
       } else {
         const endpoint = `/nozzle/shutter/${value ? 'open' : 'close'}`;
         const response = await fetch(`${COMM_SERVICE}${endpoint}`, {
-          method: 'POST'
+          method: 'PUT'
         });
         if (!response.ok) {
           throw new Error(`Failed to control shutter: ${response.status}`);

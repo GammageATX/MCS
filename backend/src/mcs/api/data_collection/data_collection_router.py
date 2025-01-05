@@ -1,7 +1,5 @@
 """Data collection API router."""
 
-from typing import List
-from datetime import datetime
 from fastapi import APIRouter, Depends, Request, status
 
 from mcs.utils.errors import create_error

@@ -1,6 +1,6 @@
 """Health check utilities."""
 
-from typing import Dict, Optional
+from typing import Dict, Optional, Any
 from datetime import datetime
 from pydantic import BaseModel
 
@@ -22,8 +22,10 @@ def get_uptime(start_time: Optional[datetime]) -> float:
 class ComponentHealth(BaseModel):
     """Component health status."""
     
-    status: str  # ok or error
+    status: str  # ok, warning, or error
     error: Optional[str] = None
+    details: Optional[Dict[str, Any]] = None
+    components: Optional[Dict[str, "ComponentHealth"]] = None
 
 
 class ServiceHealth(BaseModel):

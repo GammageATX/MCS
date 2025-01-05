@@ -4,7 +4,7 @@ import { useWebSocket } from '../context/WebSocketContext';
 
 interface ComponentHealth {
   status: 'ok' | 'error';
-  message?: string;
+  error?: string;
 }
 
 interface ServiceHealth {
@@ -97,7 +97,7 @@ export default function SystemMonitoring() {
                       label={`${name}: ${status.status}`}
                       color={status.status === 'ok' ? 'success' : 'error'}
                       size="small"
-                      title={status.message}
+                      title={status.error}
                     />
                   </Grid>
                 ))}

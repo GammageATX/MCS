@@ -1,9 +1,7 @@
 """Parameter service implementation."""
 
-import os
-import time
 import yaml
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, List
 from datetime import datetime
 from fastapi import status
 from loguru import logger
@@ -11,10 +9,10 @@ from pathlib import Path
 
 from mcs.utils.errors import create_error
 from mcs.utils.health import ServiceHealth, ComponentHealth
-from mcs.api.process.models.process_models import (
+from mcs.api.process.models.process_models import (  # noqa: F401
     Parameter,
-    Nozzle,
-    Powder,
+    Nozzle,  # noqa: F401 - used in type hints
+    Powder,  # noqa: F401 - used in type hints
     NozzleType
 )
 

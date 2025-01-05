@@ -1,16 +1,14 @@
 """Action service implementation."""
 
 import os
-import time
 import yaml
-from typing import Dict, Any, Optional
 from datetime import datetime
 from fastapi import status
 from loguru import logger
 
 from mcs.utils.errors import create_error
 from mcs.utils.health import ServiceHealth, ComponentHealth
-from mcs.api.process.models.process_models import StatusType
+from mcs.api.process.models import StatusType
 
 
 class ActionService:
@@ -59,7 +57,7 @@ class ActionService:
                 )
             
             # Load config
-            config_path = os.path.join("config", "process.yaml")
+            config_path = os.path.join("backend", "config", "process.yaml")
             if os.path.exists(config_path):
                 with open(config_path, "r") as f:
                     config = yaml.safe_load(f)

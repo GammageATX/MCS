@@ -2,30 +2,69 @@
 
 from pathlib import Path
 from datetime import datetime
-from typing import Dict, List, Optional
-from fastapi import FastAPI, Request, status
+from typing import Dict, Optional, Any
+from fastapi import FastAPI, Request, status, Response
 from fastapi.templating import Jinja2Templates
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, FileResponse
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, AnyHttpUrl
 from loguru import logger
 import aiohttp
+import time
+from functools import wraps
 
 from mcs.utils.errors import create_error
-from mcs.utils.health import get_uptime, ServiceHealth, ComponentHealth
+from mcs.utils.health import ServiceHealth, ComponentHealth
+
+
+# Simple cache implementation
+_cache: Dict[str, Any] = {}
+_cache_times: Dict[str, float] = {}
+
+
+def cache(expire_seconds: int = 5):
+    """Simple cache decorator."""
+    def decorator(func):
+        @wraps(func)
+        async def wrapper(*args, **kwargs):
+            key = f"{func.__name__}:{args}:{kwargs}"
+            now = time.time()
+            
+            # Check if cached and not expired
+            if key in _cache and now - _cache_times[key] < expire_seconds:
+                return _cache[key]
+                
+            # Get fresh value
+            result = await func(*args, **kwargs)
+            _cache[key] = result
+            _cache_times[key] = now
+            return result
+        return wrapper
+    return decorator
+
+
+class DetailedComponentHealth(ComponentHealth):
+    """Extended component health with more details."""
+    last_check: datetime = Field(default_factory=datetime.now)
+    check_count: int = Field(default=0)
+    consecutive_failures: int = Field(default=0)
 
 
 class ApiUrls(BaseModel):
     """API URLs configuration model."""
-    ui: str = Field("http://localhost:8000", description="UI service URL")
-    config: str = Field("http://localhost:8001", description="Config service URL")
-    state: str = Field("http://localhost:8002", description="State service URL")
-    communication: str = Field("http://localhost:8003", description="Communication service URL")
-    process: str = Field("http://localhost:8004", description="Process service URL")
-    data_collection: str = Field("http://localhost:8005", description="Data collection service URL")
-    validation: str = Field("http://localhost:8006", description="Validation service URL")
+    ui: AnyHttpUrl = Field("http://localhost:8000", description="UI service URL")
+    config: AnyHttpUrl = Field("http://localhost:8001", description="Config service URL")
+    state: AnyHttpUrl = Field("http://localhost:8002", description="State service URL")
+    communication: AnyHttpUrl = Field("http://localhost:8003", description="Communication service URL")
+    process: AnyHttpUrl = Field("http://localhost:8004", description="Process service URL")
+    data_collection: AnyHttpUrl = Field("http://localhost:8005", description="Data collection service URL")
+    validation: AnyHttpUrl = Field("http://localhost:8006", description="Validation service URL")
+
+    class Config:
+        """Pydantic model configuration."""
+        validate_assignment = True
 
 
 class ServiceStatus(BaseModel):
@@ -111,15 +150,24 @@ async def check_service_health(url: str, service_name: str = None) -> ServiceHea
         )
 
 
-def create_app() -> FastAPI:
-    """Create FastAPI application.
+async def check_dependencies() -> Dict[str, bool]:
+    """Check critical service dependencies."""
+    dependencies = {
+        "config": False,  # Config service is critical
+        "state": False    # State service is critical
+    }
+    api_urls = get_api_urls()
     
-    Returns:
-        FastAPI application instance
+    for service in dependencies.keys():
+        url = getattr(api_urls, service)
+        health = await check_service_health(url, service)
+        dependencies[service] = health.status == "ok"
         
-    Raises:
-        HTTPException: If application creation fails
-    """
+    return dependencies
+
+
+def create_app() -> FastAPI:
+    """Create FastAPI application."""
     try:
         app = FastAPI(
             title="MicroColdSpray Service Monitor",
@@ -161,6 +209,14 @@ def create_app() -> FastAPI:
         # Store start time for uptime calculation
         start_time = datetime.now()
 
+        @app.get('/favicon.ico', include_in_schema=False)
+        async def favicon():
+            """Serve favicon."""
+            favicon_path = static_dir / 'favicon.ico'
+            if favicon_path.exists():
+                return FileResponse(favicon_path)
+            return Response(status_code=404)
+
         @app.get(
             "/",
             response_class=HTMLResponse,
@@ -170,24 +226,18 @@ def create_app() -> FastAPI:
             }
         )
         async def index(request: Request) -> HTMLResponse:
-            """Render service monitor page.
-            
-            Args:
-                request: FastAPI request object
-                
-            Returns:
-                HTML response with rendered template
-                
-            Raises:
-                HTTPException: If template rendering fails
-            """
+            """Render service monitor page."""
             try:
+                # Check dependencies
+                dependencies = await check_dependencies()
+                
                 return templates.TemplateResponse(
                     "monitoring/services.html",
                     {
                         "request": request,
                         "api_urls": get_api_urls().dict(),
-                        "page_title": "Service Monitor"
+                        "page_title": "Service Monitor",
+                        "dependencies": dependencies
                     }
                 )
             except Exception as e:
@@ -205,18 +255,15 @@ def create_app() -> FastAPI:
             }
         )
         async def health() -> ServiceHealth:
-            """Health check endpoint.
-            
-            Returns:
-                ServiceHealth object with status details
-            """
+            """Get UI service health status."""
             try:
+                uptime = (datetime.now() - start_time).total_seconds()
                 return ServiceHealth(
                     status="ok",
                     service="ui",
                     version=app.version,
                     is_running=True,
-                    uptime=get_uptime(start_time),
+                    uptime=uptime,
                     error=None,
                     components={"main": ComponentHealth(status="ok", error=None)}
                 )
@@ -240,15 +287,9 @@ def create_app() -> FastAPI:
                 status.HTTP_500_INTERNAL_SERVER_ERROR: {"description": "Internal server error"}
             }
         )
+        @cache(expire=5)  # Cache for 5 seconds
         async def get_services_status() -> Dict[str, ServiceStatus]:
-            """Get status of all services.
-            
-            Returns:
-                Dictionary mapping service names to their status
-                
-            Raises:
-                HTTPException: If status check fails
-            """
+            """Get status of all services."""
             services: Dict[str, ServiceStatus] = {}
             api_urls = get_api_urls()
             
@@ -263,12 +304,12 @@ def create_app() -> FastAPI:
                     "validation": api_urls.validation
                 }.items():
                     health = await check_service_health(url, service_name)
-                    port = int(url.split(":")[-1])
+                    port = int(str(url).split(":")[-1])  # Handle HttpUrl type
                     
                     # Map service status to display status
                     display_status = "ok"  # Default to ok
                     if health.is_running:
-                        display_status = "ok"  # Use ok instead of "Running"
+                        display_status = "ok"
                     elif health.status == "starting":
                         display_status = "starting"
                     elif health.status == "error":
@@ -279,7 +320,7 @@ def create_app() -> FastAPI:
                     services[service_name] = ServiceStatus(
                         name=service_name,
                         port=port,
-                        status=display_status,  # Use the mapped status
+                        status=display_status,
                         uptime=health.uptime,
                         version=health.version,
                         mode=health.mode,

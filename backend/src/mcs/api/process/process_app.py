@@ -7,21 +7,14 @@ from fastapi.middleware.cors import CORSMiddleware
 from loguru import logger
 
 from mcs.api.process.process_service import ProcessService
-from mcs.api.process.endpoints import (
-    process_router,
-    pattern_router,
-    parameter_router,
-    sequence_router
-)
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Handle startup and shutdown events."""
+    service = None
     try:
         logger.info("Starting process service...")
-        
-        # Get service from app state
         service = app.state.service
         
         # Initialize and start service
@@ -30,28 +23,32 @@ async def lifespan(app: FastAPI):
         
         logger.info("Process service started successfully")
         
-        yield  # Server is running
-        
-        # Shutdown
-        if hasattr(app.state, "service") and app.state.service.is_running:
-            await app.state.service.stop()
-            logger.info("Process service stopped")
-            
     except Exception as e:
         logger.error(f"Process service startup failed: {e}")
         # Don't raise here - let the service start in degraded mode
         # The health check will show which components failed
-        yield
-        # Still try to stop service if it exists
-        if hasattr(app.state, "service"):
-            try:
-                await app.state.service.stop()
-            except Exception as stop_error:
-                logger.error(f"Failed to stop process service: {stop_error}")
+        
+    yield  # Server is running
+    
+    # Shutdown
+    if service:
+        try:
+            await service.stop()
+            logger.info("Process service stopped")
+        except Exception as stop_error:
+            logger.error(f"Failed to stop process service: {stop_error}")
 
 
 def create_process_service() -> FastAPI:
     """Create process service application."""
+    # Import routers here to avoid circular imports
+    from mcs.api.process.endpoints import (
+        process_router,
+        pattern_router,
+        parameter_router,
+        sequence_router
+    )
+
     app = FastAPI(
         title="Process Service",
         description="Service for managing process execution",

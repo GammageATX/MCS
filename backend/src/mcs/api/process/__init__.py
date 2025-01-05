@@ -2,6 +2,7 @@
 
 from fastapi import Request
 from mcs.api.process.process_service import ProcessService
+from mcs.api.process.process_app import create_process_service
 
 
 async def get_process_service(request: Request) -> ProcessService:
@@ -11,5 +12,6 @@ async def get_process_service(request: Request) -> ProcessService:
 
 __all__ = [
     "ProcessService",
-    "get_process_service"
+    "get_process_service",
+    "create_process_service"
 ]

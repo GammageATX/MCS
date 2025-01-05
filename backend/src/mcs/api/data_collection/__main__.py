@@ -6,7 +6,7 @@ import yaml
 import uvicorn
 from loguru import logger
 
-from mcs.api.data_collection.data_collection_app import create_data_collection_app
+from mcs.api.data_collection.data_collection_app import create_data_collection_service  # noqa: F401 - used in string form for uvicorn
 from mcs.utils.errors import create_error
 
 
@@ -49,7 +49,7 @@ def setup_logging():
 def load_config():
     """Load service configuration."""
     try:
-        config_path = os.path.join("config", "data_collection.yaml")
+        config_path = os.path.join("backend", "config", "data_collection.yaml")
         if not os.path.exists(config_path):
             logger.warning(f"Config file not found at {config_path}, using defaults")
             return {
@@ -77,33 +77,24 @@ def main():
     try:
         # Setup logging
         setup_logging()
-        logger.info("Starting data collection service...")
         
         # Load config
         config = load_config()
+        
+        # Get service config
         service_config = config.get("service", {})
+        host = service_config.get("host", "localhost")
+        port = service_config.get("port", 8005)
         
-        # Get config from environment or use defaults
-        host = os.getenv("DATA_COLLECTION_HOST", service_config.get("host", "0.0.0.0"))
-        port = int(os.getenv("DATA_COLLECTION_PORT", service_config.get("port", 8005)))
-        reload = os.getenv("DATA_COLLECTION_RELOAD", "false").lower() == "true"
-        
-        # Log startup configuration
-        logger.info(f"Host: {host}")
-        logger.info(f"Port: {port}")
-        logger.info(f"Reload: {reload}")
-        
-        # Run service
+        # Start service
         uvicorn.run(
-            "mcs.api.data_collection.data_collection_app:create_data_collection_app",
+            "mcs.api.data_collection.data_collection_app:create_data_collection_service",
             host=host,
             port=port,
-            reload=reload,
-            log_level="info",
-            factory=True,
-            reload_dirs=[os.path.dirname(os.path.dirname(__file__))]  # Watch mcs package
+            reload=False,
+            workers=1
         )
-
+        
     except Exception as e:
         logger.error(f"Failed to start data collection service: {e}")
         sys.exit(1)

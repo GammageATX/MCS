@@ -1,7 +1,6 @@
 """File service implementation."""
 
 import os
-from typing import Dict, Any, Optional
 from datetime import datetime
 from fastapi import status
 from loguru import logger

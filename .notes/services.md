@@ -61,8 +61,7 @@ Handles real-time communication and hardware control.
 
 ##### Deagglomerator Control
 
-- `POST /deagg/{deagg_id}/speed` - Set deagglomerator speed
-- `POST /deagg/{deagg_id}/set` - Set deagglomerator parameters
+- `POST /deagg/{deagg_id}/settings` - Set deagglomerator parameters (speed via duty cycle 20-35%, fixed 500Hz frequency)
 
 ##### Nozzle Control
 
