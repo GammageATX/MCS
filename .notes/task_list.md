@@ -3,15 +3,16 @@
 ## Current Sprint
 
 ### Service Development Mode Implementation
+
 - [ ] Create standardized __main__.py template
 - [ ] Implement development mode for each service:
-  - [ ] UI Service
-  - [ ] Configuration Service
-  - [ ] State Service
-  - [x] Communication Service
-  - [ ] Process Service
-  - [ ] Data Collection Service
-  - [ ] Validation Service
+    - [ ] UI Service
+    - [ ] Configuration Service
+    - [ ] State Service
+    - [ ] Communication Service
+    - [ ] Process Service
+    - [ ] Data Collection Service
+    - [ ] Validation Service
 - [ ] Add logging configuration to each service
 - [ ] Add config loading with defaults
 - [ ] Test hot reload functionality
@@ -20,25 +21,28 @@
 ## Code Consistency Refactoring
 
 ### Phase 0: Leverage Existing Standards
+
 - [ ] Document current standards in utils/
-  - [ ] Health check system usage guide
-  - [ ] Error handling patterns guide
+    - [ ] Health check system usage guide
+    - [ ] Error handling patterns guide
 - [ ] Audit services for compliance with existing standards
 - [ ] Create examples of correct usage patterns
 - [ ] Add validation for proper standard usage
 
 ### Phase 1: Method Naming Standardization
+
 - [ ] Audit current method names across all services
 - [ ] Create mapping of old to new method names
 - [ ] Update equipment service methods
-  - [ ] Standardize binary state methods to set_*_state()
-  - [ ] Rename start_*/stop_* methods
-  - [ ] Update value setting methods
+    - [ ] Standardize binary state methods to set_*_state()
+    - [ ] Rename start_*/stop_* methods
+    - [ ] Update value setting methods
 - [ ] Update motion service methods
 - [ ] Update documentation
 - [ ] Add tests for renamed methods
 
 ### Phase 2: Error Handling Unification
+
 - [ ] Implement standardized error handling utility
 - [ ] Update direct error creation instances
 - [ ] Standardize try/except blocks
@@ -47,6 +51,7 @@
 - [ ] Update error documentation
 
 ### Phase 3: State Management Standardization
+
 - [ ] Create unified state update mechanism
 - [ ] Implement standard async callback handler
 - [ ] Update state change notifications
@@ -54,6 +59,7 @@
 - [ ] Document state management patterns
 
 ### Phase 4: Validation Consolidation
+
 - [ ] Define validation hierarchy (model/service/endpoint)
 - [ ] Create standard validation utilities
 - [ ] Update Pydantic models
@@ -62,6 +68,7 @@
 - [ ] Update validation documentation
 
 ### Phase 5: Logging Standardization
+
 - [ ] Create logging templates
 - [ ] Define log levels for different operations
 - [ ] Update logging calls
@@ -71,6 +78,7 @@
 ## Completed Tasks
 
 ### Code Standardization (2024-01-04)
+
 1. Equipment Service Method Names
    - [x] Standardized flow control methods with `_rate` suffix
    - [x] Unified valve control methods with `_state` suffix
@@ -89,6 +97,7 @@
    - [x] Fixed model imports and spacing
 
 ### Next Steps
+
 1. Apply similar standardization to other services:
    - [ ] Motion service
    - [ ] Process service

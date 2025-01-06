@@ -152,10 +152,12 @@
 ## 2024-01-04: Code Standardization Review
 
 ### Participants
+
 - Development Team
 - AI Assistant (Cursor)
 
 ### Key Decisions
+
 1. Method Naming Conventions
    - Standardized state control methods with `set_<component>_state` pattern
    - Unified value control methods with descriptive suffixes (e.g., `_rate`)
@@ -174,6 +176,7 @@
    - WebSocket for real-time updates
 
 ### Implementation Status
+
 1. Completed Changes
    - Equipment service method names updated
    - API endpoints standardized
@@ -186,6 +189,7 @@
    - Update tests for renamed methods
 
 ### Next Steps
+
 1. Review other services for similar standardization opportunities
 2. Create documentation with examples
 3. Update test suite to reflect new naming
