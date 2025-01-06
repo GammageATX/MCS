@@ -20,30 +20,18 @@ async def lifespan(app: FastAPI):
     """Handle startup and shutdown events."""
     try:
         logger.info("Starting communication service...")
-        
-        # Get service from app state
         service = app.state.service
-        
-        # Initialize and start service
         await service.initialize()
         await service.start()
-        
         logger.info("Communication service started successfully")
-        
-        yield  # Server is running
-        
-        # Shutdown
+        yield
         logger.info("Stopping communication service...")
         if hasattr(app.state, "service") and app.state.service.is_running:
             await app.state.service.stop()
             logger.info("Communication service stopped successfully")
-        
     except Exception as e:
         logger.error(f"Communication service startup failed: {e}")
-        # Don't raise here - let the service start in degraded mode
-        # The health check will show which components failed
         yield
-        # Still try to stop service if it exists
         if hasattr(app.state, "service"):
             try:
                 await app.state.service.stop()
@@ -88,23 +76,20 @@ def create_communication_service() -> FastAPI:
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             content={"detail": exc.errors()},
         )
-    
-    # Create service
-    service = CommunicationService(config)
-    
+
     # Add routers
     app.include_router(state_router)
     app.include_router(equipment_router)
     app.include_router(motion_router)
-    
-    # Store service in app state
+
+    # Create service
+    service = CommunicationService(config)
     app.state.service = service
-    
+
     @app.get("/health", response_model=ServiceHealth)
     async def health() -> ServiceHealth:
         """Get service health status."""
         try:
-            # Check if service exists and is initialized
             if not hasattr(app.state, "service"):
                 return ServiceHealth(
                     status=HealthStatus.STARTING,
@@ -115,24 +100,22 @@ def create_communication_service() -> FastAPI:
                     error="Service initializing",
                     components={}
                 )
-            
             return await app.state.service.health()
-            
         except Exception as e:
             error_msg = f"Health check failed: {str(e)}"
             logger.error(error_msg)
             return create_error_health("communication", version, error_msg)
-    
+
     @app.post("/start")
     async def start():
         """Start service."""
         await app.state.service.start()
         return {"status": "started"}
-    
+
     @app.post("/stop")
     async def stop():
         """Stop service."""
         await app.state.service.stop()
         return {"status": "stopped"}
-    
+
     return app

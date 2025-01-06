@@ -201,10 +201,14 @@ class MotionService:
                     
                     # Check critical axes
                     for axis_name, axis in [("x", status.x_axis), ("y", status.y_axis), ("z", status.z_axis)]:
-                        axis_ok = not axis.error and axis.homed
+                        axis_homed = axis.homed
+                        # Error only if axis has fault, degraded if not homed
+                        status = HealthStatus.ERROR if axis.error else (
+                            HealthStatus.DEGRADED if not axis_homed else HealthStatus.OK
+                        )
                         components[f"{axis_name}_axis"] = ComponentHealth(
-                            status=HealthStatus.OK if axis_ok else HealthStatus.ERROR,
-                            error="Not homed" if not axis.homed else "Axis error" if axis.error else None
+                            status=status,
+                            error="Axis error" if axis.error else ("Not homed" if not axis_homed else None)
                         )
                 else:
                     components["status"] = ComponentHealth(
@@ -234,7 +238,8 @@ class MotionService:
         try:
             components = await self._get_component_health()
             
-            # Overall status is ERROR if any critical component is in error
+            # Overall status is OK if service is running, even if some components are degraded
+            # Only ERROR if critical failures occur
             overall_status = HealthStatus.ERROR if any(
                 c.status == HealthStatus.ERROR for c in components.values()
             ) else HealthStatus.OK

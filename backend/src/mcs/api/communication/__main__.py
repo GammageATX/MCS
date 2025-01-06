@@ -6,7 +6,7 @@ import yaml
 import uvicorn
 from loguru import logger
 
-from mcs.api.communication.communication_app import create_communication_service  # noqa: F401
+from mcs.api.communication.communication_app import create_communication_service  # noqa: F401 - used in string form for uvicorn
 from mcs.utils.errors import create_error
 
 
@@ -73,11 +73,11 @@ def load_config():
 
 
 def main():
-    """Run communication service."""
+    """Run communication service in development mode."""
     try:
         # Setup logging
         setup_logging()
-        logger.info("Starting communication service...")
+        logger.info("Starting communication service in development mode...")
         
         # Load config
         config = load_config()
@@ -86,22 +86,21 @@ def main():
         # Get config from environment or use defaults
         host = os.getenv("COMMUNICATION_HOST", service_config.get("host", "0.0.0.0"))
         port = int(os.getenv("COMMUNICATION_PORT", service_config.get("port", 8003)))
-        reload = os.getenv("COMMUNICATION_RELOAD", "false").lower() == "true"
         
         # Log startup configuration
         logger.info(f"Host: {host}")
         logger.info(f"Port: {port}")
-        logger.info(f"Reload: {reload}")
+        logger.info("Mode: development (reload enabled)")
         
-        # Run service
+        # Run service with development configuration
         uvicorn.run(
             "mcs.api.communication.communication_app:create_communication_service",
             host=host,
             port=port,
-            reload=reload,
-            log_level="info",
+            reload=True,
             factory=True,
-            reload_dirs=[os.path.dirname(os.path.dirname(__file__))]  # Watch mcs package
+            reload_dirs=["backend/src"],
+            log_level="debug"
         )
 
     except Exception as e:

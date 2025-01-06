@@ -9,6 +9,7 @@ from pydantic import BaseModel, Field
 class HealthStatus(str, Enum):
     """Standardized health status values."""
     OK = "ok"
+    DEGRADED = "degraded"  # System functional but with reduced capabilities
     ERROR = "error"
     STARTING = "starting"
     STOPPED = "stopped"

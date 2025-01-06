@@ -227,3 +227,17 @@ async def health(self) -> ServiceHealth:
    - Dependencies
    - Configuration options
    - Error scenarios
+
+### Service Deployment Patterns
+
+#### Development Mode
+
+- Uses factory pattern with hot reload
+- Enabled via MCS_ENV=development
+- Watches source directories for changes
+
+#### Production Mode
+
+- Uses single app instance
+- Standard Uvicorn deployment
+- No reload functionality
