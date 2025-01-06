@@ -110,15 +110,21 @@ class TagMappingService:
                     full_tag_name = f"{group_prefix}.{tag_name}"
                     logger.debug(f"Processing tag {full_tag_name} with data: {tag_data}")
                     
+                    # Handle internal tags
+                    is_internal = tag_data.get("internal", False)
+                    mapped = tag_data.get("mapped", not is_internal)  # Internal tags are not mapped by default
+                    
                     self._tag_map[full_tag_name] = {
                         "type": tag_data.get("type", "unknown"),
                         "access": tag_data.get("access", "read"),
-                        "mapped": tag_data.get("mapped", True),  # Default to True if plc_tag exists
-                        "plc_tag": tag_data.get("plc_tag"),
+                        "mapped": mapped,
+                        "internal": is_internal,
+                        "plc_tag": tag_data.get("plc_tag") if mapped else None,
                         "description": tag_data.get("description", ""),
                         "scaling": tag_data.get("scaling"),
                         "range": tag_data.get("range"),
-                        "unit": tag_data.get("unit")
+                        "unit": tag_data.get("unit"),
+                        "default": tag_data.get("default")  # Add default value support
                     }
                     logger.debug(f"Added tag mapping: {full_tag_name} -> {self._tag_map[full_tag_name]}")
             else:

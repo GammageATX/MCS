@@ -87,6 +87,27 @@ class TagCacheService:
             # Initialize empty cache
             self._cache = {}
             
+            # Initialize internal tags with defaults
+            system_defaults = self._config.get("communication", {}).get("system_defaults", {})
+            for tag_name, tag_info in self._tag_mapping._tag_map.items():
+                if tag_info.get("internal", False):
+                    # Check for default in tag definition
+                    default = tag_info.get("default")
+                    if default is None:
+                        # Check system defaults using tag path
+                        path = tag_name.split(".")
+                        current = system_defaults
+                        for part in path:
+                            if not isinstance(current, dict):
+                                break
+                            current = current.get(part, {})
+                        if not isinstance(current, dict):
+                            default = current
+                    
+                    if default is not None:
+                        self._cache[tag_name] = default
+                        logger.debug(f"Initialized internal tag {tag_name} with default {default}")
+            
             # Connect PLC client
             logger.info("Connecting PLC client")
             await self._plc_client.connect()

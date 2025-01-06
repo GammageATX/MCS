@@ -83,9 +83,10 @@ internal_states:
       conditions:
       - tag: "motion.position.z"
         operator: "less_than_equal"
-        value: "{system_defaults.safety.safe_z}"
+        value: "{safety.safe_z}"
       - tag: "motion.status.z"
-        value: 40.0
+        operator: "equal"
+        value: 4
 
     at_trough_position:
       type: "multi_condition"
