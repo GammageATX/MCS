@@ -287,19 +287,27 @@ class InternalStateService:
             # Try both variants
             for i in [1, 2]:
                 tag = tag_pattern.replace("{1|2}", str(i))
-                value = await self._tag_cache.get_tag(tag)
-                if value is not None:
-                    logger.debug(f"Found value for wildcard tag {tag_pattern} -> {tag} = {value}")
-                    return value
+                try:
+                    value = await self._tag_cache.get_tag(tag)
+                    if value is not None:
+                        logger.debug(f"Found value for wildcard tag {tag_pattern} -> {tag} = {value}")
+                        return value
+                except Exception as e:
+                    logger.warning(f"Error getting tag {tag}: {e}")
+                    continue
             logger.warning(f"No value found for wildcard tag pattern: {tag_pattern}")
             return None
         else:
-            value = await self._tag_cache.get_tag(tag_pattern)
-            if value is None:
-                logger.warning(f"No value found for tag: {tag_pattern}")
-            else:
-                logger.debug(f"Found value for tag {tag_pattern} = {value}")
-            return value
+            try:
+                value = await self._tag_cache.get_tag(tag_pattern)
+                if value is None:
+                    logger.warning(f"No value found for tag: {tag_pattern}")
+                else:
+                    logger.debug(f"Found value for tag {tag_pattern} = {value}")
+                return value
+            except Exception as e:
+                logger.warning(f"Error getting tag {tag_pattern}: {e}")
+                return None
 
     async def _resolve_value(self, value: Any) -> Any:
         """Resolve a value that may contain a placeholder.
@@ -451,3 +459,103 @@ class InternalStateService:
             Dict[str, bool]: Current state values
         """
         return self._internal_states.copy()
+
+    async def get_equipment_states(self) -> Dict[str, bool]:
+        """Get all equipment-related internal states.
+        
+        Returns:
+            Dict[str, bool]: Equipment-related internal states
+        """
+        if not self.is_running:
+            logger.warning("Service not running, returning empty equipment states")
+            return {}
+            
+        # Filter states that are equipment-related
+        equipment_states = {
+            state: value
+            for state, value in self._internal_states.items()
+            if state in [
+                "gas_flow_stable",
+                "powder_feed_active",
+                "process_ready",
+                "pressures_stable",
+                "flows_stable",
+                "powder_feed_on"
+            ]
+        }
+        return equipment_states
+
+    async def get_equipment_state(self, state_name: str) -> Optional[bool]:
+        """Get single equipment-related internal state.
+        
+        Args:
+            state_name: Name of internal state to get
+            
+        Returns:
+            Optional[bool]: Current state value or None if not found
+        """
+        if not self.is_running:
+            logger.warning(f"Service not running, returning None for equipment state: {state_name}")
+            return None
+            
+        if state_name not in [
+            "gas_flow_stable",
+            "powder_feed_active",
+            "process_ready",
+            "pressures_stable",
+            "flows_stable",
+            "powder_feed_on"
+        ]:
+            logger.warning(f"State {state_name} is not an equipment state")
+            return None
+            
+        return self._internal_states.get(state_name)
+
+    async def get_motion_states(self) -> Dict[str, bool]:
+        """Get all motion-related internal states.
+        
+        Returns:
+            Dict[str, bool]: Motion-related internal states
+        """
+        if not self.is_running:
+            logger.warning("Service not running, returning empty motion states")
+            return {}
+            
+        # Filter states that are motion-related
+        motion_states = {
+            state: value
+            for state, value in self._internal_states.items()
+            if state in [
+                "motion_enabled",
+                "at_valid_position",
+                "homing_complete",
+                "axes_referenced",
+                "motion_error"
+            ]
+        }
+        return motion_states
+
+    async def get_motion_state(self, state_name: str) -> Optional[bool]:
+        """Get single motion-related internal state.
+        
+        Args:
+            state_name: Name of internal state to get
+            
+        Returns:
+            Optional[bool]: Current state value or None if not found
+        """
+        if not self.is_running:
+            logger.warning(f"Service not running, returning None for motion state: {state_name}")
+            return None
+            
+        if state_name not in [
+            "motion_enabled",
+            "at_valid_position",
+            "homing_complete",
+            "axes_referenced",
+            "motion_error"
+        ]:
+            logger.warning(f"State {state_name} is not a motion state")
+            return None
+            
+        return self._internal_states.get(state_name)

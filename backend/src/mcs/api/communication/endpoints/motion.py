@@ -6,13 +6,8 @@ from loguru import logger
 import asyncio
 
 from mcs.utils.errors import create_error
-from mcs.api.communication.models import (
-    Position,
-    SystemStatus,
-    JogRequest,
-    MoveRequest,
-    MotionState
-)
+from mcs.api.communication.models.state import Position, SystemStatus, MotionState
+from mcs.api.communication.models.motion import JogRequest, MoveRequest
 
 router = APIRouter(prefix="/motion", tags=["motion"])
 

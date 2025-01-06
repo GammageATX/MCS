@@ -331,7 +331,7 @@ class TagMappingService:
             
         return self._tag_map[internal_tag].get("access")
 
-    def get_tag_info(self, internal_name: str) -> Dict[str, Any]:
+    def get_tag_info(self, internal_name: str) -> Optional[Dict[str, Any]]:
         """Get all tag information."""
         try:
             if not self.is_running:
@@ -341,10 +341,8 @@ class TagMappingService:
                 )
 
             if internal_name not in self._tag_map:
-                raise create_error(
-                    status_code=status.HTTP_404_NOT_FOUND,
-                    message=f"Tag not found: {internal_name}"
-                )
+                logger.warning(f"Tag not found: {internal_name}")
+                return None
 
             return self._tag_map[internal_name]
 

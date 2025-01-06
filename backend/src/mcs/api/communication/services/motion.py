@@ -9,7 +9,7 @@ from mcs.utils.errors import create_error
 from mcs.utils.health import ServiceHealth, ComponentHealth, HealthStatus, create_error_health
 from mcs.api.communication.services.tag_cache import TagCacheService
 from mcs.api.communication.services.internal_state import InternalStateService
-from mcs.api.communication.models.motion import (
+from mcs.api.communication.models.state import (
     Position, SystemStatus, MotionState, AxisStatus
 )
 
@@ -52,12 +52,12 @@ class MotionService:
         """Get service uptime in seconds."""
         return (datetime.now() - self._start_time).total_seconds() if self._start_time else 0.0
 
-    def on_state_changed(self, callback: Callable[[Dict[str, Any]], None]) -> None:
-        """Register callback for state changes."""
+    def on_state_changed(self, callback: Callable[[MotionState], None]) -> None:
+        """Register callback for motion state changes."""
         if callback not in self._state_callbacks:
             self._state_callbacks.append(callback)
 
-    def remove_state_changed_callback(self, callback: Callable[[Dict[str, Any]], None]) -> None:
+    def remove_state_changed_callback(self, callback: Callable[[MotionState], None]) -> None:
         """Remove state change callback."""
         if callback in self._state_callbacks:
             self._state_callbacks.remove(callback)
@@ -67,10 +67,8 @@ class MotionService:
         try:
             position = await self.get_position()
             status = await self.get_status()
-            state = {
-                "position": position.dict(),
-                "status": status.dict()
-            }
+            state = MotionState(position=position, status=status)
+            
             for callback in self._state_callbacks:
                 try:
                     callback(state)

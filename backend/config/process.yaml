@@ -275,7 +275,7 @@ process:
             value: bool
           topic: tag/set
         validation:
-        - tag: pressure.chamber_pressure
+        - tag: pressure.chamber
       mechanical_pump:
         description: Control mechanical pump
         messages:
@@ -286,7 +286,7 @@ process:
             value: bool
           topic: tag/set
         validation:
-        - tag: pressure.chamber_pressure
+        - tag: pressure.chamber
     valves:
       feeder_gas_valve:
         description: Control feeder gas line valve
@@ -635,7 +635,7 @@ process:
         checks:
         - condition: less_than
           error: Chamber pressure too high for spraying
-          tag: pressure.chamber_pressure
+          tag: pressure.chamber
           timeout: 30.0
           value: 5.0
           warning: Chamber pressure rising

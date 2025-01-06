@@ -70,10 +70,10 @@ internal_states:
       type: "multi_condition"
       description: "System pressures are stable"
       conditions:
-      - tag: "pressure.chamber_pressure"
+      - tag: "vacuum.chamber_pressure"
         operator: "less_than"
         value: 5.0
-      - tag: "pressure.main_supply_pressure"
+      - tag: "gas_control.main_supply_pressure"
         operator: "greater_than"
         value: 50.0
 

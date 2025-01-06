@@ -39,6 +39,10 @@ class TagCacheService:
         # Tag subscriptions
         self._tag_subscribers: Dict[str, Set[Callable[[str, Any], None]]] = {}
         
+        # Track logged tags to avoid duplicate debug messages
+        self._logged_tag_mappings: Set[str] = set()
+        self._logged_tag_changes: Set[str] = set()
+        
         # Store constructor args for initialization
         self._init_config = config
         self._init_plc_client = plc_client
@@ -300,7 +304,19 @@ class TagCacheService:
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
                 message=f"{self.service_name} service not running"
             )
+            
+        # Check if tag exists in mapping
+        tag_info = self._tag_mapping.get_tag_info(tag)
+        if not tag_info:
+            logger.warning(f"Tag not found in mapping: {tag}")
+            return None
+            
+        # Get value from cache
         value = self._cache.get(tag)
+        if value is None:
+            logger.warning(f"Tag not found in cache: {tag}")
+            return None
+            
         logger.debug(f"Retrieved value for tag {tag}: {value}")
         return value
 
@@ -372,12 +388,15 @@ class TagCacheService:
                         plc_tag = tag_info["plc_tag"]
                         plc_tags.append(plc_tag)
                         internal_to_plc[plc_tag] = internal_tag
-                        logger.debug(f"Polling mapped tag: {internal_tag} -> {plc_tag}")
+                        # Only log mapping once
+                        if internal_tag not in self._logged_tag_mappings:
+                            logger.debug(f"Mapped internal tag {internal_tag} -> PLC tag {plc_tag}")
+                            self._logged_tag_mappings.add(internal_tag)
 
                 # Get current values
                 if plc_tags:
                     values = await self._plc_client.get(plc_tags)
-                    logger.debug(f"Polled values: {values}")
+                    changed_values = {}
                     
                     # Process each value
                     for plc_tag, value in values.items():
@@ -395,7 +414,7 @@ class TagCacheService:
                             
                             # If internal value changed, notify subscribers and callbacks
                             if old_value != scaled_value:
-                                logger.debug(f"Tag changed: {internal_tag} = {scaled_value} (PLC: {plc_tag} = {value})")
+                                changed_values[internal_tag] = (scaled_value, plc_tag, value)
                                 
                                 # Notify tag subscribers
                                 self._notify_tag_subscribers(internal_tag, scaled_value)
@@ -404,6 +423,14 @@ class TagCacheService:
                                 tag_info = self._tag_mapping._tag_map.get(internal_tag, {})
                                 if tag_info.get("state_type"):
                                     self._notify_state_callbacks(tag_info["state_type"], scaled_value)
+                    
+                    # Log all changes in one message
+                    if changed_values:
+                        changes_str = "\n".join(
+                            f"  {tag} = {val[0]} (PLC: {val[1]} = {val[2]})"
+                            for tag, val in changed_values.items()
+                        )
+                        logger.debug(f"Tag changes:\n{changes_str}")
 
                 # Reset error counter on success
                 consecutive_errors = 0

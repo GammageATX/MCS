@@ -19,6 +19,10 @@ def setup_logging():
     # Remove default handler
     logger.remove()
     
+    # Get log level from environment or use default
+    console_level = os.getenv("MCS_LOG_LEVEL", "INFO").upper()
+    file_level = os.getenv("MCS_FILE_LOG_LEVEL", "DEBUG").upper()
+    
     # Add console handler with color
     log_format = (
         "<green>{time:YYYY-MM-DD HH:mm:ss}</green> | "
@@ -26,7 +30,7 @@ def setup_logging():
         "<cyan>{name}</cyan>:<cyan>{function}</cyan>:<cyan>{line}</cyan> - "
         "<level>{message}</level>"
     )
-    logger.add(sys.stderr, format=log_format, level="INFO", enqueue=True)
+    logger.add(sys.stderr, format=log_format, level=console_level, enqueue=True)
     
     # Add file handler with rotation
     file_format = (
@@ -40,7 +44,7 @@ def setup_logging():
         rotation="1 day",
         retention="30 days",
         format=file_format,
-        level="DEBUG",
+        level=file_level,
         enqueue=True,
         compression="zip"
     )

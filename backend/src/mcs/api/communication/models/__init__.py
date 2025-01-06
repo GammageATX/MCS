@@ -1,49 +1,60 @@
-"""Communication API models."""
+"""Communication service models."""
 
-from mcs.api.communication.models.equipment import (
-    EquipmentState,
-    GasState,
-    VacuumState,
-    FeederState,
-    NozzleState,
+from .equipment import (
     GasFlowRequest,
     GasValveRequest,
     VacuumPumpRequest,
     GateValveRequest,
     ShutterRequest,
+    NozzleSelectRequest,
     FeederRequest,
+    FeederStateRequest,
     DeagglomeratorRequest
 )
 
-from mcs.api.communication.models.motion import (
+from .motion import (
+    JogRequest,
+    MoveRequest
+)
+
+from .state import (
+    GasState,
+    VacuumState,
+    FeederState,
+    NozzleState,
     Position,
     AxisStatus,
     SystemStatus,
-    JogRequest,
-    MoveRequest,
-    MotionState
+    MotionState,
+    EquipmentState,
+    ProcessState
 )
 
 __all__ = [
-    # Equipment models
-    "EquipmentState",
-    "GasState",
-    "VacuumState",
-    "FeederState",
-    "NozzleState",
-    "GasFlowRequest",
-    "GasValveRequest",
-    "VacuumPumpRequest",
-    "GateValveRequest",
-    "ShutterRequest",
-    "FeederRequest",
-    "DeagglomeratorRequest",
-
-    # Motion models
-    "Position",
-    "AxisStatus",
-    "SystemStatus",
-    "JogRequest",
-    "MoveRequest",
-    "MotionState"
+    # Equipment requests
+    'GasFlowRequest',
+    'GasValveRequest',
+    'VacuumPumpRequest',
+    'GateValveRequest',
+    'ShutterRequest',
+    'NozzleSelectRequest',
+    'FeederRequest',
+    'FeederStateRequest',
+    'DeagglomeratorRequest',
+    'ProcessState',
+    
+    # Motion requests
+    'JogRequest',
+    'MoveRequest',
+    
+    # Equipment and motion states
+    'GasState',
+    'VacuumState',
+    'FeederState',
+    'NozzleState',
+    'Position',
+    'AxisStatus',
+    'SystemStatus',
+    'MotionState',
+    'EquipmentState'
 ]

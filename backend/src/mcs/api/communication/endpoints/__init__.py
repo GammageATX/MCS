@@ -1,10 +1,10 @@
 """Communication API endpoints."""
 
-from typing import Dict, Any
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect, status
 from loguru import logger
 import asyncio
 
+from mcs.api.communication.models.state import EquipmentState, MotionState
 from mcs.api.communication.endpoints.equipment import router as equipment_router
 from mcs.api.communication.endpoints.motion import router as motion_router
 
@@ -35,10 +35,10 @@ async def websocket_state(websocket: WebSocket):
         motion_queue = asyncio.Queue()
         
         # Subscribe to state updates
-        def equipment_state_changed(state: Dict[str, Any]):
+        def equipment_state_changed(state: EquipmentState):
             asyncio.create_task(equipment_queue.put(state))
             
-        def motion_state_changed(state: Dict[str, Any]):
+        def motion_state_changed(state: MotionState):
             asyncio.create_task(motion_queue.put(state))
         
         # Register callbacks
@@ -50,15 +50,13 @@ async def websocket_state(websocket: WebSocket):
             equipment_state = await service.equipment.get_state()
             motion_position = await service.motion.get_position()
             motion_status = await service.motion.get_status()
+            motion_state = MotionState(position=motion_position, status=motion_status)
             
             await websocket.send_json({
                 "type": "state_update",
                 "data": {
                     "equipment": equipment_state.dict(),
-                    "motion": {
-                        "position": motion_position.dict(),
-                        "status": motion_status.dict()
-                    }
+                    "motion": motion_state.dict()
                 }
             })
 
@@ -82,16 +80,14 @@ async def websocket_state(websocket: WebSocket):
                     equipment_state = await service.equipment.get_state()
                     motion_position = await service.motion.get_position()
                     motion_status = await service.motion.get_status()
+                    motion_state = MotionState(position=motion_position, status=motion_status)
                     
                     # Send update
                     await websocket.send_json({
                         "type": "state_update",
                         "data": {
                             "equipment": equipment_state.dict(),
-                            "motion": {
-                                "position": motion_position.dict(),
-                                "status": motion_status.dict()
-                            }
+                            "motion": motion_state.dict()
                         }
                     })
 

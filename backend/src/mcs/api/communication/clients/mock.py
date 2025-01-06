@@ -140,11 +140,7 @@ class MockPLCClient:
             while self._running:
                 # Simulate some tag value changes
                 for tag in self._plc_tags:
-                    if "Position" in tag:
-                        # Simulate small position changes
-                        current = self._plc_tags[tag]
-                        self._plc_tags[tag] = current + (0.1 if current < 100 else -0.1)
-                    elif "Pressure" in tag:
+                    if "Pressure" in tag:  # Check for PLC tag naming convention
                         # Simulate pressure fluctuations
                         current = self._plc_tags[tag]
                         self._plc_tags[tag] = current + (0.05 if current < 5 else -0.05)
