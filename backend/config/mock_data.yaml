@@ -26,13 +26,13 @@ plc_tags:
   "Open": true # Gate valve open position
   "Partial": false # Gate valve partial position
   "VentSwitch": false # Chamber vent valve
-  "ChamberPressure": 2.5 # Chamber vacuum pressure (torr)
 
   # Pressure Measurements
   "MainGasPressure": 80.0 # Main gas supply pressure (psi)
   "RegulatorPressure": 60.0 # Regulator pressure (psi)
   "NozzlePressure": 55.0 # Nozzle pressure (psi)
   "FeederPressure": 500.0 # Powder feeder pressure (torr)
+  "ChamberPressure": 2.5 # Chamber vacuum pressure (torr)
 
   # Motion Control
   "AMC.Ax1Position": 0.0 # X axis position (mm)

@@ -300,7 +300,9 @@ class TagCacheService:
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
                 message=f"{self.service_name} service not running"
             )
-        return self._cache.get(tag)
+        value = self._cache.get(tag)
+        logger.debug(f"Retrieved value for tag {tag}: {value}")
+        return value
 
     async def set_tag(self, tag: str, value: Any) -> None:
         """Set tag value."""

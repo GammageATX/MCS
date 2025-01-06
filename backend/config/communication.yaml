@@ -101,3 +101,10 @@ internal_states:
       - tag: "motion.position.z"
         operator: "equal"
         value: 0.0
+
+    motion_enabled:
+      type: "comparison"
+      description: "Motion system is enabled and ready"
+      tag: "interlocks.motion_ready"
+      operator: "equal"
+      value: true

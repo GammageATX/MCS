@@ -255,7 +255,7 @@ export default function EquipmentControl() {
             <Grid item xs={6}>
               <Typography>Chamber Pressure</Typography>
               <Typography variant="h6">
-                {equipment.vacuum.chamber_pressure.toExponential(2)} Torr
+                {equipment.pressure.chamber_pressure.toExponential(2)} Torr
               </Typography>
             </Grid>
             <Grid item xs={6}>

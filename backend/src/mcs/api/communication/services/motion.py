@@ -2,13 +2,16 @@
 
 from typing import Dict, Any, Callable
 from datetime import datetime
-from fastapi import status as http_status
+from fastapi import status
 from loguru import logger
 
 from mcs.utils.errors import create_error
 from mcs.utils.health import ServiceHealth, ComponentHealth, HealthStatus, create_error_health
 from mcs.api.communication.services.tag_cache import TagCacheService
-from mcs.api.communication.models.motion import Position, SystemStatus, AxisStatus
+from mcs.api.communication.services.internal_state import InternalStateService
+from mcs.api.communication.models.motion import (
+    Position, SystemStatus, MotionState, AxisStatus
+)
 
 
 class MotionService:
@@ -17,17 +20,15 @@ class MotionService:
     def __init__(self, config: Dict[str, Any]):
         """Initialize service."""
         self._service_name = "motion"
-        self._version = "1.0.0"  # Will be updated from config
+        self._version = config.get("communication", {}).get("services", {}).get("motion", {}).get("version", "1.0.0")
         self._is_running = False
         self._start_time = None
         
         # Initialize components to None
-        self._config = None
+        self._config = config  # Store config here
         self._tag_cache = None
+        self._internal_state = None
         self._state_callbacks = []
-        
-        # Store constructor args for initialization
-        self._init_config = config
         
         logger.info(f"{self.service_name} service initialized")
 
@@ -83,30 +84,31 @@ class MotionService:
         self._tag_cache = tag_cache
         logger.info(f"{self.service_name} tag cache service set")
 
+    def set_internal_state(self, internal_state: InternalStateService) -> None:
+        """Set internal state service."""
+        self._internal_state = internal_state
+        logger.info(f"{self.service_name} internal state service set")
+
     async def initialize(self) -> None:
         """Initialize service."""
         try:
             if self.is_running:
                 raise create_error(
-                    status_code=http_status.HTTP_409_CONFLICT,
+                    status_code=status.HTTP_409_CONFLICT,
                     message=f"{self.service_name} service already running"
                 )
-
-            # Load config and version
-            self._config = self._init_config
-            self._version = self._config["communication"]["services"]["motion"]["version"]
 
             # Initialize tag cache
             if not self._tag_cache:
                 raise create_error(
-                    status_code=http_status.HTTP_503_SERVICE_UNAVAILABLE,
+                    status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
                     message=f"{self.service_name} tag cache service not initialized"
                 )
 
             # Wait for tag cache service to be ready
             if not self._tag_cache.is_running:
                 raise create_error(
-                    status_code=http_status.HTTP_503_SERVICE_UNAVAILABLE,
+                    status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
                     message=f"{self.service_name} tag cache service not running"
                 )
             
@@ -116,7 +118,7 @@ class MotionService:
             error_msg = f"Failed to initialize {self.service_name} service: {str(e)}"
             logger.error(error_msg)
             raise create_error(
-                status_code=http_status.HTTP_503_SERVICE_UNAVAILABLE,
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
                 message=error_msg
             )
 
@@ -125,13 +127,13 @@ class MotionService:
         try:
             if self.is_running:
                 raise create_error(
-                    status_code=http_status.HTTP_409_CONFLICT,
+                    status_code=status.HTTP_409_CONFLICT,
                     message=f"{self.service_name} service already running"
                 )
 
             if not self._tag_cache or not self._tag_cache.is_running:
                 raise create_error(
-                    status_code=http_status.HTTP_400_BAD_REQUEST,
+                    status_code=status.HTTP_400_BAD_REQUEST,
                     message=f"{self.service_name} service not initialized"
                 )
             
@@ -145,7 +147,7 @@ class MotionService:
             error_msg = f"Failed to start {self.service_name} service: {str(e)}"
             logger.error(error_msg)
             raise create_error(
-                status_code=http_status.HTTP_503_SERVICE_UNAVAILABLE,
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
                 message=error_msg
             )
 
@@ -154,7 +156,7 @@ class MotionService:
         try:
             if not self.is_running:
                 raise create_error(
-                    status_code=http_status.HTTP_409_CONFLICT,
+                    status_code=status.HTTP_409_CONFLICT,
                     message=f"{self.service_name} service not running"
                 )
 
@@ -171,7 +173,7 @@ class MotionService:
             error_msg = f"Failed to stop {self.service_name} service: {str(e)}"
             logger.error(error_msg)
             raise create_error(
-                status_code=http_status.HTTP_503_SERVICE_UNAVAILABLE,
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
                 message=error_msg
             )
 
@@ -257,7 +259,7 @@ class MotionService:
         try:
             if not self.is_running:
                 raise create_error(
-                    status_code=http_status.HTTP_503_SERVICE_UNAVAILABLE,
+                    status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
                     message=f"{self.service_name} service not running"
                 )
 
@@ -277,7 +279,7 @@ class MotionService:
             error_msg = "Failed to get position"
             logger.error(f"{error_msg}: {str(e)}")
             raise create_error(
-                status_code=http_status.HTTP_500_INTERNAL_SERVER_ERROR,
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 message=error_msg
             )
 
@@ -286,7 +288,7 @@ class MotionService:
         try:
             if not self.is_running:
                 raise create_error(
-                    status_code=http_status.HTTP_503_SERVICE_UNAVAILABLE,
+                    status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
                     message=f"{self.service_name} service not running"
                 )
 
@@ -311,7 +313,7 @@ class MotionService:
             error_msg = "Failed to get system status"
             logger.error(f"{error_msg}: {str(e)}")
             raise create_error(
-                status_code=http_status.HTTP_500_INTERNAL_SERVER_ERROR,
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 message=error_msg
             )
 
@@ -320,14 +322,14 @@ class MotionService:
         try:
             if not self.is_running:
                 raise create_error(
-                    status_code=http_status.HTTP_503_SERVICE_UNAVAILABLE,
+                    status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
                     message=f"{self.service_name} service not running"
                 )
 
             # Validate axis
             if axis not in ["x", "y", "z"]:
                 raise create_error(
-                    status_code=http_status.HTTP_400_BAD_REQUEST,
+                    status_code=status.HTTP_400_BAD_REQUEST,
                     message=f"Invalid axis: {axis}"
                 )
 
@@ -364,7 +366,7 @@ class MotionService:
             error_msg = f"Failed to get {axis} axis status"
             logger.error(f"{error_msg}: {str(e)}")
             raise create_error(
-                status_code=http_status.HTTP_500_INTERNAL_SERVER_ERROR,
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 message=error_msg
             )
 
@@ -373,7 +375,7 @@ class MotionService:
         try:
             if not self.is_running:
                 raise create_error(
-                    status_code=http_status.HTTP_503_SERVICE_UNAVAILABLE,
+                    status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
                     message=f"{self.service_name} service not running"
                 )
 
@@ -397,7 +399,7 @@ class MotionService:
             error_msg = "Failed to move"
             logger.error(f"{error_msg}: {str(e)}")
             raise create_error(
-                status_code=http_status.HTTP_500_INTERNAL_SERVER_ERROR,
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 message=error_msg
             )
 
@@ -406,14 +408,14 @@ class MotionService:
         try:
             if not self.is_running:
                 raise create_error(
-                    status_code=http_status.HTTP_503_SERVICE_UNAVAILABLE,
+                    status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
                     message=f"{self.service_name} service not running"
                 )
 
             # Validate axis
             if axis not in ["x", "y", "z"]:
                 raise create_error(
-                    status_code=http_status.HTTP_400_BAD_REQUEST,
+                    status_code=status.HTTP_400_BAD_REQUEST,
                     message=f"Invalid axis: {axis}"
                 )
 
@@ -430,7 +432,7 @@ class MotionService:
             error_msg = f"Failed to jog {axis} axis"
             logger.error(f"{error_msg}: {str(e)}")
             raise create_error(
-                status_code=http_status.HTTP_500_INTERNAL_SERVER_ERROR,
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 message=error_msg
             )
 
@@ -439,7 +441,7 @@ class MotionService:
         try:
             if not self.is_running:
                 raise create_error(
-                    status_code=http_status.HTTP_503_SERVICE_UNAVAILABLE,
+                    status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
                     message=f"{self.service_name} service not running"
                 )
 
@@ -453,7 +455,7 @@ class MotionService:
             error_msg = "Failed to set home"
             logger.error(f"{error_msg}: {str(e)}")
             raise create_error(
-                status_code=http_status.HTTP_500_INTERNAL_SERVER_ERROR,
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 message=error_msg
             )
 
@@ -462,7 +464,7 @@ class MotionService:
         try:
             if not self.is_running:
                 raise create_error(
-                    status_code=http_status.HTTP_503_SERVICE_UNAVAILABLE,
+                    status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
                     message=f"{self.service_name} service not running"
                 )
 
@@ -476,6 +478,42 @@ class MotionService:
             error_msg = "Failed to move to home"
             logger.error(f"{error_msg}: {str(e)}")
             raise create_error(
-                status_code=http_status.HTTP_500_INTERNAL_SERVER_ERROR,
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                message=error_msg
+            )
+
+    async def get_motion_state(self) -> MotionState:
+        """Get current motion state."""
+        try:
+            if not self.is_running:
+                raise create_error(
+                    status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                    message=f"{self.service_name} service not running"
+                )
+
+            # Get position from raw tags
+            position = await self.get_position()
+            system_status = await self.get_status()
+
+            # Get internal states
+            at_valid_position = await self._internal_state.get_state("at_valid_position")
+            motion_enabled = await self._internal_state.get_state("motion_enabled")
+
+            # Update status with internal states
+            system_status.module_ready = motion_enabled
+            system_status.x_axis.in_position = at_valid_position and not system_status.x_axis.moving
+            system_status.y_axis.in_position = at_valid_position and not system_status.y_axis.moving
+            system_status.z_axis.in_position = at_valid_position and not system_status.z_axis.moving
+
+            return MotionState(
+                position=position,
+                status=system_status
+            )
+
+        except Exception as e:
+            error_msg = "Failed to get motion state"
+            logger.error(f"{error_msg}: {str(e)}")
+            raise create_error(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 message=error_msg
             )

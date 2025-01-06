@@ -290,3 +290,26 @@ async def get_motion_internal_state(request: Request, state_name: str) -> bool:
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             message=f"{error_msg}: {str(e)}"
         )
+
+
+@router.get("/state", response_model=MotionState)
+async def get_state(request: Request) -> MotionState:
+    """Get current motion state."""
+    try:
+        service = request.app.state.service
+        if not service.is_running:
+            raise create_error(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                message="Service not running"
+            )
+
+        state = await service.motion.get_motion_state()
+        return state
+
+    except Exception as e:
+        error_msg = "Failed to get motion state"
+        logger.error(f"{error_msg}: {str(e)}")
+        raise create_error(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            message=f"{error_msg}: {str(e)}"
+        )

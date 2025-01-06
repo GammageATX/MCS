@@ -145,7 +145,9 @@ class CommunicationService:
 
             # Set dependencies for other services
             self._equipment.set_tag_cache(self._tag_cache)
+            self._equipment.set_internal_state(self._internal_state)
             self._motion.set_tag_cache(self._tag_cache)
+            self._motion.set_internal_state(self._internal_state)
             self._internal_state.set_tag_cache(self._tag_cache)
             self._internal_state.set_tag_mapping(self._tag_mapping)
 

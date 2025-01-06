@@ -178,15 +178,6 @@ tag_groups:
         mapped: true
         plc_tag: BoosterPumpStop
         type: bool
-    chamber_pressure:
-      access: read
-      description: Chamber vacuum pressure
-      mapped: true
-      plc_tag: ChamberPressure
-      range: [ 0.01, 1000.0 ]
-      scaling: 12bit_linear
-      type: float
-      unit: torr
 
   nozzle:
     select:
@@ -458,6 +449,7 @@ tag_groups:
       mapped: true
       plc_tag: Shutter
       type: bool
+
   safety:
     approach_z:
       access: read/write

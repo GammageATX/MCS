@@ -8,8 +8,11 @@ from loguru import logger
 from mcs.utils.errors import create_error
 from mcs.utils.health import ServiceHealth, ComponentHealth, HealthStatus, create_error_health
 from mcs.api.communication.services.tag_cache import TagCacheService
+from mcs.api.communication.services.internal_state import InternalStateService
 from mcs.api.communication.models.equipment import (
-    GasState, VacuumState, EquipmentState
+    GasState, VacuumState, EquipmentState, FeederState,
+    DeagglomeratorState, NozzleState, PressureState,
+    HardwareState, ProcessState
 )
 
 
@@ -19,17 +22,15 @@ class EquipmentService:
     def __init__(self, config: Dict[str, Any]):
         """Initialize service."""
         self._service_name = "equipment"
-        self._version = "1.0.0"  # Will be updated from config
+        self._version = config.get("communication", {}).get("services", {}).get("equipment", {}).get("version", "1.0.0")
         self._is_running = False
         self._start_time = None
         
         # Initialize components to None
-        self._config = None
+        self._config = config  # Store config here
         self._tag_cache = None
+        self._internal_state = None
         self._state_callbacks = []
-        
-        # Store constructor args for initialization
-        self._init_config = config
         
         logger.info(f"{self.service_name} service initialized")
 
@@ -78,6 +79,11 @@ class EquipmentService:
         self._tag_cache = tag_cache
         logger.info(f"{self.service_name} tag cache service set")
 
+    def set_internal_state(self, internal_state: InternalStateService) -> None:
+        """Set internal state service."""
+        self._internal_state = internal_state
+        logger.info(f"{self.service_name} internal state service set")
+
     async def initialize(self) -> None:
         """Initialize service."""
         try:
@@ -86,10 +92,6 @@ class EquipmentService:
                     status_code=status.HTTP_409_CONFLICT,
                     message=f"{self.service_name} service already running"
                 )
-
-            # Load config and version
-            self._config = self._init_config
-            self._version = self._config["communication"]["services"]["equipment"]["version"]
 
             # Initialize tag cache
             if not self._tag_cache:
@@ -104,9 +106,6 @@ class EquipmentService:
                     status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
                     message=f"{self.service_name} tag cache service not running"
                 )
-            
-            # Register for state changes
-            self._tag_cache.add_state_callback(self._handle_state_change)
             
             logger.info(f"{self.service_name} service initialized")
             
@@ -127,16 +126,16 @@ class EquipmentService:
                     message=f"{self.service_name} service already running"
                 )
 
-            if not self._tag_cache or not self._tag_cache.is_running:
+            if not self._tag_cache or not self._internal_state:
                 raise create_error(
                     status_code=status.HTTP_400_BAD_REQUEST,
                     message=f"{self.service_name} service not initialized"
                 )
-            
+
             self._is_running = True
             self._start_time = datetime.now()
             logger.info(f"{self.service_name} service started")
-            
+
         except Exception as e:
             self._is_running = False
             self._start_time = None
@@ -156,19 +155,10 @@ class EquipmentService:
                     message=f"{self.service_name} service not running"
                 )
 
-            # Unregister state callback
-            if self._tag_cache:
-                self._tag_cache.remove_state_callback(self._handle_state_change)
-            
-            # Clear state callbacks
-            self._state_callbacks.clear()
-            
-            # Reset service state
             self._is_running = False
             self._start_time = None
-            
             logger.info(f"{self.service_name} service stopped")
-            
+
         except Exception as e:
             error_msg = f"Failed to stop {self.service_name} service: {str(e)}"
             logger.error(error_msg)
@@ -180,87 +170,24 @@ class EquipmentService:
     async def _get_component_health(self) -> Dict[str, ComponentHealth]:
         """Get health status of all components."""
         try:
-            # Check tag cache status
+            components = {}
+            
+            # Check tag cache service
             tag_cache_ok = self._tag_cache and self._tag_cache.is_running
-            components = {
-                "tag_cache": ComponentHealth(
-                    status=HealthStatus.OK if tag_cache_ok else HealthStatus.ERROR,
-                    error=None if tag_cache_ok else "Tag cache not running"
-                )
-            }
-            
-            # Get current equipment state
-            try:
-                equipment_state = await self.get_equipment_state()
-                if equipment_state:
-                    # Check critical systems
-                    
-                    # Vacuum system (critical)
-                    if equipment_state.vacuum:
-                        vacuum = equipment_state.vacuum
-                        vacuum_ok = vacuum.chamber_pressure <= 1000  # Critical pressure threshold
-                        components["vacuum"] = ComponentHealth(
-                            status=HealthStatus.OK if vacuum_ok else HealthStatus.ERROR,
-                            error=None if vacuum_ok else "Chamber pressure too high",
-                            details={"chamber_pressure": vacuum.chamber_pressure}
-                        )
-                    else:
-                        components["vacuum"] = ComponentHealth(
-                            status=HealthStatus.ERROR,
-                            error="Vacuum state not available"
-                        )
-                    
-                    # Hardware status (critical)
-                    if equipment_state.hardware:
-                        hardware = equipment_state.hardware
-                        hardware_ok = hardware.motion_enabled and hardware.position_valid and hardware.plc_connected
-                        components["hardware"] = ComponentHealth(
-                            status=HealthStatus.OK if hardware_ok else HealthStatus.ERROR,
-                            error=None if hardware_ok else "Hardware system error",
-                            details={
-                                "motion_enabled": hardware.motion_enabled,
-                                "position_valid": hardware.position_valid,
-                                "plc_connected": hardware.plc_connected
-                            }
-                        )
-                    else:
-                        components["hardware"] = ComponentHealth(
-                            status=HealthStatus.ERROR,
-                            error="Hardware state not available"
-                        )
-                    
-                    # Safety system (critical)
-                    if equipment_state.safety:
-                        safety = equipment_state.safety
-                        safety_ok = not safety.emergency_stop and safety.interlocks_ok and safety.limits_ok
-                        components["safety"] = ComponentHealth(
-                            status=HealthStatus.OK if safety_ok else HealthStatus.ERROR,
-                            error=None if safety_ok else "Safety system error",
-                            details={
-                                "emergency_stop": safety.emergency_stop,
-                                "interlocks_ok": safety.interlocks_ok,
-                                "limits_ok": safety.limits_ok
-                            }
-                        )
-                    else:
-                        components["safety"] = ComponentHealth(
-                            status=HealthStatus.ERROR,
-                            error="Safety state not available"
-                        )
-                else:
-                    components["equipment"] = ComponentHealth(
-                        status=HealthStatus.ERROR,
-                        error="Equipment state not available"
-                    )
-            except Exception as e:
-                logger.error(f"Failed to get equipment state: {str(e)}")
-                components["equipment"] = ComponentHealth(
-                    status=HealthStatus.ERROR,
-                    error=f"Failed to get equipment state: {str(e)}"
-                )
-            
+            components["tag_cache"] = ComponentHealth(
+                status=HealthStatus.OK if tag_cache_ok else HealthStatus.ERROR,
+                error=None if tag_cache_ok else "Tag cache service not running"
+            )
+
+            # Check internal state service
+            internal_state_ok = self._internal_state and self._internal_state.is_running
+            components["internal_state"] = ComponentHealth(
+                status=HealthStatus.OK if internal_state_ok else HealthStatus.ERROR,
+                error=None if internal_state_ok else "Internal state service not running"
+            )
+
             return components
-            
+
         except Exception as e:
             logger.error(f"Failed to get component health: {str(e)}")
             return {
@@ -296,7 +223,7 @@ class EquipmentService:
             return create_error_health(self.service_name, self.version, error_msg)
 
     async def get_equipment_state(self) -> EquipmentState:
-        """Get equipment state."""
+        """Get current equipment state."""
         try:
             if not self.is_running:
                 raise create_error(
@@ -304,15 +231,122 @@ class EquipmentService:
                     message=f"{self.service_name} service not running"
                 )
 
-            # Get cached equipment state
-            state = await self._tag_cache.get_state("equipment")
-            if not state:
+            if not self._tag_cache or not self._tag_cache.is_running:
                 raise create_error(
-                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                    message="Equipment state not available"
+                    status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                    message="Tag cache service not running"
                 )
 
-            return state
+            if not self._internal_state or not self._internal_state.is_running:
+                raise create_error(
+                    status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                    message="Internal state service not running"
+                )
+
+            # Get vacuum state
+            try:
+                chamber_pressure = await self._tag_cache.get_tag("pressure.chamber_pressure")
+                logger.debug(f"Chamber pressure from tag cache: {chamber_pressure}")
+                
+                vacuum_state = VacuumState(
+                    chamber_pressure=chamber_pressure,
+                    gate_valve=await self._tag_cache.get_tag("vacuum.gate_valve.open"),
+                    mech_pump=await self._tag_cache.get_tag("vacuum.mechanical_pump.start"),
+                    booster_pump=await self._tag_cache.get_tag("vacuum.booster_pump.start"),
+                    vent_valve=await self._tag_cache.get_tag("vacuum.vent_valve")
+                )
+            except Exception as e:
+                logger.error(f"Failed to get vacuum state: {str(e)}")
+                raise
+
+            # Get gas state
+            try:
+                gas_state = GasState(
+                    main_flow=await self._tag_cache.get_tag("gas_control.main_flow.setpoint"),
+                    main_flow_measured=await self._tag_cache.get_tag("gas_control.main_flow.measured"),
+                    feeder_flow=await self._tag_cache.get_tag("gas_control.feeder_flow.setpoint"),
+                    feeder_flow_measured=await self._tag_cache.get_tag("gas_control.feeder_flow.measured"),
+                    main_valve=await self._tag_cache.get_tag("gas_control.main_valve.open"),
+                    feeder_valve=await self._tag_cache.get_tag("gas_control.feeder_valve.open")
+                )
+            except Exception as e:
+                logger.error(f"Failed to get gas state: {str(e)}")
+                raise
+
+            # Get feeder state
+            try:
+                feeder_state = FeederState(
+                    running=await self._tag_cache.get_tag("feeders.feeder1.running"),
+                    frequency=await self._tag_cache.get_tag("feeders.feeder1.frequency")
+                )
+            except Exception as e:
+                logger.error(f"Failed to get feeder state: {str(e)}")
+                raise
+
+            # Get deagglomerator state
+            try:
+                deagg_state = DeagglomeratorState(
+                    duty_cycle=await self._tag_cache.get_tag("deagglomerators.deagg1.duty_cycle")
+                )
+            except Exception as e:
+                logger.error(f"Failed to get deagglomerator state: {str(e)}")
+                raise
+
+            # Get nozzle state
+            try:
+                nozzle_state = NozzleState(
+                    active_nozzle=1 if not await self._tag_cache.get_tag("nozzle.select") else 2,
+                    shutter_open=await self._tag_cache.get_tag("nozzle.shutter.open")
+                )
+            except Exception as e:
+                logger.error(f"Failed to get nozzle state: {str(e)}")
+                raise
+
+            # Get pressure state
+            try:
+                pressure_state = PressureState(
+                    chamber=await self._tag_cache.get_tag("pressure.chamber_pressure"),
+                    feeder=await self._tag_cache.get_tag("pressure.feeder_pressure"),
+                    main_supply=await self._tag_cache.get_tag("pressure.main_supply_pressure"),
+                    nozzle=await self._tag_cache.get_tag("pressure.nozzle_pressure"),
+                    regulator=await self._tag_cache.get_tag("pressure.regulator_pressure")
+                )
+            except Exception as e:
+                logger.error(f"Failed to get pressure state: {str(e)}")
+                raise
+
+            # Get hardware state from internal state service
+            try:
+                hardware_state = HardwareState(
+                    motion_enabled=await self._internal_state.get_state("motion_enabled"),
+                    plc_connected=self._tag_cache._plc_client.is_connected(),
+                    position_valid=await self._internal_state.get_state("at_valid_position")
+                )
+            except Exception as e:
+                logger.error(f"Failed to get hardware state: {str(e)}")
+                raise
+
+            # Get process state from internal state service
+            try:
+                process_state = ProcessState(
+                    gas_flow_stable=await self._internal_state.get_state("flows_stable"),
+                    powder_feed_active=await self._internal_state.get_state("powder_feed_on"),
+                    process_ready=await self._internal_state.get_state("pressures_stable")
+                )
+            except Exception as e:
+                logger.error(f"Failed to get process state: {str(e)}")
+                raise
+
+            return EquipmentState(
+                gas=gas_state,
+                vacuum=vacuum_state,
+                feeder=feeder_state,
+                deagglomerator=deagg_state,
+                nozzle=nozzle_state,
+                pressure=pressure_state,
+                hardware=hardware_state,
+                process=process_state
+            )
 
         except Exception as e:
             error_msg = "Failed to get equipment state"
@@ -331,15 +365,23 @@ class EquipmentService:
                     message=f"{self.service_name} service not running"
                 )
 
-            # Get cached gas state
-            state = await self._tag_cache.get_state("gas")
-            if not state:
+            # Get gas state from individual tags
+            try:
+                gas_state = GasState(
+                    main_flow=await self._tag_cache.get_tag("gas_control.main_flow.setpoint"),
+                    main_flow_measured=await self._tag_cache.get_tag("gas_control.main_flow.measured"),
+                    feeder_flow=await self._tag_cache.get_tag("gas_control.feeder_flow.setpoint"),
+                    feeder_flow_measured=await self._tag_cache.get_tag("gas_control.feeder_flow.measured"),
+                    main_valve=await self._tag_cache.get_tag("gas_control.main_valve.open"),
+                    feeder_valve=await self._tag_cache.get_tag("gas_control.feeder_valve.open")
+                )
+                return gas_state
+            except Exception as e:
+                logger.error(f"Failed to get gas state: {str(e)}")
                 raise create_error(
                     status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                    message="Gas state not available"
+                    message="Failed to get gas state"
                 )
-
-            return state
 
         except Exception as e:
             error_msg = "Failed to get gas state"
@@ -358,15 +400,22 @@ class EquipmentService:
                     message=f"{self.service_name} service not running"
                 )
 
-            # Get cached vacuum state
-            state = await self._tag_cache.get_state("vacuum")
-            if not state:
+            # Get vacuum state from individual tags
+            try:
+                vacuum_state = VacuumState(
+                    chamber_pressure=await self._tag_cache.get_tag("pressure.chamber_pressure"),
+                    gate_valve=await self._tag_cache.get_tag("vacuum.gate_valve.open"),
+                    mech_pump=await self._tag_cache.get_tag("vacuum.mechanical_pump.start"),
+                    booster_pump=await self._tag_cache.get_tag("vacuum.booster_pump.start"),
+                    vent_valve=await self._tag_cache.get_tag("vacuum.vent_valve")
+                )
+                return vacuum_state
+            except Exception as e:
+                logger.error(f"Failed to get vacuum state: {str(e)}")
                 raise create_error(
                     status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                    message="Vacuum state not available"
+                    message="Failed to get vacuum state"
                 )
-
-            return state
 
         except Exception as e:
             error_msg = "Failed to get vacuum state"

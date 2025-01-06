@@ -3,8 +3,6 @@
 from typing import Literal
 from pydantic import BaseModel, Field
 
-from mcs.api.communication.models.motion import MotionState
-
 
 class GasState(BaseModel):
     """Gas system state."""
@@ -73,7 +71,6 @@ class EquipmentState(BaseModel):
     deagglomerator: DeagglomeratorState = Field(..., description="Deagglomerator state")
     nozzle: NozzleState = Field(..., description="Nozzle control state")
     pressure: PressureState = Field(..., description="System pressure readings")
-    motion: MotionState = Field(..., description="Motion system state")
     hardware: HardwareState = Field(..., description="Hardware status")
     process: ProcessState = Field(..., description="Process status")
 

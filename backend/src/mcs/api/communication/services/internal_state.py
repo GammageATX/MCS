@@ -331,13 +331,15 @@ class InternalStateService:
             rule = self._state_rules.get(state)
             if not rule:
                 logger.warning(f"No rule found for state: {state}")
+                self._internal_states[state] = False
                 return
                 
             # Get current value based on rule type
             if rule["type"] == "comparison":
                 tag_value = await self._get_tag_value(rule["tag"])
                 if tag_value is None:
-                    logger.warning(f"No value for tag: {rule['tag']}")
+                    logger.warning(f"No value for tag: {rule['tag']}, setting state {state} to False")
+                    self._internal_states[state] = False
                     return
                     
                 # Convert values to float for numeric comparisons
@@ -345,10 +347,13 @@ class InternalStateService:
                     tag_value = float(tag_value)
                     compare_value = await self._resolve_value(rule["value"])
                     if compare_value is None:
+                        logger.warning(f"No comparison value for state {state}, setting to False")
+                        self._internal_states[state] = False
                         return
                     compare_value = float(compare_value)
                 except (TypeError, ValueError) as e:
-                    logger.error(f"Failed to convert values for comparison: {e}")
+                    logger.error(f"Failed to convert values for comparison: {e}, setting state {state} to False")
+                    self._internal_states[state] = False
                     return
                     
                 operator = rule.get("operator", "equal")
@@ -368,7 +373,8 @@ class InternalStateService:
                 for condition in rule["conditions"]:
                     tag_value = await self._get_tag_value(condition["tag"])
                     if tag_value is None:
-                        logger.warning(f"No value for tag: {condition['tag']}")
+                        logger.warning(f"No value for tag: {condition['tag']}, setting state {state} to False")
+                        self._internal_states[state] = False
                         return
                         
                     # Convert values to float for numeric comparisons
@@ -376,10 +382,13 @@ class InternalStateService:
                         tag_value = float(tag_value)
                         compare_value = await self._resolve_value(condition["value"])
                         if compare_value is None:
+                            logger.warning(f"No comparison value for condition in state {state}, setting to False")
+                            self._internal_states[state] = False
                             return
                         compare_value = float(compare_value)
                     except (TypeError, ValueError) as e:
-                        logger.error(f"Failed to convert values for comparison: {e}")
+                        logger.error(f"Failed to convert values for comparison: {e}, setting state {state} to False")
+                        self._internal_states[state] = False
                         return
                         
                     operator = condition.get("operator", "equal")
@@ -393,11 +402,12 @@ class InternalStateService:
                         values.append(tag_value <= compare_value)
                     else:  # equal
                         values.append(tag_value == compare_value)
-                        
+                
                 new_value = all(values)
                 
             else:
-                logger.warning(f"Unknown rule type: {rule['type']}")
+                logger.warning(f"Unknown rule type: {rule['type']}, setting state {state} to False")
+                self._internal_states[state] = False
                 return
                 
             # Update state if changed
@@ -406,7 +416,8 @@ class InternalStateService:
                 logger.debug(f"Internal state {state} = {new_value} ({rule.get('description', '')})")
                 
         except Exception as e:
-            logger.error(f"Failed to evaluate state {state}: {e}")
+            logger.error(f"Failed to evaluate state {state}: {e}, setting to False")
+            self._internal_states[state] = False
 
     async def _evaluate_all_states(self) -> None:
         """Evaluate all internal states."""
@@ -420,9 +431,18 @@ class InternalStateService:
             state: State name to get
             
         Returns:
-            Optional[bool]: Current state value or None if not found
+            Optional[bool]: Current state value or False if not found
         """
-        return self._internal_states.get(state)
+        if not self.is_running:
+            logger.warning(f"Service not running, returning False for state: {state}")
+            return False
+            
+        value = self._internal_states.get(state)
+        if value is None:
+            logger.warning(f"State {state} not found or not yet evaluated, returning False")
+            return False
+            
+        return value
 
     async def get_all_states(self) -> Dict[str, bool]:
         """Get all internal states.
