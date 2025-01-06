@@ -41,8 +41,6 @@ test-results/
 junit/
 
 # Logs and debugging
-logs/
-*.log
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
@@ -60,20 +58,34 @@ Thumbs.db
 *.gcode
 *.pattern
 *.cal
+*.cfg
+hardware/*.bin
+hardware/*.hex
+hardware/*.elf
+hardware/firmware/
+calibration/*.dat
+calibration/history/
 
 # Large data files
-*.csv
 *.xlsx
 *.pdf
-data/raw/
-data/processed/
+*.h5
+*.parquet
 
 # Generated documentation
 docs/_build/
 docs/api/_autogen/
 docs/html/
+docs/generated/
 
 # Cache directories
 .cache/
 .npm/
-.pnpm-store/ 
+.pnpm-store/
+.pytest_cache/
+
+# Runtime files
+*.pid
+*.sock
+*.lock
+runtime/ 

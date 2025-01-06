@@ -17,3 +17,4 @@ class MoveRequest(BaseModel):
     y: Optional[float] = Field(None, description="Y target position in mm")
     z: Optional[float] = Field(None, description="Z target position in mm")
     velocity: float = Field(..., gt=0, description="Move velocity in mm/s")
+    wait_complete: bool = Field(True, description="Wait for move to complete")

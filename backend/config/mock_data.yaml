@@ -72,6 +72,7 @@ plc_tags:
   "XYMove.LINRamps": 75 # XY move Acceleration
   "XYMove.InProgress": false # XY move in progress
   "XYMove.Complete": true # XY move complete
+  "XYMove.Status": 0 # XY move status code
 
   # Hardware Set 1
   "AOS32-0.1.6.1": 35 # Deagglomerator 1 PWM duty cycle (%)

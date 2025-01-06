@@ -5,7 +5,6 @@
             "steps": [
                 "ALWAYS read `.notes/project_overview.md` and `.notes/task_list.md`",
                 "ALWAYS follow standardized service patterns from standardizing.md",
-                "ALWAYS consider hardware safety implications",
                 "ALWAYS maintain type safety between frontend and backend"
             ]
         },
@@ -14,7 +13,6 @@
             "before_action": [
                 "Create a MECE task breakdown",
                 "Review relevant TypeScript types in shared/",
-                "Check hardware safety requirements",
                 "Verify service pattern compliance"
             ],
             "code_changes": [
@@ -29,7 +27,6 @@
         },
         "safety_requirements": [
             "NEVER break type safety between frontend and backend",
-            "NEVER bypass hardware safety checks",
             "ALWAYS implement proper error handling using create_error",
             "ALWAYS include health check endpoints",
             "ALWAYS document new code and API changes",
@@ -54,6 +51,24 @@
                 "Check component status",
                 "Report detailed health state",
                 "Include uptime and version"
+            ],
+            "websocket_handling": [
+                "Implement reconnection logic",
+                "Handle connection state changes",
+                "Maintain message queue on disconnect",
+                "Implement heartbeat mechanism"
+            ],
+            "plc_communication": [
+                "Implement SSH connection retry logic",
+                "Handle connection timeouts",
+                "Maintain command queue",
+                "Implement status polling"
+            ],
+            "data_collection": [
+                "Implement proper data buffering",
+                "Handle data persistence failures",
+                "Maintain collection state",
+                "Implement data validation"
             ]
         },
         "priorities": [
@@ -81,7 +96,6 @@
             "enhanced": {
                 "description": "For complex problems requiring deep analysis",
                 "requirements": [
-                    "Hardware safety implications",
                     "Service pattern compliance",
                     "Error handling coverage"
                 ]
@@ -92,8 +106,21 @@
             "ai_first": true,
             "type_safety": true,
             "documentation_required": true,
-            "hardware_safety": true,
             "service_patterns": true
+        },
+        "validation_rules": {
+            "configuration": [
+                "Validate against schema",
+                "Check hardware limits",
+                "Verify safety constraints",
+                "Validate dependencies"
+            ],
+            "patterns": [
+                "Validate motion limits",
+                "Check pattern feasibility",
+                "Verify safety zones",
+                "Validate timing constraints"
+            ]
         }
     }
 } 

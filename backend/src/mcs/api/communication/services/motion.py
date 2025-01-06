@@ -266,10 +266,10 @@ class MotionService:
                     message=f"{self.service_name} service not running"
                 )
 
-            # Read current position from AMC controller
-            x = await self._tag_cache.get_tag("motion.motion_control.coordinated_move.xy_move.parameters.x_position")
-            y = await self._tag_cache.get_tag("motion.motion_control.coordinated_move.xy_move.parameters.y_position")
-            z = await self._tag_cache.get_tag("motion.motion_control.relative_move.z_move.parameters.position")
+            # Get current positions from motion.position.*
+            x = await self._tag_cache.get_tag("motion.position.x")
+            y = await self._tag_cache.get_tag("motion.position.y")
+            z = await self._tag_cache.get_tag("motion.position.z")
 
             # Default to 0 if position is None
             x = x if x is not None else 0.0
@@ -338,24 +338,24 @@ class MotionService:
 
             # Get axis status
             if axis in ["x", "y"]:
-                # For X and Y axes, use coordinated move status
-                position = await self._tag_cache.get_tag(f"motion.motion_control.coordinated_move.xy_move.parameters.{axis}_position")
-                in_progress = await self._tag_cache.get_tag("motion.motion_control.coordinated_move.xy_move.parameters.in_progress")
-                complete = await self._tag_cache.get_tag("motion.motion_control.coordinated_move.xy_move.parameters.status")
+                # Get coordinated move status
+                current_position = await self._tag_cache.get_tag(f"motion.position.{axis}")
+                in_progress = await self._tag_cache.get_tag("motion.coordinated_move.xy.in_progress")
+                complete = await self._tag_cache.get_tag("motion.coordinated_move.xy.status")
             else:
-                # For Z axis, use relative move status
-                position = await self._tag_cache.get_tag(f"motion.motion_control.relative_move.{axis}_move.parameters.position")
-                in_progress = await self._tag_cache.get_tag(f"motion.motion_control.relative_move.{axis}_move.parameters.in_progress")
-                complete = await self._tag_cache.get_tag(f"motion.motion_control.relative_move.{axis}_move.parameters.status")
+                # Get relative move status for Z
+                current_position = await self._tag_cache.get_tag(f"motion.position.{axis}")
+                in_progress = await self._tag_cache.get_tag(f"motion.status.{axis}")
+                complete = await self._tag_cache.get_tag(f"motion.status.{axis}")
 
             # Parse status
-            moving = bool(in_progress)  # Moving if in progress
             in_position = bool(complete)  # In position if move completed
+            moving = bool(in_progress)  # Moving if in progress
             error = not await self._tag_cache.get_tag("interlocks.motion_ready")  # Error if not enabled
             homed = bool(complete)  # Consider homed if last move completed
 
             # Default to 0 if position is None
-            position = position if position is not None else 0.0
+            position = current_position if current_position is not None else 0.0
 
             return AxisStatus(
                 position=position,
@@ -382,18 +382,13 @@ class MotionService:
                     message=f"{self.service_name} service not running"
                 )
 
-            # Set XY move parameters
-            await self._tag_cache.set_tag("motion.motion_control.coordinated_move.xy_move.parameters.x_position", x)
-            await self._tag_cache.set_tag("motion.motion_control.coordinated_move.xy_move.parameters.y_position", y)
-            await self._tag_cache.set_tag("motion.motion_control.coordinated_move.xy_move.parameters.velocity", velocity)
+            # Set XY target positions and parameters for coordinated move
+            await self._tag_cache.set_tag("motion.coordinated_move.xy.x_position", x)
+            await self._tag_cache.set_tag("motion.coordinated_move.xy.y_position", y)
+            await self._tag_cache.set_tag("motion.coordinated_move.xy.velocity", velocity)
             
             # Trigger XY move
-            await self._tag_cache.set_tag("motion.motion_control.coordinated_move.xy_move.trigger", True)
-            
-            # Set Z position and trigger move
-            await self._tag_cache.set_tag("motion.motion_control.relative_move.z_move.parameters.position", z)
-            await self._tag_cache.set_tag("motion.motion_control.relative_move.z_move.parameters.velocity", velocity)
-            await self._tag_cache.set_tag("motion.motion_control.relative_move.z_move.trigger", True)
+            await self._tag_cache.set_tag("motion.coordinated_move.xy.trigger", True)
 
             # Notify state change
             await self._notify_state_changed()
@@ -422,11 +417,16 @@ class MotionService:
                     message=f"Invalid axis: {axis}"
                 )
 
-            # Set velocity and trigger move
-            move_tag = f"motion.motion_control.relative_move.{axis}_move"
-            await self._tag_cache.set_tag(f"{move_tag}.parameters.position", distance)
-            await self._tag_cache.set_tag(f"{move_tag}.parameters.velocity", velocity)
-            await self._tag_cache.set_tag(f"{move_tag}.trigger", True)
+            if axis in ["x", "y"]:
+                # For X/Y, use coordinated move
+                await self._tag_cache.set_tag(f"coordinated_move.xy.{axis}_position", distance)
+                await self._tag_cache.set_tag("coordinated_move.xy.velocity", velocity)
+                await self._tag_cache.set_tag("coordinated_move.xy.trigger", True)
+            else:
+                # For Z, use relative move
+                await self._tag_cache.set_tag("relative_move.z.position", distance)
+                await self._tag_cache.set_tag("relative_move.z.velocity", velocity)
+                await self._tag_cache.set_tag("relative_move.z.trigger", True)
 
             # Notify state change
             await self._notify_state_changed()
@@ -448,8 +448,8 @@ class MotionService:
                     message=f"{self.service_name} service not running"
                 )
 
-            # Set current position as home
-            await self._tag_cache.set_tag("motion.set_home", True)
+            # Set home position
+            await self._tag_cache.set_tag("set_home", True)
 
             # Notify state change
             await self._notify_state_changed()
@@ -463,7 +463,7 @@ class MotionService:
             )
 
     async def move_to_home(self) -> None:
-        """Move to home position."""
+        """Move all axes to home position."""
         try:
             if not self.is_running:
                 raise create_error(
@@ -471,8 +471,14 @@ class MotionService:
                     message=f"{self.service_name} service not running"
                 )
 
-            # Trigger move to home
-            await self._tag_cache.set_tag("motion.motion_control.move_to_home", True)
+            # Default velocity for homing
+            velocity = 10.0  # mm/s
+
+            # Move to home position
+            await self._tag_cache.set_tag("motion.coordinated_move.xy.x_position", 0)
+            await self._tag_cache.set_tag("motion.coordinated_move.xy.y_position", 0)
+            await self._tag_cache.set_tag("motion.coordinated_move.xy.velocity", velocity)
+            await self._tag_cache.set_tag("motion.coordinated_move.xy.trigger", True)
 
             # Notify state change
             await self._notify_state_changed()

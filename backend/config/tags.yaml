@@ -250,21 +250,15 @@ tag_groups:
         type: integer
     coordinated_move:
       xy:
-        trigger:
-          access: read/write
-          description: Trigger coordinated XY move
-          mapped: true
-          plc_tag: MoveXY
-          type: bool
         in_progress:
           access: read
-          description: XY move in progress
+          description: XY coordinated move in progress
           mapped: true
           plc_tag: XYMove.InProgress
           type: bool
         status:
           access: read
-          description: XY move status
+          description: XY coordinated move status
           mapped: true
           plc_tag: XYMove.Complete
           type: bool
