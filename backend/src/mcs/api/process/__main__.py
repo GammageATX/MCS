@@ -1,35 +1,59 @@
-"""Process Service Entry Point
+"""Main entry point for process service."""
 
-This module serves as the entry point for the Process service.
-"""
-
-import logging
 import os
-from typing import Dict
-
-import uvicorn
+import sys
 import yaml
+import uvicorn
+from loguru import logger
 
 from mcs.api.process.process_app import create_process_service  # noqa: F401 - used in string form for uvicorn
 from mcs.utils.errors import create_error
 
 
-logger = logging.getLogger(__name__)
+def setup_logging():
+    """Setup logging configuration."""
+    log_dir = os.path.join("logs", "process")
+    if not os.path.exists(log_dir):
+        os.makedirs(log_dir)
 
-
-def load_config(config_path: str = "backend/config/process.yaml") -> Dict:
-    """Load service configuration from YAML file.
+    # Remove default handler
+    logger.remove()
     
-    Args:
-        config_path: Path to configuration file
-        
-    Returns:
-        Dict containing service configuration
-        
-    Raises:
-        HTTPException if config file not found or invalid
-    """
+    # Get log level from environment or use default
+    console_level = os.getenv("MCS_LOG_LEVEL", "INFO").upper()
+    file_level = os.getenv("MCS_FILE_LOG_LEVEL", "DEBUG").upper()
+    
+    # Add console handler with color
+    log_format = (
+        "<green>{time:YYYY-MM-DD HH:mm:ss}</green> | "
+        "<level>{level: <8}</level> | "
+        "<cyan>{name}</cyan>:<cyan>{function}</cyan>:<cyan>{line}</cyan> - "
+        "<level>{message}</level>"
+    )
+    logger.add(sys.stderr, format=log_format, level=console_level, enqueue=True)
+    
+    # Add file handler with rotation
+    file_format = (
+        "{time:YYYY-MM-DD HH:mm:ss} | "
+        "{level: <8} | "
+        "{name}:{function}:{line} - "
+        "{message}"
+    )
+    logger.add(
+        os.path.join(log_dir, "process.log"),
+        rotation="1 day",
+        retention="30 days",
+        format=file_format,
+        level=file_level,
+        enqueue=True,
+        compression="zip"
+    )
+
+
+def load_config():
+    """Load service configuration."""
     try:
+        config_path = os.path.join("backend", "config", "process.yaml")
         if not os.path.exists(config_path):
             logger.warning(f"Config file not found at {config_path}, using defaults")
             return {
@@ -41,12 +65,12 @@ def load_config(config_path: str = "backend/config/process.yaml") -> Dict:
                     "log_level": "INFO"
                 }
             }
-            
-        with open(config_path) as f:
+
+        with open(config_path, 'r') as f:
             return yaml.safe_load(f)
-            
+
     except Exception as e:
-        logger.error(f"Failed to load config: {str(e)}")
+        logger.error(f"Failed to load config: {e}")
         raise create_error(
             status_code=500,
             message=f"Failed to load configuration: {str(e)}"
@@ -54,31 +78,38 @@ def load_config(config_path: str = "backend/config/process.yaml") -> Dict:
 
 
 def main():
-    """Run the Process service."""
-    # Configure logging
-    log_level = os.getenv("LOG_LEVEL", "INFO")
-    logging.basicConfig(
-        level=log_level,
-        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-    )
+    """Run process service."""
+    try:
+        # Setup logging
+        setup_logging()
+        logger.info("Starting process service...")
+        
+        # Load config
+        config = load_config()
+        
+        # Get config from environment or use defaults
+        host = os.getenv("PROCESS_HOST", config["service"].get("host", "0.0.0.0"))
+        port = int(os.getenv("PROCESS_PORT", config["service"].get("port", 8004)))
+        
+        # Log startup configuration
+        logger.info(f"Host: {host}")
+        logger.info(f"Port: {port}")
+        logger.info("Mode: development (reload enabled)")
+        
+        # Run service with standardized configuration
+        uvicorn.run(
+            "mcs.api.process.process_app:create_process_service",  # Changed to use factory
+            host=host,
+            port=port,
+            reload=True,
+            factory=True,
+            reload_dirs=["backend/src"],
+            log_level="debug"
+        )
 
-    # Load config
-    config = load_config()
-    service_config = config.get("service", {})
-    
-    # Get host/port from environment or config
-    host = os.getenv("HOST", service_config.get("host", "0.0.0.0"))
-    port = int(os.getenv("PORT", service_config.get("port", 8004)))
-
-    # Run service
-    uvicorn.run(
-        "mcs.api.process.process_app:app",
-        host=host,
-        port=port,
-        reload=True,
-        reload_dirs=["backend/src"],
-        factory=True
-    )
+    except Exception as e:
+        logger.exception(f"Failed to start process service: {e}")
+        sys.exit(1)
 
 
 if __name__ == "__main__":

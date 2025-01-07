@@ -9,10 +9,10 @@ from pathlib import Path
 import os
 
 from mcs.utils.errors import create_error
-from mcs.utils.health import ServiceHealth, ComponentHealth, HealthStatus, create_error_health
+from mcs.utils.health import ComponentHealth, HealthStatus, create_error_health  # noqa: F401
 from mcs.api.process.models.process_models import (
     Sequence,
-    StatusType
+    ProcessStatus
 )
 
 
@@ -30,7 +30,7 @@ class SequenceService:
         self._sequences = None
         self._failed_sequences = {}
         self._active_sequence = None
-        self._sequence_status = StatusType.IDLE
+        self._sequence_status = ProcessStatus.IDLE
         
         logger.info(f"{self.service_name} service initialized")
 
@@ -155,7 +155,7 @@ class SequenceService:
             # 2. Clear sequence data
             self._sequences.clear()
             self._active_sequence = None
-            self._sequence_status = StatusType.IDLE
+            self._sequence_status = ProcessStatus.IDLE
             
             # 3. Reset service state
             self._is_running = False
@@ -171,8 +171,8 @@ class SequenceService:
                 message=error_msg
             )
 
-    async def health(self) -> ServiceHealth:
-        """Get service health status."""
+    async def health(self) -> ComponentHealth:
+        """Get sequence service health status."""
         try:
             # Check critical components
             sequences_loaded = self._sequences is not None and len(self._sequences) > 0
@@ -180,50 +180,42 @@ class SequenceService:
             dir_exists = sequence_dir.exists()
             dir_writable = dir_exists and os.access(sequence_dir, os.W_OK)
             
-            # Build component status focusing on critical components
-            components = {
-                "sequences": ComponentHealth(
-                    status=HealthStatus.OK if sequences_loaded and dir_exists and dir_writable else HealthStatus.ERROR,
-                    error=None if sequences_loaded and dir_exists and dir_writable else "Sequence system not operational",
-                    details={
-                        "total_sequences": len(self._sequences or {}),
-                        "loaded_sequences": list(self._sequences.keys()) if self._sequences else [],
-                        "failed_sequences": list(self._failed_sequences.keys()),
-                        "recovery_attempts": len(self._failed_sequences),
-                        "directory": {
-                            "path": str(sequence_dir),
-                            "exists": dir_exists,
-                            "writable": dir_writable
-                        },
-                        "execution": {
-                            "active_sequence": self._active_sequence,
-                            "status": self._sequence_status.value if self._sequence_status else None
-                        }
-                    }
-                )
-            }
-            
-            # Overall status is ERROR if sequence system is not operational
-            # or if active sequence is in error state
-            overall_status = HealthStatus.ERROR if (
-                not (sequences_loaded and dir_exists and dir_writable)
-                or self._sequence_status == StatusType.ERROR  # noqa: W503
+            # Determine status based on critical checks
+            status = HealthStatus.ERROR if (
+                not (sequences_loaded and dir_exists and dir_writable) or
+                self._sequence_status == ProcessStatus.ERROR
             ) else HealthStatus.OK
 
-            return ServiceHealth(
-                status=overall_status,
-                service=self.service_name,
-                version=self.version,
-                is_running=self.is_running,
-                uptime=self.uptime,
-                error="Critical component failure" if overall_status == HealthStatus.ERROR else None,
-                components=components
+            return ComponentHealth(
+                status=status,
+                error=None if status == HealthStatus.OK else "Sequence system not operational",
+                details={
+                    "is_running": self.is_running,
+                    "uptime": self.uptime,
+                    "sequences": {
+                        "total": len(self._sequences or {}),
+                        "loaded": list(self._sequences.keys()) if self._sequences else [],
+                        "failed": list(self._failed_sequences.keys()),
+                        "recovery_attempts": len(self._failed_sequences)
+                    },
+                    "execution": {
+                        "active_sequence": self._active_sequence,
+                        "status": self._sequence_status.value if self._sequence_status else None
+                    },
+                    "storage": {
+                        "path": str(sequence_dir),
+                        "exists": dir_exists,
+                        "writable": dir_writable
+                    }
+                }
             )
-            
         except Exception as e:
             error_msg = f"Health check failed: {str(e)}"
             logger.error(error_msg)
-            return create_error_health(self.service_name, self.version, error_msg)
+            return ComponentHealth(
+                status=HealthStatus.ERROR,
+                error=error_msg
+            )
 
     async def list_sequences(self) -> List[Sequence]:
         """List available sequences.
@@ -321,7 +313,7 @@ class SequenceService:
             # Start sequence execution
             self._running_sequences[sequence_id] = {
                 "sequence": sequence,
-                "status": StatusType.RUNNING,
+                "status": ProcessStatus.RUNNING,
                 "current_step": 0,
                 "start_time": datetime.now()
             }
@@ -336,7 +328,7 @@ class SequenceService:
                 message=error_msg
             )
 
-    async def stop_sequence(self, sequence_id: str) -> StatusType:
+    async def stop_sequence(self, sequence_id: str) -> ProcessStatus:
         """Stop sequence execution."""
         try:
             if not self.is_running:
@@ -358,7 +350,7 @@ class SequenceService:
                 )
                 
             self._active_sequence = None
-            self._sequence_status = StatusType.IDLE
+            self._sequence_status = ProcessStatus.IDLE
             logger.info(f"Stopped sequence {sequence_id}")
             
             return self._sequence_status
@@ -366,13 +358,13 @@ class SequenceService:
         except Exception as e:
             error_msg = f"Failed to stop sequence {sequence_id}"
             logger.error(f"{error_msg}: {str(e)}")
-            self._sequence_status = StatusType.ERROR
+            self._sequence_status = ProcessStatus.ERROR
             raise create_error(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
                 message=error_msg
             )
 
-    async def get_sequence_status(self, sequence_id: str) -> StatusType:
+    async def get_sequence_status(self, sequence_id: str) -> ProcessStatus:
         """Get sequence execution status."""
         try:
             if not self.is_running:
@@ -382,7 +374,7 @@ class SequenceService:
                 )
                 
             if not self._active_sequence:
-                return StatusType.IDLE
+                return ProcessStatus.IDLE
                 
             if sequence_id != self._active_sequence:
                 raise create_error(

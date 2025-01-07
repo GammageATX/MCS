@@ -9,7 +9,7 @@ from pathlib import Path
 import os
 
 from mcs.utils.errors import create_error
-from mcs.utils.health import ServiceHealth, ComponentHealth, HealthStatus, create_error_health
+from mcs.utils.health import ServiceHealth, ComponentHealth, HealthStatus, create_error_health  # noqa: F401
 from mcs.api.process.models.process_models import (  # noqa: F401
     Parameter,
     Nozzle,  # noqa: F401 - used in type hints
@@ -169,8 +169,8 @@ class ParameterService:
                 message=error_msg
             )
 
-    async def health(self) -> ServiceHealth:
-        """Get service health status."""
+    async def health(self) -> ComponentHealth:
+        """Get parameter service health status."""
         try:
             # Check critical components
             params_loaded = self._parameters is not None and len(self._parameters) > 0
@@ -178,42 +178,40 @@ class ParameterService:
             dir_exists = param_dir.exists()
             dir_writable = dir_exists and os.access(param_dir, os.W_OK)
             
-            # Build component status focusing on critical components
-            components = {
-                "parameters": ComponentHealth(
-                    status=HealthStatus.OK if params_loaded and dir_exists and dir_writable else HealthStatus.ERROR,
-                    error=None if params_loaded and dir_exists and dir_writable else "Parameter system not operational",
-                    details={
-                        "total_parameters": len(self._parameters or {}),
-                        "loaded_parameters": list(self._parameters.keys()) if self._parameters else [],
-                        "failed_parameters": list(self._failed_parameters.keys()),
-                        "recovery_attempts": len(self._failed_parameters),
-                        "directory": {
-                            "path": str(param_dir),
-                            "exists": dir_exists,
-                            "writable": dir_writable
-                        }
-                    }
-                )
-            }
-            
-            # Overall status is ERROR if parameter system is not operational
-            overall_status = HealthStatus.ERROR if not (params_loaded and dir_exists and dir_writable) else HealthStatus.OK
+            # Determine status based on critical checks
+            status = HealthStatus.OK if (
+                self.is_running and
+                params_loaded and
+                dir_exists and
+                dir_writable
+            ) else HealthStatus.ERROR
 
-            return ServiceHealth(
-                status=overall_status,
-                service=self.service_name,
-                version=self.version,
-                is_running=self.is_running,
-                uptime=self.uptime,
-                error="Critical component failure" if overall_status == HealthStatus.ERROR else None,
-                components=components
+            return ComponentHealth(
+                status=status,
+                error=None if status == HealthStatus.OK else "Parameter system not operational",
+                details={
+                    "is_running": self.is_running,
+                    "uptime": self.uptime,
+                    "parameters": {
+                        "total": len(self._parameters or {}),
+                        "loaded": list(self._parameters.keys()) if self._parameters else [],
+                        "failed": list(self._failed_parameters.keys()),
+                        "recovery_attempts": len(self._failed_parameters)
+                    },
+                    "storage": {
+                        "path": str(param_dir),
+                        "exists": dir_exists,
+                        "writable": dir_writable
+                    }
+                }
             )
-            
         except Exception as e:
             error_msg = f"Health check failed: {str(e)}"
             logger.error(error_msg)
-            return create_error_health(self.service_name, self.version, error_msg)
+            return ComponentHealth(
+                status=HealthStatus.ERROR,
+                error=error_msg
+            )
 
     async def list_parameters(self) -> List[Parameter]:
         """List available parameters."""

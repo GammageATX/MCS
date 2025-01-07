@@ -1,11 +1,11 @@
 """Process API endpoints."""
 
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, Request, status
 from loguru import logger
 
 from mcs.utils.errors import create_error
 from mcs.utils.health import ServiceHealth
-from mcs.api.process import get_process_service, ProcessService
+from mcs.api.process.process_service import ProcessService
 from mcs.api.process.models.process_models import (
     NozzleResponse,
     NozzleListResponse,
@@ -13,7 +13,12 @@ from mcs.api.process.models.process_models import (
     PowderListResponse
 )
 
-router = APIRouter(tags=["process"])
+router = APIRouter(prefix="/process", tags=["process"])
+
+
+def get_process_service(request: Request) -> ProcessService:
+    """Get service instance from app state."""
+    return request.app.state.service
 
 
 @router.get(
@@ -35,6 +40,14 @@ async def health(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             message=str(e)
         )
+
+
+@router.get("/version")
+async def version(
+    service: ProcessService = Depends(get_process_service)
+):
+    """Get service version."""
+    return {"version": service.version}
 
 
 @router.get(

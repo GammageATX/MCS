@@ -1,19 +1,18 @@
-"""Pattern management endpoints."""
+"""Pattern API endpoints."""
 
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, Request, status
 from loguru import logger
 
 from mcs.utils.errors import create_error
 from mcs.api.process.process_service import ProcessService
-from mcs.api.process import get_process_service
-from mcs.api.process.models.process_models import (
-    BaseResponse,
-    Pattern,
-    PatternResponse,
-    PatternListResponse
-)
+from mcs.api.process.models.process_models import PatternResponse, PatternListResponse, BaseResponse, Pattern  # noqa: F401
 
-router = APIRouter(prefix="/patterns", tags=["patterns"])
+router = APIRouter(prefix="/patterns", tags=["pattern"])
+
+
+def get_process_service(request: Request) -> ProcessService:
+    """Get service instance from app state."""
+    return request.app.state.service
 
 
 @router.get(

@@ -3,6 +3,7 @@
 from mcs.api.process.models.process_models import (
     # Enums
     NozzleType,
+    ProcessStatus,
     
     # Base Models
     Nozzle,
@@ -23,13 +24,13 @@ from mcs.api.process.models.process_models import (
     ParameterListResponse,
     SequenceResponse,
     SequenceListResponse,
-    StatusType,
     StatusResponse
 )
 
 __all__ = [
     # Enums
     "NozzleType",
+    "ProcessStatus",
     
     # Base Models
     "Nozzle",
@@ -50,6 +51,5 @@ __all__ = [
     "ParameterListResponse",
     "SequenceResponse",
     "SequenceListResponse",
-    "StatusType",
     "StatusResponse"
 ]

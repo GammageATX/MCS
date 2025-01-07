@@ -6,10 +6,18 @@ This module implements the Process service for managing process execution and co
 import logging
 import os
 from typing import Dict
+from datetime import datetime
 
 import yaml
+from fastapi import status
 
 from mcs.utils.errors import create_error
+from mcs.utils.health import (
+    HealthStatus,
+    ServiceHealth,
+    ComponentHealth,
+    create_error_health
+)
 
 
 logger = logging.getLogger(__name__)
@@ -31,17 +39,51 @@ class ProcessService:
         Args:
             version: Service version string
         """
-        self.version = version
-        self.is_initialized = False
-        self.is_running = False
+        self._service_name = "process"
+        self._version = version
+        self._is_running = False
+        self._is_initialized = False
+        self._start_time = None
         
         # Default paths
         self.config_path = os.path.join("backend", "config")
         self.schema_path = os.path.join("backend", "schema")
         
+        # Component services
+        self.action_service = None
+        self.parameter_service = None
+        self.pattern_service = None
+        self.sequence_service = None
+        self.schema_service = None
+        
         # Component states
         self._components = {}
         self._health = {}
+
+    @property
+    def version(self) -> str:
+        """Get service version."""
+        return self._version
+
+    @property
+    def service_name(self) -> str:
+        """Get service name."""
+        return self._service_name
+
+    @property
+    def is_running(self) -> bool:
+        """Get service running state."""
+        return self._is_running
+
+    @property
+    def is_initialized(self) -> bool:
+        """Get service initialization state."""
+        return self._is_initialized
+
+    @property
+    def uptime(self) -> float:
+        """Get service uptime in seconds."""
+        return (datetime.now() - self._start_time).total_seconds() if self._start_time else 0.0
 
     async def initialize(self) -> None:
         """Initialize service and components.
@@ -55,6 +97,12 @@ class ProcessService:
             HTTPException: If initialization fails
         """
         try:
+            if self.is_running:
+                raise create_error(
+                    status_code=status.HTTP_409_CONFLICT,
+                    message=f"{self.service_name} service already running"
+                )
+            
             # Load config
             config = self._load_config()
             
@@ -64,33 +112,84 @@ class ProcessService:
             # Setup health monitoring
             self._setup_health_monitoring()
             
-            self.is_initialized = True
+            self._is_initialized = True
             logger.info("Process service initialized successfully")
             
         except Exception as e:
-            logger.error(f"Failed to initialize process service: {str(e)}")
+            logger.error(f"Failed to initialize process service: {e}")
             raise create_error(
-                status_code=500,
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
                 message=f"Failed to initialize process service: {str(e)}"
             )
 
-    async def shutdown(self) -> None:
-        """Shutdown service and cleanup resources."""
+    async def start(self) -> None:
+        """Start service and components.
+        
+        This method:
+        1. Verifies service is initialized
+        2. Starts all components in dependency order
+        3. Sets service state to running
+        
+        Raises:
+            HTTPException: If start fails
+        """
         try:
-            # Stop components
+            if self.is_running:
+                raise create_error(
+                    status_code=status.HTTP_409_CONFLICT,
+                    message=f"{self.service_name} service already running"
+                )
+            
+            if not self.is_initialized:
+                raise create_error(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    message=f"{self.service_name} service not initialized"
+                )
+
+            # Start components in dependency order
             for component in self._components.values():
-                if hasattr(component, "shutdown"):
-                    await component.shutdown()
-                    
-            self.is_initialized = False
-            self.is_running = False
-            logger.info("Process service shut down successfully")
+                if hasattr(component, 'start'):
+                    await component.start()
+            
+            self._is_running = True
+            self._start_time = datetime.now()
+            logger.info(f"{self.service_name} service started")
             
         except Exception as e:
-            logger.error(f"Error during process service shutdown: {str(e)}")
+            self._is_running = False
+            self._start_time = None
+            error_msg = f"Failed to start {self.service_name} service: {str(e)}"
+            logger.error(error_msg)
             raise create_error(
-                status_code=500,
-                message=f"Error during process service shutdown: {str(e)}"
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                message=error_msg
+            )
+
+    async def stop(self) -> None:
+        """Shutdown service and cleanup resources."""
+        try:
+            if not self.is_running:
+                raise create_error(
+                    status_code=status.HTTP_409_CONFLICT,
+                    message=f"{self.service_name} service not running"
+                )
+
+            # Stop components in reverse dependency order
+            for component in reversed(list(self._components.values())):
+                if hasattr(component, 'stop'):
+                    await component.stop()
+                    
+            self._is_initialized = False
+            self._is_running = False
+            self._start_time = None
+            logger.info(f"{self.service_name} service stopped successfully")
+            
+        except Exception as e:
+            error_msg = f"Error during {self.service_name} service shutdown: {str(e)}"
+            logger.error(error_msg)
+            raise create_error(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                message=error_msg
             )
 
     def _load_config(self) -> Dict:
@@ -139,16 +238,13 @@ class ProcessService:
         try:
             components_config = config.get("components", {})
             
-            # Initialize components based on config
             for name, cfg in components_config.items():
                 logger.info(f"Initializing component: {name}")
-                # Initialize component based on type
-                # Add component initialization logic here
                 
         except Exception as e:
-            logger.error(f"Failed to initialize components: {str(e)}")
+            logger.error(f"Failed to initialize components: {e}")
             raise create_error(
-                status_code=500,
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 message=f"Failed to initialize components: {str(e)}"
             )
 
@@ -156,7 +252,7 @@ class ProcessService:
         """Setup health monitoring for service and components."""
         # Initialize health state
         self._health = {
-            "status": "healthy",
+            "status": HealthStatus.OK,
             "version": self.version,
             "is_initialized": self.is_initialized,
             "is_running": self.is_running,
@@ -168,24 +264,65 @@ class ProcessService:
             if hasattr(component, "health"):
                 self._health["components"][name] = component.health()
 
-    async def get_health(self) -> Dict:
-        """Get service health status.
-        
-        Returns:
-            Dict containing health status information
-        """
-        return {
-            "status": "healthy" if self.is_running else "stopped",
-            "version": self.version,
-            "is_initialized": self.is_initialized,
-            "is_running": self.is_running,
-            "components": self._health.get("components", {})
-        }
+    async def health(self) -> ServiceHealth:
+        """Get service health status."""
+        try:
+            # Check critical components
+            components = {}
+            
+            # Check each component service
+            services_to_check = {
+                "action": self.action_service,
+                "parameter": self.parameter_service,
+                "pattern": self.pattern_service,
+                "sequence": self.sequence_service,
+                "schema": self.schema_service
+            }
+            
+            for name, service in services_to_check.items():
+                if service is None:
+                    components[name] = ComponentHealth(
+                        status=HealthStatus.ERROR,
+                        error="Service not initialized"
+                    )
+                    continue
+                    
+                try:
+                    if hasattr(service, 'health'):
+                        component_health = await service.health()
+                        components[name] = component_health
+                    else:
+                        components[name] = ComponentHealth(
+                            status=HealthStatus.OK if service.is_running else HealthStatus.ERROR,
+                            error=None if service.is_running else "Service not running"
+                        )
+                except Exception as e:
+                    logger.error(f"Failed to get {name} service health: {e}")
+                    components[name] = ComponentHealth(
+                        status=HealthStatus.ERROR,
+                        error=str(e)
+                    )
+            
+            # Overall status is ERROR if any component is in error state
+            overall_status = HealthStatus.ERROR if any(
+                c.status == HealthStatus.ERROR for c in components.values()
+            ) else HealthStatus.OK
 
-    def get_version(self) -> str:
-        """Get service version.
-        
-        Returns:
-            Service version string
-        """
-        return self.version
+            return ServiceHealth(
+                status=overall_status,
+                service=self.service_name,
+                version=self.version,
+                is_running=self.is_running,
+                uptime=self.uptime,
+                error="Critical component failure" if overall_status == HealthStatus.ERROR else None,
+                components=components
+            )
+            
+        except Exception as e:
+            error_msg = f"Health check failed: {str(e)}"
+            logger.error(error_msg)
+            return create_error_health(
+                service_name=self.service_name,
+                version=self.version,
+                error_msg=error_msg
+            )

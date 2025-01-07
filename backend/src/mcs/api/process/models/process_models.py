@@ -3,6 +3,7 @@
 from typing import List, Dict, Any, Optional
 from pydantic import BaseModel, Field
 from enum import Enum
+from mcs.utils.health import HealthStatus
 
 
 # Enums
@@ -140,20 +141,34 @@ class SequenceListResponse(BaseModel):
     sequences: List[Sequence]
 
 
-class StatusType(str, Enum):
-    """Status types."""
-    IDLE = "idle"
-    READY = "ready"
-    RUNNING = "running"
-    PAUSED = "paused"
-    COMPLETED = "completed"
-    ERROR = "error"
-    ABORTED = "aborted"
+class ProcessStatus(str, Enum):
+    """Process-specific status types."""
+    IDLE = "idle"                # System ready but not active
+    INITIALIZING = "initializing"  # When process is starting up
+    RUNNING = "running"            # Process is actively running
+    PAUSED = "paused"             # Process temporarily suspended
+    COMPLETED = "completed"        # Process finished successfully
+    ABORTED = "aborted"           # Process stopped by user
+    ERROR = "error"               # System encountered an error
+    
+    @property
+    def health_status(self) -> HealthStatus:
+        """Map process status to health status."""
+        status_map = {
+            self.IDLE: HealthStatus.OK,
+            self.INITIALIZING: HealthStatus.STARTING,
+            self.RUNNING: HealthStatus.OK,
+            self.PAUSED: HealthStatus.DEGRADED,
+            self.COMPLETED: HealthStatus.OK,
+            self.ABORTED: HealthStatus.ERROR,
+            self.ERROR: HealthStatus.ERROR
+        }
+        return status_map.get(self, HealthStatus.ERROR)
 
 
 class StatusResponse(BaseModel):
     """Status response."""
-    status: StatusType
+    status: ProcessStatus
     details: Optional[Dict[str, Any]] = None
 
 

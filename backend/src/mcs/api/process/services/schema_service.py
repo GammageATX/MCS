@@ -9,7 +9,7 @@ from loguru import logger
 from pathlib import Path
 
 from mcs.utils.errors import create_error
-from mcs.utils.health import ServiceHealth, ComponentHealth, HealthStatus, create_error_health
+from mcs.utils.health import ComponentHealth, HealthStatus, create_error_health  # noqa: F401
 
 
 class SchemaService:
@@ -149,50 +149,48 @@ class SchemaService:
                 message=error_msg
             )
 
-    async def health(self) -> ServiceHealth:
-        """Get service health status."""
+    async def health(self) -> ComponentHealth:
+        """Get schema service health status."""
         try:
             # Check critical components
             schemas_loaded = bool(self._schemas)
             dir_exists = self._schema_dir.exists()
             dir_writable = dir_exists and os.access(self._schema_dir, os.W_OK)
             
-            # Build component status focusing on critical components
-            components = {
-                "schemas": ComponentHealth(
-                    status=HealthStatus.OK if schemas_loaded and dir_exists and dir_writable else HealthStatus.ERROR,
-                    error=None if schemas_loaded and dir_exists and dir_writable else "Schema system not operational",
-                    details={
-                        "total_schemas": len(self._schemas),
-                        "loaded_schemas": list(self._schemas.keys()),
-                        "failed_schemas": list(self._failed_schemas.keys()),
-                        "recovery_attempts": len(self._failed_schemas),
-                        "directory": {
-                            "path": str(self._schema_dir),
-                            "exists": dir_exists,
-                            "writable": dir_writable
-                        }
+            # Determine status based on critical checks
+            status = HealthStatus.OK if (
+                self.is_running and
+                schemas_loaded and
+                dir_exists and
+                dir_writable
+            ) else HealthStatus.ERROR
+
+            return ComponentHealth(
+                status=status,
+                error=None if status == HealthStatus.OK else "Schema system not operational",
+                details={
+                    "is_running": self.is_running,
+                    "uptime": self.uptime,
+                    "schemas": {
+                        "total": len(self._schemas),
+                        "loaded": list(self._schemas.keys()),
+                        "failed": list(self._failed_schemas.keys()),
+                        "recovery_attempts": len(self._failed_schemas)
+                    },
+                    "storage": {
+                        "path": str(self._schema_dir),
+                        "exists": dir_exists,
+                        "writable": dir_writable
                     }
-                )
-            }
-            
-            # Overall status is ERROR if schema system is not operational
-            overall_status = HealthStatus.ERROR if not (schemas_loaded and dir_exists and dir_writable) else HealthStatus.OK
-            
-            return ServiceHealth(
-                status=overall_status,
-                service=self.service_name,
-                version=self.version,
-                is_running=self.is_running,
-                uptime=self.uptime,
-                error="Critical component failure" if overall_status == HealthStatus.ERROR else None,
-                components=components
+                }
             )
-            
         except Exception as e:
             error_msg = f"Health check failed: {str(e)}"
             logger.error(error_msg)
-            return create_error_health(self.service_name, self.version, error_msg)
+            return ComponentHealth(
+                status=HealthStatus.ERROR,
+                error=error_msg
+            )
 
     async def list_schemas(self) -> List[str]:
         """List available schemas."""

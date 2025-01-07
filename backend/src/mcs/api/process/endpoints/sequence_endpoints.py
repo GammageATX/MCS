@@ -1,22 +1,26 @@
 """Sequence management endpoints."""
 
-from fastapi import APIRouter, Depends, WebSocket, WebSocketDisconnect, status
+from fastapi import APIRouter, Depends, WebSocket, WebSocketDisconnect, status, Request
 from loguru import logger
 import asyncio
 
 from mcs.utils.errors import create_error
 from mcs.api.process.process_service import ProcessService
-from mcs.api.process import get_process_service
-from mcs.api.process.models.process_models import (
+from mcs.api.process.models.process_models import (  # noqa: F401
     BaseResponse,
     Sequence,
     SequenceResponse,
     SequenceListResponse,
-    StatusType,
+    ProcessStatus,
     StatusResponse
 )
 
 router = APIRouter(prefix="/sequences", tags=["sequences"])
+
+
+def get_process_service(request: Request) -> ProcessService:
+    """Get service instance from app state."""
+    return request.app.state.service
 
 
 @router.get(
