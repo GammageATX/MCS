@@ -117,16 +117,6 @@ Handles process data collection and storage.
 - `POST /data_collection/data/stop` - Stop data collection
 - `POST /data_collection/data/record` - Record spray event
 
-### Validation Service (Port 8006)
-
-Validates configurations and parameters.
-
-#### Endpoints
-
-- `POST /validation/hardware` - Validate hardware config
-- `POST /validation/parameter/{parameter_type}` - Validate parameters
-- `POST /validation/pattern/{pattern_type}` - Validate pattern
-- `POST /validation/sequence` - Validate sequence
 
 ## Common Features
 

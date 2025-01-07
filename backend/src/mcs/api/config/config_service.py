@@ -17,7 +17,7 @@ import jsonschema
 
 
 # Default paths - relative to project root
-DEFAULT_CONFIG_PATH = "backend/config"
+DEFAULT_CONFIG_PATH = os.path.join("backend", "config")
 DEFAULT_SCHEMA_PATH = os.path.join(DEFAULT_CONFIG_PATH, "schemas")
 
 
@@ -25,7 +25,11 @@ class ConfigService:
     """Configuration service."""
 
     def __init__(self, version: str = "1.0.0"):
-        """Initialize service."""
+        """Initialize service.
+        
+        Args:
+            version: Service version
+        """
         self._service_name = "config"
         self._version = version
         self._is_running = False

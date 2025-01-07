@@ -1,16 +1,26 @@
+# Data Collection Service Config
+
+# Service information
+version: "1.0.0"
+
+# Service settings
 service:
-  version: "1.0.0"
+  name: "data_collection"
   host: "0.0.0.0"
-  port: 8006
+  port: 8005
+  log_level: "INFO"
   history_retention_days: 30
 
-database:
-  host: "localhost"
-  port: 5432
-  user: "postgres"
-  password: "dbpassword"
-  database: "postgres"
-  pool:
-    min_size: 2
-    max_size: 10
-    command_timeout: 60.0
+# Component settings
+components:
+  database:
+    version: "1.0.0"
+    host: "localhost"
+    port: 5432
+    user: "postgres"
+    password: "dbpassword"
+    database: "postgres"
+    pool:
+      min_size: 2
+      max_size: 10
+      command_timeout: 60.0

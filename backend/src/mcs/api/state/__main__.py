@@ -2,25 +2,24 @@
 
 import os
 import sys
+import yaml
 import uvicorn
 from loguru import logger
-
-from mcs.api.state.state_app import create_state_service
-from mcs.utils.errors import create_error  # noqa: F401 - used in error handlers and endpoints
+from mcs.utils.errors import create_error
 
 
 def setup_logging():
-    """Setup logging configuration.
-    
-    Creates log directory if it doesn't exist and configures console and file handlers.
-    Console handler uses colored output while file handler includes rotation.
-    """
+    """Setup logging configuration."""
     log_dir = os.path.join("logs", "state")
     if not os.path.exists(log_dir):
         os.makedirs(log_dir)
 
     # Remove default handler
     logger.remove()
+    
+    # Get log level from environment or use default
+    console_level = os.getenv("MCS_LOG_LEVEL", "INFO").upper()
+    file_level = os.getenv("MCS_FILE_LOG_LEVEL", "DEBUG").upper()
     
     # Add console handler with color
     log_format = (
@@ -29,7 +28,7 @@ def setup_logging():
         "<cyan>{name}</cyan>:<cyan>{function}</cyan>:<cyan>{line}</cyan> - "
         "<level>{message}</level>"
     )
-    logger.add(sys.stderr, format=log_format, level="INFO", enqueue=True)
+    logger.add(sys.stderr, format=log_format, level=console_level, enqueue=True)
     
     # Add file handler with rotation
     file_format = (
@@ -39,67 +38,82 @@ def setup_logging():
         "{message}"
     )
     logger.add(
-        os.path.join(log_dir, "state_service.log"),
+        os.path.join(log_dir, "state.log"),
         rotation="1 day",
         retention="30 days",
         format=file_format,
-        level="DEBUG",
+        level=file_level,
         enqueue=True,
         compression="zip"
     )
 
 
+def load_config():
+    """Load service configuration."""
+    try:
+        config_path = os.path.join("backend", "config", "state.yaml")
+        if not os.path.exists(config_path):
+            logger.warning(f"Config file not found at {config_path}, using defaults")
+            return {
+                "version": "1.0.0",
+                "service": {
+                    "name": "state",
+                    "host": "0.0.0.0",
+                    "port": 8002,
+                    "log_level": "INFO"
+                },
+                "components": {
+                    "state_machine": {
+                        "version": "1.0.0",
+                        "initial_state": "INITIALIZING",
+                        "states": {}
+                    }
+                }
+            }
+
+        with open(config_path, 'r') as f:
+            return yaml.safe_load(f)
+
+    except Exception as e:
+        logger.error(f"Failed to load config: {e}")
+        raise create_error(
+            status_code=500,
+            message=f"Failed to load configuration: {str(e)}"
+        )
+
+
 def main():
-    """Run state service.
-    
-    Configures logging, creates the FastAPI application, and starts the uvicorn server.
-    Environment variables:
-        STATE_SERVICE_HOST: Host to bind to (default: 0.0.0.0)
-        STATE_SERVICE_PORT: Port to listen on (default: 8002)
-        STATE_SERVICE_RELOAD: Enable auto-reload (default: false)
-        STATE_SERVICE_LOG_LEVEL: Logging level (default: info)
-    """
+    """Run state service."""
     try:
         # Setup logging
         setup_logging()
         logger.info("Starting state service...")
         
-        # Create service
-        app = create_state_service()
+        # Load config
+        config = load_config()
         
         # Get config from environment or use defaults
-        host = os.getenv("STATE_SERVICE_HOST", "0.0.0.0")
-        port = int(os.getenv("STATE_SERVICE_PORT", "8002"))
-        reload = os.getenv("STATE_SERVICE_RELOAD", "false").lower() == "true"
-        log_level = os.getenv("STATE_SERVICE_LOG_LEVEL", "info").lower()
-        
-        # Validate configuration
-        if port < 1 or port > 65535:
-            raise ValueError(f"Invalid port number: {port}")
-            
-        if log_level not in ["debug", "info", "warning", "error", "critical"]:
-            raise ValueError(f"Invalid log level: {log_level}")
+        host = os.getenv("STATE_HOST", config["service"].get("host", "0.0.0.0"))
+        port = int(os.getenv("STATE_PORT", config["service"].get("port", 8002)))
         
         # Log startup configuration
-        logger.info("State service configuration:")
-        logger.info(f"  Host: {host}")
-        logger.info(f"  Port: {port}")
-        logger.info(f"  Reload: {reload}")
-        logger.info(f"  Log level: {log_level}")
+        logger.info(f"Host: {host}")
+        logger.info(f"Port: {port}")
+        logger.info("Mode: development (reload enabled)")
         
-        # Run service
+        # Run service with standardized configuration
         uvicorn.run(
-            app,
+            "mcs.api.state.state_app:create_state_service",
             host=host,
             port=port,
-            reload=reload,
-            log_level=log_level,
-            access_log=True,
-            reload_dirs=[os.path.dirname(os.path.dirname(__file__))]  # Watch mcs package
+            reload=True,
+            factory=True,
+            reload_dirs=["backend/src"],
+            log_level="debug"
         )
 
-    except Exception:
-        logger.exception("Failed to start state service")
+    except Exception as e:
+        logger.exception(f"Failed to start state service: {e}")
         sys.exit(1)
 
 

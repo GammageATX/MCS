@@ -1,5 +1,8 @@
 """State service application."""
 
+import os
+import yaml
+from typing import Dict, Any
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request, status
 from fastapi.middleware.cors import CORSMiddleware
@@ -7,9 +10,47 @@ from fastapi.responses import JSONResponse
 from fastapi.exceptions import RequestValidationError
 from loguru import logger
 
-from mcs.utils.errors import create_error  # noqa: F401 - used in error handlers and endpoints
-from mcs.utils.health import ServiceHealth, HealthStatus, create_error_health
-from mcs.api.state.state_service import StateService, load_config
+from mcs.utils.errors import create_error
+from mcs.utils.health import ServiceHealth, HealthStatus
+from mcs.api.state.state_service import StateService
+
+
+def load_config() -> Dict[str, Any]:
+    """Load configuration from file.
+    
+    Returns:
+        Dict[str, Any]: Configuration dictionary
+    """
+    try:
+        config_path = os.path.join("backend", "config", "state.yaml")
+        if not os.path.exists(config_path):
+            logger.warning(f"Config file not found at {config_path}, using defaults")
+            return {
+                "version": "1.0.0",
+                "service": {
+                    "name": "state",
+                    "host": "0.0.0.0",
+                    "port": 8002,
+                    "log_level": "INFO"
+                },
+                "components": {
+                    "state_machine": {
+                        "version": "1.0.0",
+                        "initial_state": "INITIALIZING",
+                        "states": {}
+                    }
+                }
+            }
+
+        with open(config_path, "r") as f:
+            return yaml.safe_load(f)
+            
+    except Exception as e:
+        logger.error(f"Failed to load config: {e}")
+        raise create_error(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            message=f"Failed to load configuration: {str(e)}"
+        )
 
 
 @asynccontextmanager
@@ -56,12 +97,11 @@ def create_state_service() -> FastAPI:
     """
     # Load config
     config = load_config()
-    version = config.get("version", "1.0.0")
     
     app = FastAPI(
         title="State Service",
         description="Service for managing system state",
-        version=version,
+        version=config["version"],
         docs_url="/docs",
         redoc_url="/redoc",
         openapi_url="/openapi.json",
@@ -86,8 +126,8 @@ def create_state_service() -> FastAPI:
             content={"detail": exc.errors()},
         )
     
-    # Create service
-    service = StateService()
+    # Create service with version from config
+    service = StateService(version=config["version"])
     app.state.service = service
     
     @app.get("/health", response_model=ServiceHealth)
@@ -99,10 +139,11 @@ def create_state_service() -> FastAPI:
                 return ServiceHealth(
                     status=HealthStatus.STARTING,
                     service="state",
-                    version=version,
+                    version=config["version"],
                     is_running=False,
                     uptime=0.0,
                     error="Service initializing",
+                    mode=config.get("mode", "normal"),
                     components={}
                 )
             
@@ -111,7 +152,18 @@ def create_state_service() -> FastAPI:
         except Exception as e:
             error_msg = f"Health check failed: {str(e)}"
             logger.error(error_msg)
-            return create_error_health("state", version, error_msg)
+            return ServiceHealth(
+                status="error",
+                service="state",
+                version=config["version"],
+                is_running=False,
+                uptime=0.0,
+                error=error_msg,
+                mode=config.get("mode", "normal"),
+                components={
+                    "state_machine": {"status": "error", "error": error_msg}
+                }
+            )
     
     @app.post("/start")
     async def start():

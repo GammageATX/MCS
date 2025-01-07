@@ -5,6 +5,7 @@ import sys
 import yaml
 import uvicorn
 from loguru import logger
+from mcs.utils.errors import create_error
 
 
 def setup_logging():
@@ -16,6 +17,10 @@ def setup_logging():
     # Remove default handler
     logger.remove()
     
+    # Get log level from environment or use default
+    console_level = os.getenv("MCS_LOG_LEVEL", "INFO").upper()
+    file_level = os.getenv("MCS_FILE_LOG_LEVEL", "DEBUG").upper()
+    
     # Add console handler with color
     log_format = (
         "<green>{time:YYYY-MM-DD HH:mm:ss}</green> | "
@@ -23,7 +28,7 @@ def setup_logging():
         "<cyan>{name}</cyan>:<cyan>{function}</cyan>:<cyan>{line}</cyan> - "
         "<level>{message}</level>"
     )
-    logger.add(sys.stderr, format=log_format, level="INFO", enqueue=True)
+    logger.add(sys.stderr, format=log_format, level=console_level, enqueue=True)
     
     # Add file handler with rotation
     file_format = (
@@ -33,14 +38,40 @@ def setup_logging():
         "{message}"
     )
     logger.add(
-        os.path.join(log_dir, "config_service.log"),
+        os.path.join(log_dir, "config.log"),
         rotation="1 day",
         retention="30 days",
         format=file_format,
-        level="DEBUG",
+        level=file_level,
         enqueue=True,
         compression="zip"
     )
+
+
+def load_config():
+    """Load service configuration."""
+    try:
+        config_path = os.path.join("backend", "config", "config.yaml")
+        if not os.path.exists(config_path):
+            logger.warning(f"Config file not found at {config_path}, using defaults")
+            return {
+                "service": {
+                    "version": "1.0.0",
+                    "host": "0.0.0.0",
+                    "port": 8001,
+                    "log_level": "INFO"
+                }
+            }
+
+        with open(config_path, 'r') as f:
+            return yaml.safe_load(f)
+
+    except Exception as e:
+        logger.error(f"Failed to load config: {e}")
+        raise create_error(
+            status_code=500,
+            message=f"Failed to load configuration: {str(e)}"
+        )
 
 
 def main():
@@ -50,28 +81,27 @@ def main():
         setup_logging()
         logger.info("Starting configuration service...")
         
-        # Load config for service settings
-        try:
-            with open("backend/config/config.yaml", "r") as f:
-                config = yaml.safe_load(f)
-        except Exception as e:
-            logger.error(f"Failed to load config, using defaults: {e}")
-            config = {
-                "service": {
-                    "host": "0.0.0.0",
-                    "port": 8001,
-                    "log_level": "INFO"
-                }
-            }
+        # Load config
+        config = load_config()
         
-        # Run service using config values
+        # Get config from environment or use defaults
+        host = os.getenv("CONFIG_HOST", config["service"].get("host", "0.0.0.0"))
+        port = int(os.getenv("CONFIG_PORT", config["service"].get("port", 8001)))
+        
+        # Log startup configuration
+        logger.info(f"Host: {host}")
+        logger.info(f"Port: {port}")
+        logger.info("Mode: development (reload enabled)")
+        
+        # Run service with standardized configuration
         uvicorn.run(
             "mcs.api.config.config_app:create_config_service",
-            host=config["service"]["host"],
-            port=config["service"]["port"],
-            log_level=config["service"]["log_level"].lower(),
-            reload=True,  # Enable auto-reload for development
-            reload_dirs=[os.path.dirname(os.path.dirname(__file__))]  # Watch mcs package
+            host=host,
+            port=port,
+            reload=True,
+            factory=True,
+            reload_dirs=["backend/src"],
+            log_level="debug"
         )
 
     except Exception as e:

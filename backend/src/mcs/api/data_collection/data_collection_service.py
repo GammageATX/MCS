@@ -21,56 +21,55 @@ def load_config() -> Dict[str, Any]:
     try:
         config_path = os.path.join("backend", "config", "data_collection.yaml")
         if not os.path.exists(config_path):
-            # In mock mode, return default config
+            logger.warning(f"Config file not found at {config_path}, using defaults")
             return {
+                "version": "1.0.0",
                 "service": {
-                    "version": "1.0.0",
-                    "mode": "mock"
+                    "name": "data_collection",
+                    "host": "0.0.0.0",
+                    "port": 8005,
+                    "log_level": "INFO",
+                    "history_retention_days": 30
                 },
-                "database": {
-                    "host": "localhost",
-                    "port": 5432,
-                    "user": "mock_user",
-                    "password": "mock_password",
-                    "database": "mock_db",
-                    "pool": {
-                        "min_size": 1,
-                        "max_size": 10
+                "components": {
+                    "database": {
+                        "version": "1.0.0",
+                        "host": "localhost",
+                        "port": 5432,
+                        "user": "mock_user",
+                        "password": "mock_password",
+                        "database": "mock_db",
+                        "pool": {
+                            "min_size": 1,
+                            "max_size": 10
+                        }
                     }
                 }
             }
             
         with open(config_path, "r") as f:
             return yaml.safe_load(f)
+            
     except Exception as e:
         logger.error(f"Failed to load config: {e}")
-        # Return mock config on error
-        return {
-            "service": {
-                "version": "1.0.0",
-                "mode": "mock"
-            },
-            "database": {
-                "host": "localhost",
-                "port": 5432,
-                "user": "mock_user",
-                "password": "mock_password",
-                "database": "mock_db",
-                "pool": {
-                    "min_size": 1,
-                    "max_size": 10
-                }
-            }
-        }
+        raise create_error(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            message=f"Failed to load configuration: {str(e)}"
+        )
 
 
 class DataCollectionService:
     """Service for collecting spray data."""
 
-    def __init__(self, storage: Optional[DataCollectionStorage] = None):
-        """Initialize service."""
+    def __init__(self, storage: Optional[DataCollectionStorage] = None, version: str = "1.0.0"):
+        """Initialize service.
+        
+        Args:
+            storage: Optional pre-configured storage service
+            version: Service version
+        """
         self._service_name = "data_collection"
-        self._version = "1.0.0"  # Will be updated from config
+        self._version = version
         self._is_running = False
         self._start_time = None
         self._config = None
@@ -108,12 +107,11 @@ class DataCollectionService:
         try:
             # Load config first
             self._config = load_config()
-            self._version = self._config["service"]["version"]
-            self._mode = self._config.get("service", {}).get("mode", self._mode)  # Get mode from config
+            self._version = self._config.get("version", self._version)
             
             # Initialize storage if not provided
             if not self._storage:
-                db_config = self._config["database"]
+                db_config = self._config["components"]["database"]
                 dsn = f"postgresql://{db_config['user']}:{db_config['password']}@{db_config['host']}:{db_config['port']}/{db_config['database']}"
                 self._storage = DataCollectionStorage(dsn=dsn, pool_config=db_config["pool"])
                 await self._storage.initialize()

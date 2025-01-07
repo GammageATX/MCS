@@ -1,212 +1,107 @@
-# Hardware Documentation
+# Micro Cold Spray System - Technical Context
 
-## System Overview
+## 1. Process Overview
 
-The micro cold spray system is a specialized coating process that:
+The micro cold spray system is a novel coating process with the following key characteristics:
 
-- Uses submicron-sized powder particles
-- Operates in a controlled vacuum environment
-- Employs a converging-diverging nozzle design
-- Achieves supersonic particle acceleration
-- Uses a fixed nozzle with movable substrate stage
+- Aerosolizes submicron-sized powders
+- Uses vacuum environment
+- Employs converging-diverging nozzle
+- Accelerates particles to supersonic speeds
+- Uses stationary nozzle with moving substrate stage for pattern rastering
 
-## Hardware Components
+## 2. Hardware Components
 
-### 1. Gas Management System
+### 2.1 Primary Control Systems
 
-**Purpose:** Control and regulate aerosol gas flow to nozzle
+1. **Gas Management System**
+   - Pneumatic valves
+   - Mass flow controllers
+   - Purpose: Control aerosol gas flow to nozzle
 
-#### Components
+2. **Vacuum System**
+   - Vacuum pumps
+   - Gate valve
+   - Purpose: Maintain and regulate vacuum chamber environment
 
-- **Pneumatic Valves**
-- Main gas valve
-- Feeder gas valve
-- Safety shutoff valves
+3. **Spray Control System**
+   - Nozzle shutter mechanism
+   - Purpose: Enable/disable spray process
 
-- **Mass Flow Controllers**
-- Main gas flow control
-- Feeder gas flow control
-- Flow rate monitoring
+4. **Powder Management System**
+   - Deagglomerator motor: Breaks up powder clumps
+   - 3-way valves:
+     - Controls aerosol flow
+     - Switches between dual hardware setups (nozzle/feeder/deagglomerator pairs)
 
-#### Safety Requirements
+5. **External Powder Feeder**
+   - Controlled by separate PLC
+   - Connected via SSH interface
+   - Purpose: Manage powder feed rate
 
-- Pressure relief mechanisms
-- Emergency shutoff capability
-- Flow rate limits and alarms
-- Leak detection
+## 3. Configuration Management
 
-### 2. Vacuum System
+### 3.1 File Types
 
-**Purpose:** Maintain and regulate vacuum chamber environment
+1. **Component Configuration Files**
+   - Nozzle properties template
+   - Powder properties template
+   - Purpose: Define physical component characteristics
 
-#### Components
+2. **Process Configuration Files**
+   - Raster pattern files: Define substrate movement paths
+   - Gas parameter files: Specify aerosol gas settings
+   - Purpose: Define process parameters
 
-- **Vacuum Pumps**
-- Mechanical pump
-- Booster pump
-- Pressure monitoring
+3. **Sequence Files**
+   - Orchestrates all configurations
+   - Defines step-by-step system actions
+   - Controls spray events (shutter open + feeder active + pattern running)
 
-- **Gate Valve**
-- Chamber isolation
-- Emergency venting
-- Pressure control
+### 3.2 Sequence Operations
 
-#### Safety Requirements
+1. **Start-Up Phase**
+   - System component initialization
+   - Safety checks
+   - Environment preparation
 
-- Pressure monitoring at multiple points
-- Emergency venting capability
-- Pump protection interlocks
-- Chamber pressure limits
+2. **Process Phase**
+   - Dynamic parameter adjustments
+   - Hardware switching
+   - Feeder activation
+   - Pattern rastering
 
-### 3. Spray Control System
+3. **Shut-Down Phase**
+   - Safe component deactivation
+   - System state verification
+   - Environment normalization
 
-**Purpose:** Control spray process and pattern generation
+## 4. User Interface Requirements
 
-#### Components
+### 4.1 Core Functionalities
 
-- **Nozzle Assembly**
-- Converging-diverging design
-- Multiple nozzle capability
-- Shutter mechanism
+1. **File Management Interface**
+   - Create/edit nozzle configurations
+   - Create/edit powder configurations
+   - Create/edit raster patterns
+   - Create/edit gas parameters
+   - Create/edit sequence files
 
-- **Substrate Stage**
-- Multi-axis motion control
-- Position feedback
-- Pattern execution
+2. **Process Control Interface**
+   - Execute sequences
+   - Real-time progress tracking
+   - System status monitoring
+     - Gas flow rates
+     - Pressure measurements
 
-#### Safety Requirements
+3. **Configuration Interface**
+   - Hardware configuration management
+   - Gas parameter adjustments
+   - Pattern setting modifications
 
-- Position limit switches
-- Collision avoidance
-- Emergency stop capability
-- Motion interlocks
+### 4.2 Design Principles
 
-### 4. Powder Management System
-
-**Purpose:** Control powder feed and conditioning
-
-#### Components
-
-- **Deagglomerator**
-- Motor control
-- Speed regulation
-- Powder conditioning
-
-- **3-Way Valves**
-- Flow path control
-- System switching
-- Dual hardware setup support
-
-#### Safety Requirements
-
-- Powder containment
-- Motor overload protection
-- Emergency purge capability
-- Contamination prevention
-
-### 5. External Powder Feeder
-
-**Purpose:** Precise powder feed rate control
-
-#### Components
-
-- **PLC Control System**
-- SSH interface
-- Feed rate regulation
-- Status monitoring
-
-- **Feed Mechanism**
-- Powder transport
-- Rate control
-- Feed verification
-
-#### Safety Requirements
-
-- Feed rate limits
-- Powder level monitoring
-- System isolation capability
-- Emergency shutdown
-
-## Hardware Safety Interlocks
-
-### System-wide Safety Requirements
-
-1. **Emergency Stop System**
-   - Immediate process halt
-   - Safe state transition
-   - Component protection
-   - Operator safety
-
-2. **Interlock Chain**
-   - Vacuum system status
-   - Gas flow verification
-   - Motion system ready
-   - Powder feed status
-
-3. **Component Protection**
-   - Temperature monitoring
-   - Pressure limits
-   - Motion limits
-   - Power monitoring
-
-### Operational Safety Checks
-
-1. **Startup Sequence**
-   - Component initialization order
-   - System verification
-   - Safety check sequence
-   - Ready state confirmation
-
-2. **Shutdown Sequence**
-   - Safe state transition
-   - Component shutdown order
-   - System purge requirements
-   - Final state verification
-
-3. **Fault Handling**
-   - Error detection
-   - Safe state transition
-   - Component protection
-   - Recovery procedures
-
-## Maintenance Requirements
-
-### Regular Maintenance
-
-1. **Daily Checks**
-   - Pressure readings
-   - Flow verification
-   - Motion system check
-   - Safety system test
-
-2. **Weekly Tasks**
-   - Nozzle inspection
-   - Powder system cleaning
-   - Vacuum system check
-   - Calibration verification
-
-3. **Monthly Service**
-   - Component inspection
-   - Sensor calibration
-   - Safety system verification
-   - Performance validation
-
-### Calibration Requirements
-
-1. **Flow Controllers**
-   - Flow rate verification
-   - Zero point calibration
-   - Range verification
-   - Response time check
-
-2. **Motion System**
-   - Position accuracy
-   - Speed calibration
-   - Home position verification
-   - Backlash compensation
-
-3. **Sensors**
-   - Pressure sensors
-   - Temperature sensors
-   - Position sensors
-   - Flow sensors
+- Clear separation between file building, sequence execution, and system configuration
+- Intuitive workflow for sequence building and execution
+- Real-time monitoring and control capabilities
+- Easy access to system configuration adjustments

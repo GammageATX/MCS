@@ -1,5 +1,8 @@
 """Data collection API application."""
 
+import os
+import yaml
+from typing import Dict, Any
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request, status
 from fastapi.middleware.cors import CORSMiddleware
@@ -13,10 +16,58 @@ from mcs.utils.errors import create_error  # noqa: F401 - used in error handlers
 from mcs.utils.health import ServiceHealth
 
 
+def load_config() -> Dict[str, Any]:
+    """Load configuration from file.
+    
+    Returns:
+        Dict[str, Any]: Configuration dictionary
+    """
+    try:
+        config_path = os.path.join("backend", "config", "data_collection.yaml")
+        if not os.path.exists(config_path):
+            logger.warning(f"Config file not found at {config_path}, using defaults")
+            return {
+                "version": "1.0.0",
+                "service": {
+                    "name": "data_collection",
+                    "host": "0.0.0.0",
+                    "port": 8005,
+                    "log_level": "INFO",
+                    "history_retention_days": 30
+                },
+                "components": {
+                    "database": {
+                        "version": "1.0.0",
+                        "host": "localhost",
+                        "port": 5432,
+                        "user": "mcs_user",
+                        "password": "mcs_password",
+                        "database": "mcs_db",
+                        "pool": {
+                            "min_size": 2,
+                            "max_size": 10
+                        }
+                    }
+                }
+            }
+
+        with open(config_path, "r") as f:
+            return yaml.safe_load(f)
+            
+    except Exception as e:
+        logger.error(f"Failed to load config: {e}")
+        raise create_error(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            message=f"Failed to load configuration: {str(e)}"
+        )
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Handle startup and shutdown events."""
     try:
+        logger.info("Starting data collection service...")
+        
         # Get service from app state
         service = app.state.service
         
@@ -29,9 +80,10 @@ async def lifespan(app: FastAPI):
         yield  # Server is running
         
         # Shutdown
-        await app.state.service.stop()
-        logger.info("Data collection service stopped successfully")
-        
+        if hasattr(app.state, "service") and app.state.service.is_running:
+            await app.state.service.stop()
+            logger.info("Data collection service stopped successfully")
+            
     except Exception as e:
         logger.error(f"Data collection service startup failed: {e}")
         # Don't raise here - let the service start in degraded mode
@@ -51,9 +103,13 @@ def create_data_collection_service() -> FastAPI:
     Returns:
         FastAPI: Application instance
     """
+    # Load config
+    config = load_config()
+    
     app = FastAPI(
         title="Data Collection API",
         description="API for collecting spray data",
+        version=config["version"],
         docs_url="/docs",
         redoc_url="/redoc",
         openapi_url="/openapi.json",
@@ -78,8 +134,8 @@ def create_data_collection_service() -> FastAPI:
             content={"detail": exc.errors()},
         )
     
-    # Create service
-    service = DataCollectionService()
+    # Create service with version from config
+    service = DataCollectionService(version=config["version"])
     app.state.service = service
     
     # Add routes
@@ -94,11 +150,11 @@ def create_data_collection_service() -> FastAPI:
                 return ServiceHealth(
                     status="starting",
                     service="data_collection",
-                    version="1.0.0",
+                    version=config["version"],
                     is_running=False,
                     uptime=0.0,
                     error="Service initializing",
-                    mode="normal",
+                    mode=config.get("mode", "normal"),
                     components={}
                 )
             
@@ -110,11 +166,11 @@ def create_data_collection_service() -> FastAPI:
             return ServiceHealth(
                 status="error",
                 service="data_collection",
-                version="1.0.0",
+                version=config["version"],
                 is_running=False,
                 uptime=0.0,
                 error=error_msg,
-                mode="normal",
+                mode=config.get("mode", "normal"),
                 components={
                     "storage": {"status": "error", "error": error_msg},
                     "collector": {"status": "error", "error": error_msg}

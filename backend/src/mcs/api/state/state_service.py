@@ -17,21 +17,49 @@ def load_config() -> Dict[str, Any]:
     Returns:
         Dict[str, Any]: Configuration dictionary
     """
-    config_path = os.path.join("backend", "config", "state.yaml")
-    if not os.path.exists(config_path):
-        raise FileNotFoundError(f"Config file not found: {config_path}")
-        
-    with open(config_path, "r") as f:
-        return yaml.safe_load(f)
+    try:
+        config_path = os.path.join("backend", "config", "state.yaml")
+        if not os.path.exists(config_path):
+            logger.warning(f"Config file not found at {config_path}, using defaults")
+            return {
+                "version": "1.0.0",
+                "service": {
+                    "name": "state",
+                    "host": "0.0.0.0",
+                    "port": 8002,
+                    "log_level": "INFO"
+                },
+                "components": {
+                    "state_machine": {
+                        "version": "1.0.0",
+                        "initial_state": "INITIALIZING",
+                        "states": {}
+                    }
+                }
+            }
+            
+        with open(config_path, "r") as f:
+            return yaml.safe_load(f)
+            
+    except Exception as e:
+        logger.error(f"Failed to load config: {e}")
+        raise create_error(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            message=f"Failed to load configuration: {str(e)}"
+        )
 
 
 class StateService:
     """State service implementation."""
     
-    def __init__(self):
-        """Initialize state service."""
+    def __init__(self, version: str = "1.0.0"):
+        """Initialize state service.
+        
+        Args:
+            version: Service version
+        """
         self._service_name = "state"
-        self._version = "1.0.0"  # Will be updated from config
+        self._version = version
         self._is_running = False
         self._start_time = None
         
@@ -78,9 +106,39 @@ class StateService:
                     message=f"{self.service_name} service already running"
                 )
             
-            # Load config and state machine
-            await self._load_state_machine()
+            # Load config first
+            self._config = load_config()
+            self._version = self._config.get("version", self._version)
             
+            # Load state machine
+            state_machine_config = self._config["components"]["state_machine"]
+            self._state_machine = state_machine_config.get("states", {})
+            if not self._state_machine:
+                raise create_error(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    message="No states defined in config"
+                )
+                
+            # Set initial state
+            initial_state = state_machine_config.get("initial_state")
+            if not initial_state:
+                raise create_error(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    message="No initial state defined in config"
+                )
+            if initial_state not in self._state_machine:
+                raise create_error(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    message=f"Invalid initial state: {initial_state}"
+                )
+                
+            self._current_state = initial_state
+            self._history = []
+            
+            # Clear any failed transitions for loaded states
+            for state in self._state_machine:
+                self._failed_transitions.pop(state, None)
+                
             logger.info(f"{self.service_name} service initialized")
             
         except Exception as e:

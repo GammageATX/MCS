@@ -24,28 +24,36 @@ def load_config() -> Dict[str, Any]:
     """
     try:
         config_path = os.path.join("backend", "config", "config.yaml")
-        if os.path.exists(config_path):
-            with open(config_path, "r") as f:
-                return yaml.safe_load(f)
-    except Exception as e:
-        logger.warning(f"Failed to load config: {e}")
-    
-    # Return default config if loading fails
-    return {
-        "version": "1.0.0",
-        "mode": "normal",
-        "components": {
-            "file": {
-                "version": "1.0.0"
-            },
-            "format": {
-                "version": "1.0.0"
-            },
-            "schema": {
-                "version": "1.0.0"
+        if not os.path.exists(config_path):
+            logger.warning(f"Config file not found at {config_path}, using defaults")
+            return {
+                "version": "1.0.0",
+                "mode": "normal",
+                "components": {
+                    "file": {
+                        "version": "1.0.0",
+                        "base_path": os.path.join("backend", "config")
+                    },
+                    "format": {
+                        "version": "1.0.0",
+                        "enabled_formats": ["yaml", "json"]
+                    },
+                    "schema": {
+                        "version": "1.0.0",
+                        "schema_path": os.path.join("backend", "config", "schemas")
+                    }
+                }
             }
-        }
-    }
+
+        with open(config_path, "r") as f:
+            return yaml.safe_load(f)
+            
+    except Exception as e:
+        logger.error(f"Failed to load config: {e}")
+        raise create_error(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            message=f"Failed to load configuration: {str(e)}"
+        )
 
 
 @asynccontextmanager
@@ -118,7 +126,7 @@ def create_config_service() -> FastAPI:
         )
     
     # Create service and router
-    service = ConfigService(config)
+    service = ConfigService(version=config["version"])
     app.include_router(config_router)
     
     # Store service in app state

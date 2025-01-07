@@ -19,6 +19,10 @@ def setup_logging():
     # Remove default handler
     logger.remove()
     
+    # Get log level from environment or use default
+    console_level = os.getenv("MCS_LOG_LEVEL", "INFO").upper()
+    file_level = os.getenv("MCS_FILE_LOG_LEVEL", "DEBUG").upper()
+    
     # Add console handler with color
     log_format = (
         "<green>{time:YYYY-MM-DD HH:mm:ss}</green> | "
@@ -26,7 +30,7 @@ def setup_logging():
         "<cyan>{name}</cyan>:<cyan>{function}</cyan>:<cyan>{line}</cyan> - "
         "<level>{message}</level>"
     )
-    logger.add(sys.stderr, format=log_format, level="INFO", enqueue=True)
+    logger.add(sys.stderr, format=log_format, level=console_level, enqueue=True)
     
     # Add file handler with rotation
     file_format = (
@@ -40,7 +44,7 @@ def setup_logging():
         rotation="1 day",
         retention="30 days",
         format=file_format,
-        level="DEBUG",
+        level=file_level,
         enqueue=True,
         compression="zip"
     )
@@ -77,26 +81,33 @@ def main():
     try:
         # Setup logging
         setup_logging()
+        logger.info("Starting data collection service...")
         
         # Load config
         config = load_config()
         
-        # Get service config
-        service_config = config.get("service", {})
-        host = service_config.get("host", "localhost")
-        port = service_config.get("port", 8005)
+        # Get config from environment or use defaults
+        host = os.getenv("DATA_COLLECTION_HOST", config["service"].get("host", "0.0.0.0"))
+        port = int(os.getenv("DATA_COLLECTION_PORT", config["service"].get("port", 8005)))
         
-        # Start service
+        # Log startup configuration
+        logger.info(f"Host: {host}")
+        logger.info(f"Port: {port}")
+        logger.info("Mode: development (reload enabled)")
+        
+        # Run service with standardized configuration
         uvicorn.run(
             "mcs.api.data_collection.data_collection_app:create_data_collection_service",
             host=host,
             port=port,
-            reload=False,
-            workers=1
+            reload=True,
+            factory=True,
+            reload_dirs=["backend/src"],
+            log_level="debug"
         )
-        
+
     except Exception as e:
-        logger.error(f"Failed to start data collection service: {e}")
+        logger.exception(f"Failed to start data collection service: {e}")
         sys.exit(1)
 
 
