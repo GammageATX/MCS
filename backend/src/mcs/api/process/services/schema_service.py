@@ -1,15 +1,22 @@
-"""Schema service for process API."""
+"""Schema Service
+
+This module implements the Schema service for managing process schemas.
+"""
+
+import os
+from pathlib import Path
+from datetime import datetime
 
 import yaml
-import os
-from typing import Dict, Any, List
-from datetime import datetime
 from fastapi import status
 from loguru import logger
-from pathlib import Path
 
 from mcs.utils.errors import create_error
-from mcs.utils.health import ComponentHealth, HealthStatus, create_error_health  # noqa: F401
+from mcs.utils.health import (
+    HealthStatus,
+    ComponentHealth
+)
+from mcs.api.process.models.process_models import ProcessStatus
 
 
 class SchemaService:
@@ -20,12 +27,13 @@ class SchemaService:
         self._service_name = "schema"
         self._version = version
         self._is_running = False
+        self._is_initialized = False
         self._start_time = None
         
         # Initialize components to None
-        self._schemas: Dict[str, Dict] = {}
+        self._schemas = None
         self._failed_schemas = {}
-        self._schema_dir = Path("backend/src/mcs/api/process/schemas")
+        self._schema_status = ProcessStatus.IDLE
         
         logger.info(f"{self.service_name} service initialized")
 
@@ -45,6 +53,11 @@ class SchemaService:
         return self._is_running
 
     @property
+    def is_initialized(self) -> bool:
+        """Get service initialization state."""
+        return self._is_initialized
+
+    @property
     def uptime(self) -> float:
         """Get service uptime in seconds."""
         return (datetime.now() - self._start_time).total_seconds() if self._start_time else 0.0
@@ -58,12 +71,13 @@ class SchemaService:
                     message=f"{self.service_name} service already running"
                 )
             
-            # Create schema directory if it doesn't exist
-            self._schema_dir.mkdir(parents=True, exist_ok=True)
+            # Initialize schemas
+            self._schemas = {}
             
-            # Load all schema files
+            # Load schemas from config
             await self._load_schemas()
             
+            self._is_initialized = True
             logger.info(f"{self.service_name} service initialized")
             
         except Exception as e:
@@ -74,32 +88,6 @@ class SchemaService:
                 message=error_msg
             )
 
-    async def _load_schemas(self) -> None:
-        """Load schemas from files."""
-        try:
-            if not self._schema_dir.exists():
-                return
-                
-            for schema_file in self._schema_dir.glob("*.yaml"):
-                try:
-                    with open(schema_file, "r") as f:
-                        self._schemas[schema_file.stem] = yaml.safe_load(f)
-                    logger.info(f"Loaded schema: {schema_file.stem}")
-                    
-                except Exception as e:
-                    logger.error(f"Failed to load schema {schema_file}: {e}")
-                    self._failed_schemas[schema_file.stem] = str(e)
-                    continue
-                    
-        except Exception as e:
-            logger.error(f"Failed to load schemas: {e}")
-
-    async def _attempt_recovery(self) -> None:
-        """Attempt to recover failed schemas."""
-        if self._failed_schemas:
-            logger.info(f"Attempting to recover {len(self._failed_schemas)} failed schemas...")
-            await self._load_schemas()
-
     async def start(self) -> None:
         """Start service."""
         try:
@@ -108,14 +96,22 @@ class SchemaService:
                     status_code=status.HTTP_409_CONFLICT,
                     message=f"{self.service_name} service already running"
                 )
-            
+
+            if not self.is_initialized:
+                raise create_error(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    message=f"{self.service_name} service not initialized"
+                )
+
             self._is_running = True
             self._start_time = datetime.now()
+            self._schema_status = ProcessStatus.IDLE
             logger.info(f"{self.service_name} service started")
-            
+
         except Exception as e:
             self._is_running = False
             self._start_time = None
+            self._schema_status = ProcessStatus.ERROR
             error_msg = f"Failed to start {self.service_name} service: {str(e)}"
             logger.error(error_msg)
             raise create_error(
@@ -131,18 +127,15 @@ class SchemaService:
                     status_code=status.HTTP_409_CONFLICT,
                     message=f"{self.service_name} service not running"
                 )
-            
-            # Clear schema data
-            self._schemas.clear()
-            
-            # Reset service state
+
+            self._is_initialized = False
             self._is_running = False
             self._start_time = None
-            
+            self._schema_status = ProcessStatus.IDLE
             logger.info(f"{self.service_name} service stopped")
-            
+
         except Exception as e:
-            error_msg = f"Failed to stop {self.service_name} service: {str(e)}"
+            error_msg = f"Error during {self.service_name} service shutdown: {str(e)}"
             logger.error(error_msg)
             raise create_error(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
@@ -150,40 +143,97 @@ class SchemaService:
             )
 
     async def health(self) -> ComponentHealth:
-        """Get schema service health status."""
+        """Get service health status."""
         try:
+            if not self.is_running:
+                return ComponentHealth(
+                    status=HealthStatus.ERROR,
+                    error=f"{self.service_name} service not running"
+                )
+
             # Check critical components
-            schemas_loaded = bool(self._schemas)
-            dir_exists = self._schema_dir.exists()
-            dir_writable = dir_exists and os.access(self._schema_dir, os.W_OK)
-            
-            # Determine status based on critical checks
-            status = HealthStatus.OK if (
-                self.is_running and
-                schemas_loaded and
-                dir_exists and
-                dir_writable
-            ) else HealthStatus.ERROR
+            schemas_loaded = self._schemas is not None and len(self._schemas) > 0
+            schema_dir = Path("data/schemas")
+            dir_exists = schema_dir.exists()
+            dir_writable = dir_exists and os.access(schema_dir, os.W_OK)
+
+            # Map process status to health status
+            if self._schema_status == ProcessStatus.ERROR:
+                return ComponentHealth(
+                    status=HealthStatus.ERROR,
+                    error="Schema system in error state",
+                    details={
+                        "schemas": {
+                            "total": len(self._schemas or {}),
+                            "loaded": list(self._schemas.keys()) if self._schemas else [],
+                            "failed": list(self._failed_schemas.keys()),
+                            "recovery_attempts": len(self._failed_schemas)
+                        },
+                        "storage": {
+                            "path": str(schema_dir),
+                            "exists": dir_exists,
+                            "writable": dir_writable
+                        }
+                    }
+                )
+            elif self._schema_status == ProcessStatus.PAUSED:
+                return ComponentHealth(
+                    status=HealthStatus.DEGRADED,
+                    error="Schema system paused",
+                    details={
+                        "schemas": {
+                            "total": len(self._schemas or {}),
+                            "loaded": list(self._schemas.keys()) if self._schemas else [],
+                            "failed": list(self._failed_schemas.keys()),
+                            "recovery_attempts": len(self._failed_schemas)
+                        },
+                        "storage": {
+                            "path": str(schema_dir),
+                            "exists": dir_exists,
+                            "writable": dir_writable
+                        }
+                    }
+                )
+
+            # Check if any critical components are missing
+            if not (schemas_loaded and dir_exists and dir_writable):
+                return ComponentHealth(
+                    status=HealthStatus.DEGRADED,
+                    error="Schema system partially operational",
+                    details={
+                        "schemas": {
+                            "total": len(self._schemas or {}),
+                            "loaded": list(self._schemas.keys()) if self._schemas else [],
+                            "failed": list(self._failed_schemas.keys()),
+                            "recovery_attempts": len(self._failed_schemas)
+                        },
+                        "storage": {
+                            "path": str(schema_dir),
+                            "exists": dir_exists,
+                            "writable": dir_writable
+                        }
+                    }
+                )
 
             return ComponentHealth(
-                status=status,
-                error=None if status == HealthStatus.OK else "Schema system not operational",
+                status=HealthStatus.OK,
+                error=None,
                 details={
-                    "is_running": self.is_running,
-                    "uptime": self.uptime,
                     "schemas": {
-                        "total": len(self._schemas),
-                        "loaded": list(self._schemas.keys()),
+                        "total": len(self._schemas or {}),
+                        "loaded": list(self._schemas.keys()) if self._schemas else [],
                         "failed": list(self._failed_schemas.keys()),
                         "recovery_attempts": len(self._failed_schemas)
                     },
                     "storage": {
-                        "path": str(self._schema_dir),
+                        "path": str(schema_dir),
                         "exists": dir_exists,
                         "writable": dir_writable
-                    }
+                    },
+                    "uptime": self.uptime
                 }
             )
+
         except Exception as e:
             error_msg = f"Health check failed: {str(e)}"
             logger.error(error_msg)
@@ -192,98 +242,22 @@ class SchemaService:
                 error=error_msg
             )
 
-    async def list_schemas(self) -> List[str]:
-        """List available schemas."""
-        if not self.is_running:
-            raise create_error(
-                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                message="Service not running"
-            )
-        
-        return list(self._schemas.keys())
-
-    async def get_schema(self, name: str) -> Dict[str, Any]:
-        """Get schema by name."""
+    async def _load_schemas(self) -> None:
+        """Load schemas from configuration."""
         try:
-            if not self.is_running:
-                raise create_error(
-                    status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                    message="Service not running"
-                )
-                
-            if name not in self._schemas:
-                raise create_error(
-                    status_code=status.HTTP_404_NOT_FOUND,
-                    message=f"Schema '{name}' not found"
-                )
-                
-            return self._schemas[name]
-            
-        except Exception as e:
-            error_msg = f"Failed to get schema {name}"
-            logger.error(f"{error_msg}: {str(e)}")
-            raise create_error(
-                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                message=error_msg
-            )
-
-    async def validate(self, name: str, data: Dict[str, Any]) -> tuple[bool, List[str]]:
-        """Validate data against schema."""
-        try:
-            if not self.is_running:
-                raise create_error(
-                    status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                    message="Service not running"
-                )
-                
-            if name not in self._schemas:
-                raise create_error(
-                    status_code=status.HTTP_404_NOT_FOUND,
-                    message=f"Schema '{name}' not found"
-                )
-            
-            schema = self._schemas[name]
-            errors = []
-            
-            # Basic structure validation
-            if schema["root_key"] not in data:
-                errors.append(f"Missing root key '{schema['root_key']}'")
-                return False, errors
-                
-            # Required fields
-            content = data[schema["root_key"]]
-            for field in schema["required_fields"]:
-                if field not in content:
-                    errors.append(f"Missing required field '{field}'")
-                    
-            # Field types
-            for field, field_type in schema["field_types"].items():
-                if field in content:
-                    if field_type == "number":
-                        if not isinstance(content[field], (int, float)):
-                            errors.append(f"Field '{field}' must be a number")
-                    elif field_type == "integer":
-                        if not isinstance(content[field], int):
-                            errors.append(f"Field '{field}' must be an integer")
-                    elif field_type == "string":
-                        if not isinstance(content[field], str):
-                            errors.append(f"Field '{field}' must be a string")
-                            
-            # Field ranges
-            for field, range_info in schema.get("field_ranges", {}).items():
-                if field in content:
-                    value = content[field]
-                    if "min" in range_info and value < range_info["min"]:
-                        errors.append(f"Field '{field}' must be >= {range_info['min']}")
-                    if "max" in range_info and value > range_info["max"]:
-                        errors.append(f"Field '{field}' must be <= {range_info['max']}")
+            config_path = os.path.join("backend", "config", "process.yaml")
+            if os.path.exists(config_path):
+                with open(config_path, "r") as f:
+                    config = yaml.safe_load(f)
+                    if "schema" in config:
+                        self._version = config["schema"].get("version", self._version)
                         
-            return len(errors) == 0, errors
+            logger.info("Loaded schemas from configuration")
             
         except Exception as e:
-            error_msg = f"Validation failed: {str(e)}"
+            error_msg = f"Failed to load schemas: {str(e)}"
             logger.error(error_msg)
             raise create_error(
-                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 message=error_msg
             )

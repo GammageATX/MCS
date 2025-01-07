@@ -1,19 +1,22 @@
-"""Pattern service implementation."""
+"""Pattern Service
+
+This module implements the Pattern service for managing process patterns.
+"""
+
+import os
+from pathlib import Path
+from datetime import datetime
 
 import yaml
-from typing import List
-from datetime import datetime
 from fastapi import status
 from loguru import logger
-from pathlib import Path
-import os
 
 from mcs.utils.errors import create_error
-from mcs.utils.health import get_uptime, HealthStatus, ComponentHealth
-from mcs.api.process.models.process_models import (
-    Pattern,
-    PatternType
+from mcs.utils.health import (
+    HealthStatus,
+    ComponentHealth
 )
+from mcs.api.process.models.process_models import ProcessStatus
 
 
 class PatternService:
@@ -24,11 +27,13 @@ class PatternService:
         self._service_name = "pattern"
         self._version = version
         self._is_running = False
+        self._is_initialized = False
         self._start_time = None
         
         # Initialize components to None
         self._patterns = None
         self._failed_patterns = {}
+        self._pattern_status = ProcessStatus.IDLE
         
         logger.info(f"{self.service_name} service initialized")
 
@@ -48,9 +53,14 @@ class PatternService:
         return self._is_running
 
     @property
+    def is_initialized(self) -> bool:
+        """Get service initialization state."""
+        return self._is_initialized
+
+    @property
     def uptime(self) -> float:
         """Get service uptime in seconds."""
-        return get_uptime(self._start_time)
+        return (datetime.now() - self._start_time).total_seconds() if self._start_time else 0.0
 
     async def initialize(self) -> None:
         """Initialize service."""
@@ -64,9 +74,10 @@ class PatternService:
             # Initialize patterns
             self._patterns = {}
             
-            # Load patterns from data directory
+            # Load patterns from config
             await self._load_patterns()
             
+            self._is_initialized = True
             logger.info(f"{self.service_name} service initialized")
             
         except Exception as e:
@@ -77,44 +88,6 @@ class PatternService:
                 message=error_msg
             )
 
-    async def _load_patterns(self) -> None:
-        """Load patterns from files."""
-        try:
-            pattern_dir = Path("data/patterns")
-            if not pattern_dir.exists():
-                return
-            
-            for pattern_file in pattern_dir.glob("*.yaml"):
-                try:
-                    with open(pattern_file, "r") as f:
-                        data = yaml.safe_load(f)
-                        
-                    if "pattern" not in data:
-                        logger.error(f"Missing 'pattern' root key in {pattern_file}")
-                        continue
-                        
-                    pattern_data = data["pattern"]
-                    # Convert type string to enum before validation
-                    if "type" in pattern_data:
-                        pattern_data["type"] = PatternType(pattern_data["type"])
-                    
-                    pattern = Pattern(**pattern_data)
-                    self._patterns[pattern.id] = pattern
-                    logger.info(f"Loaded pattern: {pattern.id}")
-                        
-                except Exception as e:
-                    logger.error(f"Failed to load pattern {pattern_file}: {e}")
-                    continue
-                
-        except Exception as e:
-            logger.error(f"Failed to load patterns: {e}")
-
-    async def _attempt_recovery(self) -> None:
-        """Attempt to recover by reloading failed patterns."""
-        if self._failed_patterns:
-            logger.info(f"Attempting to recover {len(self._failed_patterns)} failed patterns...")
-            await self._load_patterns()
-
     async def start(self) -> None:
         """Start service."""
         try:
@@ -123,20 +96,22 @@ class PatternService:
                     status_code=status.HTTP_409_CONFLICT,
                     message=f"{self.service_name} service already running"
                 )
-            
-            if self._patterns is None:
+
+            if not self.is_initialized:
                 raise create_error(
                     status_code=status.HTTP_400_BAD_REQUEST,
                     message=f"{self.service_name} service not initialized"
                 )
-            
+
             self._is_running = True
             self._start_time = datetime.now()
+            self._pattern_status = ProcessStatus.IDLE
             logger.info(f"{self.service_name} service started")
-            
+
         except Exception as e:
             self._is_running = False
             self._start_time = None
+            self._pattern_status = ProcessStatus.ERROR
             error_msg = f"Failed to start {self.service_name} service: {str(e)}"
             logger.error(error_msg)
             raise create_error(
@@ -152,18 +127,15 @@ class PatternService:
                     status_code=status.HTTP_409_CONFLICT,
                     message=f"{self.service_name} service not running"
                 )
-            
-            # 1. Clear pattern data
-            self._patterns.clear()
-            
-            # 2. Reset service state
+
+            self._is_initialized = False
             self._is_running = False
             self._start_time = None
-            
+            self._pattern_status = ProcessStatus.IDLE
             logger.info(f"{self.service_name} service stopped")
-            
+
         except Exception as e:
-            error_msg = f"Failed to stop {self.service_name} service: {str(e)}"
+            error_msg = f"Error during {self.service_name} service shutdown: {str(e)}"
             logger.error(error_msg)
             raise create_error(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
@@ -171,28 +143,82 @@ class PatternService:
             )
 
     async def health(self) -> ComponentHealth:
-        """Get pattern service health status."""
+        """Get service health status."""
         try:
+            if not self.is_running:
+                return ComponentHealth(
+                    status=HealthStatus.ERROR,
+                    error=f"{self.service_name} service not running"
+                )
+
             # Check critical components
             patterns_loaded = self._patterns is not None and len(self._patterns) > 0
             pattern_dir = Path("data/patterns")
             dir_exists = pattern_dir.exists()
             dir_writable = dir_exists and os.access(pattern_dir, os.W_OK)
-            
-            # Determine status based on critical checks
-            status = HealthStatus.OK if (
-                self.is_running and
-                patterns_loaded and
-                dir_exists and
-                dir_writable
-            ) else HealthStatus.ERROR
+
+            # Map process status to health status
+            if self._pattern_status == ProcessStatus.ERROR:
+                return ComponentHealth(
+                    status=HealthStatus.ERROR,
+                    error="Pattern system in error state",
+                    details={
+                        "patterns": {
+                            "total": len(self._patterns or {}),
+                            "loaded": list(self._patterns.keys()) if self._patterns else [],
+                            "failed": list(self._failed_patterns.keys()),
+                            "recovery_attempts": len(self._failed_patterns)
+                        },
+                        "storage": {
+                            "path": str(pattern_dir),
+                            "exists": dir_exists,
+                            "writable": dir_writable
+                        }
+                    }
+                )
+            elif self._pattern_status == ProcessStatus.PAUSED:
+                return ComponentHealth(
+                    status=HealthStatus.DEGRADED,
+                    error="Pattern system paused",
+                    details={
+                        "patterns": {
+                            "total": len(self._patterns or {}),
+                            "loaded": list(self._patterns.keys()) if self._patterns else [],
+                            "failed": list(self._failed_patterns.keys()),
+                            "recovery_attempts": len(self._failed_patterns)
+                        },
+                        "storage": {
+                            "path": str(pattern_dir),
+                            "exists": dir_exists,
+                            "writable": dir_writable
+                        }
+                    }
+                )
+
+            # Check if any critical components are missing
+            if not (patterns_loaded and dir_exists and dir_writable):
+                return ComponentHealth(
+                    status=HealthStatus.DEGRADED,
+                    error="Pattern system partially operational",
+                    details={
+                        "patterns": {
+                            "total": len(self._patterns or {}),
+                            "loaded": list(self._patterns.keys()) if self._patterns else [],
+                            "failed": list(self._failed_patterns.keys()),
+                            "recovery_attempts": len(self._failed_patterns)
+                        },
+                        "storage": {
+                            "path": str(pattern_dir),
+                            "exists": dir_exists,
+                            "writable": dir_writable
+                        }
+                    }
+                )
 
             return ComponentHealth(
-                status=status,
-                error=None if status == HealthStatus.OK else "Pattern system not operational",
+                status=HealthStatus.OK,
+                error=None,
                 details={
-                    "is_running": self.is_running,
-                    "uptime": self.uptime,
                     "patterns": {
                         "total": len(self._patterns or {}),
                         "loaded": list(self._patterns.keys()) if self._patterns else [],
@@ -203,9 +229,11 @@ class PatternService:
                         "path": str(pattern_dir),
                         "exists": dir_exists,
                         "writable": dir_writable
-                    }
+                    },
+                    "uptime": self.uptime
                 }
             )
+
         except Exception as e:
             error_msg = f"Health check failed: {str(e)}"
             logger.error(error_msg)
@@ -214,103 +242,22 @@ class PatternService:
                 error=error_msg
             )
 
-    async def list_patterns(self) -> List[Pattern]:
-        """List available patterns."""
+    async def _load_patterns(self) -> None:
+        """Load patterns from configuration."""
         try:
-            if not self.is_running:
-                raise create_error(
-                    status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                    message="Service not running"
-                )
-            
-            return list(self._patterns.values())
+            config_path = os.path.join("backend", "config", "process.yaml")
+            if os.path.exists(config_path):
+                with open(config_path, "r") as f:
+                    config = yaml.safe_load(f)
+                    if "pattern" in config:
+                        self._version = config["pattern"].get("version", self._version)
+                        
+            logger.info("Loaded patterns from configuration")
             
         except Exception as e:
-            logger.error(f"Failed to list patterns: {e}")
+            error_msg = f"Failed to load patterns: {str(e)}"
+            logger.error(error_msg)
             raise create_error(
-                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                message=f"Failed to list patterns: {str(e)}"
-            )
-
-    async def get_pattern(self, pattern_id: str) -> Pattern:
-        """Get pattern by ID."""
-        try:
-            if not self.is_running:
-                raise create_error(
-                    status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                    message="Service not running"
-                )
-                
-            # Case-insensitive lookup
-            pattern_id = pattern_id.lower().replace("-", "_")
-            for pattern in self._patterns.values():
-                if pattern.id.lower().replace("-", "_") == pattern_id:
-                    return pattern
-                    
-            raise create_error(
-                status_code=status.HTTP_404_NOT_FOUND,
-                message=f"Pattern {pattern_id} not found"
-            )
-            
-        except Exception as e:
-            logger.error(f"Failed to get pattern {pattern_id}: {e}")
-            raise create_error(
-                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                message=str(e)
-            )
-
-    async def create_pattern(self, pattern: Pattern) -> Pattern:
-        """Create new pattern."""
-        try:
-            if not self.is_running:
-                raise create_error(
-                    status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                    message="Service not running"
-                )
-                
-            if pattern.id in self._patterns:
-                raise create_error(
-                    status_code=status.HTTP_409_CONFLICT,
-                    message=f"Pattern {pattern.id} already exists"
-                )
-                
-            self._patterns[pattern.id] = pattern
-            logger.info(f"Created pattern {pattern.id}")
-            
-            return pattern
-            
-        except Exception as e:
-            error_msg = f"Failed to create pattern {pattern.id}"
-            logger.error(f"{error_msg}: {str(e)}")
-            raise create_error(
-                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                message=error_msg
-            )
-
-    async def update_pattern(self, pattern: Pattern) -> Pattern:
-        """Update existing pattern."""
-        try:
-            if not self.is_running:
-                raise create_error(
-                    status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                    message="Service not running"
-                )
-                
-            if pattern.id not in self._patterns:
-                raise create_error(
-                    status_code=status.HTTP_404_NOT_FOUND,
-                    message=f"Pattern {pattern.id} not found"
-                )
-                
-            self._patterns[pattern.id] = pattern
-            logger.info(f"Updated pattern {pattern.id}")
-            
-            return pattern
-            
-        except Exception as e:
-            error_msg = f"Failed to update pattern {pattern.id}"
-            logger.error(f"{error_msg}: {str(e)}")
-            raise create_error(
-                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 message=error_msg
             )
