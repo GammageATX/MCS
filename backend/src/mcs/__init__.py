@@ -2,7 +2,7 @@
 
 __version__ = "1.0.0"
 
-from mcs.ui.router import create_app as create_ui_app
+from mcs.ui.router import create_ui_service as create_ui_app
 from mcs.api.config.config_app import create_config_service
 from mcs.api.state.state_app import create_state_service
 from mcs.api.communication.communication_app import create_communication_service

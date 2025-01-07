@@ -18,6 +18,11 @@ from mcs.utils.health import (
     ComponentHealth,
     create_error_health
 )
+from mcs.api.process.services.action_service import ActionService
+from mcs.api.process.services.parameter_service import ParameterService
+from mcs.api.process.services.pattern_service import PatternService
+from mcs.api.process.services.sequence_service import SequenceService
+from mcs.api.process.services.schema_service import SchemaService
 
 
 logger = logging.getLogger(__name__)
@@ -236,11 +241,28 @@ class ProcessService:
             HTTPException: If component initialization fails
         """
         try:
-            components_config = config.get("components", {})
+            # Initialize component services
+            self.action_service = ActionService(version=self.version)
+            self.parameter_service = ParameterService(version=self.version)
+            self.pattern_service = PatternService(version=self.version)
+            self.sequence_service = SequenceService(version=self.version)
+            self.schema_service = SchemaService(version=self.version)
             
-            for name, cfg in components_config.items():
-                logger.info(f"Initializing component: {name}")
-                
+            # Store components for health monitoring
+            self._components = {
+                "action": self.action_service,
+                "parameter": self.parameter_service,
+                "pattern": self.pattern_service,
+                "sequence": self.sequence_service,
+                "schema": self.schema_service
+            }
+            
+            # Initialize each component
+            for name, component in self._components.items():
+                logger.info(f"Initializing {name} component...")
+                await component.initialize()
+                logger.info(f"{name} component initialized")
+            
         except Exception as e:
             logger.error(f"Failed to initialize components: {e}")
             raise create_error(
@@ -261,52 +283,43 @@ class ProcessService:
         
         # Add component health monitoring
         for name, component in self._components.items():
-            if hasattr(component, "health"):
-                self._health["components"][name] = component.health()
+            self._health["components"][name] = ComponentHealth(
+                status=HealthStatus.OK if component.is_running else HealthStatus.STARTING,
+                error=None
+            )
 
     async def health(self) -> ServiceHealth:
-        """Get service health status."""
+        """Get service health status.
+        
+        Returns:
+            ServiceHealth: Service health status
+        """
         try:
-            # Check critical components
             components = {}
-            
-            # Check each component service
-            services_to_check = {
-                "action": self.action_service,
-                "parameter": self.parameter_service,
-                "pattern": self.pattern_service,
-                "sequence": self.sequence_service,
-                "schema": self.schema_service
-            }
-            
-            for name, service in services_to_check.items():
-                if service is None:
-                    components[name] = ComponentHealth(
-                        status=HealthStatus.ERROR,
-                        error="Service not initialized"
-                    )
-                    continue
-                    
+            overall_status = HealthStatus.OK
+            error_msg = None
+
+            # Check component health
+            for name, component in self._components.items():
                 try:
-                    if hasattr(service, 'health'):
-                        component_health = await service.health()
-                        components[name] = component_health
+                    if hasattr(component, "health"):
+                        health = await component.health()
+                        components[name] = health
+                        if health.status != HealthStatus.OK:
+                            overall_status = HealthStatus.ERROR
                     else:
                         components[name] = ComponentHealth(
-                            status=HealthStatus.OK if service.is_running else HealthStatus.ERROR,
-                            error=None if service.is_running else "Service not running"
+                            status=HealthStatus.OK if component.is_running else HealthStatus.ERROR,
+                            error="No health check implemented"
                         )
                 except Exception as e:
-                    logger.error(f"Failed to get {name} service health: {e}")
+                    error = f"{name} health check failed: {str(e)}"
+                    logger.error(error)
                     components[name] = ComponentHealth(
                         status=HealthStatus.ERROR,
-                        error=str(e)
+                        error=error
                     )
-            
-            # Overall status is ERROR if any component is in error state
-            overall_status = HealthStatus.ERROR if any(
-                c.status == HealthStatus.ERROR for c in components.values()
-            ) else HealthStatus.OK
+                    overall_status = HealthStatus.ERROR
 
             return ServiceHealth(
                 status=overall_status,
@@ -314,15 +327,15 @@ class ProcessService:
                 version=self.version,
                 is_running=self.is_running,
                 uptime=self.uptime,
-                error="Critical component failure" if overall_status == HealthStatus.ERROR else None,
+                error=error_msg,
                 components=components
             )
-            
+
         except Exception as e:
             error_msg = f"Health check failed: {str(e)}"
             logger.error(error_msg)
             return create_error_health(
-                service_name=self.service_name,
+                service=self.service_name,
                 version=self.version,
-                error_msg=error_msg
+                error=error_msg
             )

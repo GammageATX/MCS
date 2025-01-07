@@ -1,9 +1,11 @@
-"""Service UI router."""
+"""UI application router."""
 
 from pathlib import Path
 from datetime import datetime
 from typing import Dict, Optional, Any
-from fastapi import FastAPI, Request, status, Response
+from contextlib import asynccontextmanager
+
+from fastapi import FastAPI, Request, status, Response, Depends
 from fastapi.templating import Jinja2Templates
 from fastapi.responses import HTMLResponse, FileResponse
 from fastapi.middleware.gzip import GZipMiddleware
@@ -16,12 +18,192 @@ import time
 from functools import wraps
 
 from mcs.utils.errors import create_error
-from mcs.utils.health import ServiceHealth, ComponentHealth, HealthStatus, create_simple_health, create_error_health
+from mcs.utils.health import ServiceHealth, ComponentHealth, HealthStatus, create_error_health
 
 
 # Simple cache implementation
 _cache: Dict[str, Any] = {}
 _cache_times: Dict[str, float] = {}
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Handle startup and shutdown events."""
+    try:
+        logger.info("Starting UI application...")
+        ui_app = app.state.ui_app
+        await ui_app.initialize()
+        await ui_app.start()
+        yield
+        if ui_app.is_running:
+            await ui_app.stop()
+    except Exception as e:
+        logger.error(f"Application startup failed: {e}")
+        yield
+
+
+class UIApp:
+    """UI application for system monitoring and control."""
+
+    def __init__(self, version: str = "1.0.0"):
+        """Initialize UI application."""
+        self._app_name = "ui"
+        self._version = version
+        self._is_running = False
+        self._is_initialized = False
+        self._start_time = None
+        self._templates = None
+        self._static_dir = None
+        self._api_urls = None
+
+    @property
+    def version(self) -> str:
+        """Get application version."""
+        return self._version
+
+    @property
+    def app_name(self) -> str:
+        """Get application name."""
+        return self._app_name
+
+    @property
+    def is_running(self) -> bool:
+        """Get application running state."""
+        return self._is_running
+
+    @property
+    def is_initialized(self) -> bool:
+        """Get application initialization state."""
+        return self._is_initialized
+
+    @property
+    def uptime(self) -> float:
+        """Get application uptime in seconds."""
+        return (datetime.now() - self._start_time).total_seconds() if self._start_time else 0.0
+
+    async def initialize(self) -> None:
+        """Initialize application."""
+        try:
+            if self.is_running:
+                raise create_error(
+                    status_code=status.HTTP_409_CONFLICT,
+                    message=f"{self.app_name} application already running"
+                )
+
+            # Setup templates
+            templates_dir = Path(__file__).parent / "templates"
+            if not templates_dir.exists():
+                raise FileNotFoundError(f"Templates directory not found: {templates_dir}")
+            self._templates = Jinja2Templates(directory=templates_dir)
+            self._templates.env.globals.update({
+                "now": datetime.now,
+                "version": self.version
+            })
+
+            # Setup static files
+            self._static_dir = Path(__file__).parent / "static"
+            if not self._static_dir.exists():
+                logger.warning(f"Static directory not found: {self._static_dir}")
+
+            # Initialize API URLs
+            self._api_urls = get_api_urls()
+
+            self._is_initialized = True
+            logger.info(f"{self.app_name} application initialized")
+
+        except Exception as e:
+            error_msg = f"Failed to initialize {self.app_name} application: {str(e)}"
+            logger.error(error_msg)
+            raise create_error(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                message=error_msg
+            )
+
+    async def start(self) -> None:
+        """Start application."""
+        try:
+            if self.is_running:
+                raise create_error(
+                    status_code=status.HTTP_409_CONFLICT,
+                    message=f"{self.app_name} application already running"
+                )
+
+            if not self.is_initialized:
+                raise create_error(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    message=f"{self.app_name} application not initialized"
+                )
+
+            self._is_running = True
+            self._start_time = datetime.now()
+            logger.info(f"{self.app_name} application started")
+
+        except Exception as e:
+            self._is_running = False
+            self._start_time = None
+            error_msg = f"Failed to start {self.app_name} application: {str(e)}"
+            logger.error(error_msg)
+            raise create_error(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                message=error_msg
+            )
+
+    async def stop(self) -> None:
+        """Stop application."""
+        try:
+            if not self.is_running:
+                raise create_error(
+                    status_code=status.HTTP_409_CONFLICT,
+                    message=f"{self.app_name} application not running"
+                )
+
+            self._is_initialized = False
+            self._is_running = False
+            self._start_time = None
+            logger.info(f"{self.app_name} application stopped")
+
+        except Exception as e:
+            error_msg = f"Error during {self.app_name} application shutdown: {str(e)}"
+            logger.error(error_msg)
+            raise create_error(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                message=error_msg
+            )
+
+    async def health(self) -> ServiceHealth:
+        """Get application health status."""
+        try:
+            # Check critical dependencies
+            components = {}
+            dependencies = await check_dependencies()
+
+            for name, is_healthy in dependencies.items():
+                components[name] = ComponentHealth(
+                    status=HealthStatus.OK if is_healthy else HealthStatus.ERROR,
+                    error=None if is_healthy else "Service unhealthy"
+                )
+
+            # Overall status is ERROR if any critical dependency is down
+            overall_status = HealthStatus.ERROR if not all(dependencies.values()) else HealthStatus.OK
+
+            return ServiceHealth(
+                status=overall_status,
+                service=self.app_name,  # Keep as 'service' for compatibility with health check system
+                version=self.version,
+                is_running=self.is_running,
+                uptime=self.uptime,
+                error="Critical dependency failure" if overall_status == HealthStatus.ERROR else None,
+                components=components
+            )
+
+        except Exception as e:
+            error_msg = f"Health check failed: {str(e)}"
+            logger.error(error_msg)
+            return create_error_health(
+                service_name=self.app_name,
+                version=self.version,
+                error_msg=error_msg
+            )
 
 
 def cache(expire_seconds: int = 5):
@@ -166,15 +348,20 @@ async def check_dependencies() -> Dict[str, bool]:
     return dependencies
 
 
-def create_app() -> FastAPI:
-    """Create FastAPI application."""
+def create_ui_service() -> FastAPI:
+    """Create UI application.
+    
+    Note: Function name kept as create_ui_service for backward compatibility,
+    but this creates a UI application, not a service.
+    """
     try:
         app = FastAPI(
-            title="MicroColdSpray Service Monitor",
-            description="Service monitoring interface for MicroColdSpray system",
+            title="MicroColdSpray Monitor",
+            description="System monitoring interface for MicroColdSpray",
             version="1.0.0",
             docs_url="/docs",
-            redoc_url="/redoc"
+            redoc_url="/redoc",
+            lifespan=lifespan
         )
 
         # Add CORS middleware
@@ -189,32 +376,21 @@ def create_app() -> FastAPI:
         # Add GZip middleware
         app.add_middleware(GZipMiddleware, minimum_size=1000)
 
-        # Setup templates
-        templates_dir = Path(__file__).parent / "templates"
-        if not templates_dir.exists():
-            raise FileNotFoundError(f"Templates directory not found: {templates_dir}")
-        templates = Jinja2Templates(directory=templates_dir)
-        templates.env.globals.update({
-            "now": datetime.now,
-            "version": app.version
-        })
+        # Create UI app instance
+        ui_app = UIApp(version=app.version)
+        app.state.ui_app = ui_app
 
-        # Setup static files
-        static_dir = Path(__file__).parent / "static"
-        if static_dir.exists():
-            app.mount("/static", StaticFiles(directory=static_dir), name="static")
-        else:
-            logger.warning(f"Static directory not found: {static_dir}")
-
-        # Store start time for uptime calculation
-        start_time = datetime.now()
+        # Mount static files after app is initialized
+        if ui_app._static_dir and ui_app._static_dir.exists():
+            app.mount("/static", StaticFiles(directory=ui_app._static_dir), name="static")
 
         @app.get('/favicon.ico', include_in_schema=False)
         async def favicon():
             """Serve favicon."""
-            favicon_path = static_dir / 'favicon.ico'
-            if favicon_path.exists():
-                return FileResponse(favicon_path)
+            if ui_app._static_dir:
+                favicon_path = ui_app._static_dir / 'favicon.ico'
+                if favicon_path.exists():
+                    return FileResponse(favicon_path)
             return Response(status_code=404)
 
         @app.get(
@@ -226,25 +402,25 @@ def create_app() -> FastAPI:
             }
         )
         async def index(request: Request) -> HTMLResponse:
-            """Render service monitor page."""
+            """Render monitor page."""
             try:
                 # Check dependencies
                 dependencies = await check_dependencies()
                 
-                return templates.TemplateResponse(
+                return ui_app._templates.TemplateResponse(
                     "monitoring/services.html",
                     {
                         "request": request,
-                        "api_urls": get_api_urls().dict(),
+                        "api_urls": ui_app._api_urls.dict(),
                         "page_title": "Service Monitor",
                         "dependencies": dependencies
                     }
                 )
             except Exception as e:
-                logger.error(f"Failed to render service monitor page: {e}")
+                logger.error(f"Failed to render monitor page: {e}")
                 raise create_error(
                     status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                    message=f"Failed to render service monitor page: {str(e)}"
+                    message=f"Failed to render monitor page: {str(e)}"
                 )
 
         @app.get(
@@ -254,20 +430,11 @@ def create_app() -> FastAPI:
                 status.HTTP_500_INTERNAL_SERVER_ERROR: {"description": "Internal server error"}
             }
         )
-        async def health() -> ServiceHealth:
-            """Get UI service health status."""
-            try:
-                uptime = (datetime.now() - start_time).total_seconds()
-                return create_simple_health(
-                    service_name="ui",
-                    version=app.version,
-                    is_running=True,
-                    uptime=uptime
-                )
-            except Exception as e:
-                error_msg = f"Health check failed: {str(e)}"
-                logger.error(error_msg)
-                return create_error_health("ui", app.version, error_msg)
+        async def health(
+            ui_app: UIApp = Depends(lambda r: r.app.state.ui_app)
+        ) -> ServiceHealth:
+            """Get UI application health status."""
+            return await ui_app.health()
 
         @app.get(
             "/monitoring/services/status",
@@ -280,7 +447,7 @@ def create_app() -> FastAPI:
         async def get_services_status() -> Dict[str, ServiceStatus]:
             """Get status of all services."""
             services: Dict[str, ServiceStatus] = {}
-            api_urls = get_api_urls()
+            api_urls = ui_app._api_urls
             
             try:
                 for service_name, url in {
