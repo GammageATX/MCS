@@ -251,8 +251,8 @@ class EquipmentService:
                 vacuum_state = VacuumState(
                     chamber_pressure=chamber_pressure,
                     gate_valve_state=await self._tag_cache.get_tag("vacuum.gate_valve.open"),
-                    mechanical_pump_state=await self._tag_cache.get_tag("vacuum.mechanical_pump.start"),
-                    booster_pump_state=await self._tag_cache.get_tag("vacuum.booster_pump.start"),
+                    mechanical_pump_state=await self._tag_cache.get_tag("vacuum.mechanical_pump.start"),  # wrong, need state this is a momentary tag to start the pump
+                    booster_pump_state=await self._tag_cache.get_tag("vacuum.booster_pump.start"),  # wrong, need state this is a momentary tag to start the pump
                     vent_valve_state=await self._tag_cache.get_tag("vacuum.vent_valve")
                 )
             except Exception as e:
@@ -274,8 +274,8 @@ class EquipmentService:
             # Get feeder state
             try:
                 # Try feeder1 first, then feeder2
-                feeder1_running = await self._tag_cache.get_tag("feeders.feeder1.running")
-                feeder2_running = await self._tag_cache.get_tag("feeders.feeder2.running")
+                feeder1_running = await self._tag_cache.get_tag("feeders.feeder1.running")  # wrong, set as bool but its an integer 4 for off 1 for on
+                feeder2_running = await self._tag_cache.get_tag("feeders.feeder2.running")  # wrong, set as bool but its an integer 4 for off 1 for on
                 feeder1_freq = await self._tag_cache.get_tag("feeders.feeder1.frequency")
                 feeder2_freq = await self._tag_cache.get_tag("feeders.feeder2.frequency")
                 
@@ -337,9 +337,9 @@ class EquipmentService:
             # Get process state from internal state service
             try:
                 process_state = ProcessState(
-                    gas_flow_stable=await self._internal_state.get_state("flows_stable"),
+                    gas_flow_stable=await self._internal_state.get_state("flows_stable"),  # I don't think we are actually checking the time average of the flow rates
                     powder_feed_active=await self._internal_state.get_state("powder_feed_on"),
-                    process_ready=await self._internal_state.get_state("pressures_stable")
+                    process_ready=await self._internal_state.get_state("pressures_stable")  # I don't think we are actually checking the time average of the pressures
                 )
             except Exception as e:
                 logger.error(f"Failed to get process state: {str(e)}")
