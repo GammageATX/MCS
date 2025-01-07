@@ -10,10 +10,10 @@ from mcs import (
     create_ui_app,
     create_config_service,
     create_state_service,
-    create_communication_service,
     create_process_service,
     create_data_collection_service
 )
+from mcs.api.communication.communication_app import create_communication_service
 
 
 def setup_logging():

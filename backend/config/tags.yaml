@@ -196,15 +196,6 @@ tag_groups:
         mapped: true
         plc_tag: Shutter
         type: bool
-    pressure:
-      access: read
-      description: Nozzle pressure
-      mapped: true
-      plc_tag: NozzlePressure
-      range: [ 0.0, 1520.0 ]
-      scaling: 12bit_linear
-      type: float
-      unit: torr
 
   motion:
     position:
@@ -248,6 +239,12 @@ tag_groups:
         mapped: true
         plc_tag: AMC.Ax3AxisStatus
         type: integer
+      module:
+        access: read
+        description: Motion module status
+        mapped: true
+        plc_tag: AMC.ModuleStatus
+        type: bool
     coordinated_move:
       xy:
         in_progress:
@@ -418,32 +415,6 @@ tag_groups:
       plc_tag: SetHome
       type: bool
 
-  interlocks:
-    motion_ready:
-      access: read
-      description: Motion controller ready status
-      mapped: true
-      plc_tag: AMC.ModuleStatus
-      type: bool
-    safe_for_motion:
-      access: read
-      description: All motion safety conditions met
-      internal: true
-      mapped: false
-      type: bool
-    safe_for_spray:
-      access: read
-      description: Safe to start spraying
-      internal: true
-      mapped: false
-      type: bool
-    shutter_engaged:
-      access: read
-      description: Shutter engaged status
-      mapped: true
-      plc_tag: Shutter
-      type: bool
-
   safety:
     approach_z:
       access: read/write
@@ -463,38 +434,6 @@ tag_groups:
       internal: true
       type: float
       unit: mm
-
-  status:
-    hardware:
-      access: read
-      description: Hardware component status
-      internal: true
-      mapped: false
-      type: dict
-      components:
-        motion_enabled: bool
-        plc_connected: bool
-        position_valid: bool
-    process:
-      access: read
-      description: Process parameters status
-      internal: true
-      mapped: false
-      type: dict
-      parameters:
-        gas_flow_stable: bool
-        powder_feed_active: bool
-        process_ready: bool
-    safety:
-      access: read
-      description: Safety conditions status
-      internal: true
-      mapped: false
-      type: dict
-      conditions:
-        emergency_stop: bool
-        interlocks_ok: bool
-        limits_ok: bool
 
   pressure:
     chamber:

@@ -105,6 +105,6 @@ internal_states:
     motion_enabled:
       type: "comparison"
       description: "Motion system is enabled and ready"
-      tag: "interlocks.motion_ready"
+      tag: "motion.status.module"
       operator: "equal"
       value: true

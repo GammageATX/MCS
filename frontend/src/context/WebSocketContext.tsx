@@ -1,45 +1,66 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 
 interface AxisStatus {
-  homed: boolean;
-  moving: boolean;
+  position: number;
   in_position: boolean;
+  moving: boolean;
   error: boolean;
+  homed: boolean;
 }
 
-interface MotionStatus {
+interface SystemStatus {
   x_axis: AxisStatus;
   y_axis: AxisStatus;
   z_axis: AxisStatus;
   module_ready: boolean;
 }
 
-interface MotionPosition {
+interface Position {
   x: number;
   y: number;
   z: number;
 }
 
 interface MotionState {
-  status: MotionStatus;
-  position: MotionPosition;
+  position: Position;
+  status: SystemStatus;
 }
 
 interface GasState {
-  main_flow: number;
-  main_flow_measured: number;
-  feeder_flow: number;
-  feeder_flow_measured: number;
-  main_valve: boolean;
-  feeder_valve: boolean;
+  main_flow_rate: number;
+  feeder_flow_rate: number;
+  main_valve_state: boolean;
+  feeder_valve_state: boolean;
 }
 
 interface VacuumState {
   chamber_pressure: number;
-  gate_valve: boolean;
-  mech_pump: boolean;
-  booster_pump: boolean;
-  vent_valve: boolean;
+  gate_valve_state: boolean;
+  mechanical_pump_state: boolean;
+  booster_pump_state: boolean;
+  vent_valve_state: boolean;
+}
+
+interface FeederState {
+  running: boolean;
+  frequency: number;
+}
+
+interface DeagglomeratorState {
+  duty_cycle: number;
+}
+
+interface NozzleState {
+  active_nozzle: 1 | 2;
+  shutter_state: boolean;
+}
+
+interface PressureState {
+  chamber: number;
+  feeder: number;
+  main_supply: number;
+  nozzle: number;
+  regulator: number;
 }
 
 interface HardwareState {
@@ -48,16 +69,27 @@ interface HardwareState {
   position_valid: boolean;
 }
 
+interface ProcessState {
+  gas_flow_stable: boolean;
+  powder_feed_active: boolean;
+  process_ready: boolean;
+}
+
 interface EquipmentState {
-  motion: MotionState;
   gas: GasState;
   vacuum: VacuumState;
+  feeder: FeederState;
+  deagglomerator: DeagglomeratorState;
+  nozzle: NozzleState;
+  pressure: PressureState;
   hardware: HardwareState;
+  process: ProcessState;
 }
 
 interface WebSocketContextType {
   connected: boolean;
   equipment: EquipmentState | null;
+  sendMessage?: (message: any) => void;
 }
 
 const WebSocketContext = createContext<WebSocketContextType>({
@@ -72,20 +104,29 @@ export function useWebSocket() {
 export function WebSocketProvider({ children }: { children: React.ReactNode }) {
   const [connected, setConnected] = useState(false);
   const [equipment, setEquipment] = useState<EquipmentState | null>(null);
+  const [ws, setWs] = useState<WebSocket | null>(null);
+
+  const sendMessage = (message: any) => {
+    if (ws && ws.readyState === WebSocket.OPEN) {
+      ws.send(JSON.stringify(message));
+    }
+  };
 
   useEffect(() => {
     console.log('Attempting to connect to WebSocket...');
-    const ws = new WebSocket('ws://localhost:8003/ws/state');
+    const socket = new WebSocket('ws://localhost:8003/ws/state');
+    setWs(socket);
 
-    ws.onopen = () => {
+    socket.onopen = () => {
       console.log('WebSocket connected successfully');
       setConnected(true);
     };
 
-    ws.onclose = (event) => {
+    socket.onclose = (event) => {
       console.log('WebSocket disconnected:', event.code, event.reason);
       setConnected(false);
       setEquipment(null);
+      setWs(null);
       
       // Attempt to reconnect after 5 seconds
       setTimeout(() => {
@@ -93,11 +134,11 @@ export function WebSocketProvider({ children }: { children: React.ReactNode }) {
       }, 5000);
     };
 
-    ws.onerror = (error) => {
+    socket.onerror = (error) => {
       console.error('WebSocket error:', error);
     };
 
-    ws.onmessage = (event) => {
+    socket.onmessage = (event) => {
       try {
         const data = JSON.parse(event.data);
         console.log('Received WebSocket data:', data);
@@ -109,12 +150,12 @@ export function WebSocketProvider({ children }: { children: React.ReactNode }) {
 
     return () => {
       console.log('Cleaning up WebSocket connection');
-      ws.close();
+      socket.close();
     };
   }, []);
 
   return (
-    <WebSocketContext.Provider value={{ connected, equipment }}>
+    <WebSocketContext.Provider value={{ connected, equipment, sendMessage }}>
       {children}
     </WebSocketContext.Provider>
   );

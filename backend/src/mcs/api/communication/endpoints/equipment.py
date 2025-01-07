@@ -281,7 +281,7 @@ async def websocket_equipment_state(websocket: WebSocket):
 
         try:
             # Send initial state
-            initial_state = await service.get_state()
+            initial_state = await service.equipment.get_equipment_state()
             initial_internal = await service.internal_state.get_equipment_states()
             
             await websocket.send_json({
@@ -306,7 +306,7 @@ async def websocket_equipment_state(websocket: WebSocket):
                         task.cancel()
                     
                     # Get latest states
-                    equipment_state = await service.get_state()
+                    equipment_state = await service.equipment.get_equipment_state()
                     internal_states = await service.internal_state.get_equipment_states()
                     
                     # Send update

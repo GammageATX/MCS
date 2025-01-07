@@ -444,6 +444,7 @@ class EquipmentService:
 
             await self._tag_cache.set_tag("gas_control.main_flow.setpoint", flow_rate)
             logger.info(f"Set main gas flow rate to {flow_rate} SLPM")
+            await self._notify_state_changed()
 
         except Exception as e:
             error_msg = "Failed to set main flow rate"
@@ -464,6 +465,7 @@ class EquipmentService:
 
             await self._tag_cache.set_tag("gas_control.feeder_flow.setpoint", flow_rate)
             logger.info(f"Set feeder gas flow rate to {flow_rate} SLPM")
+            await self._notify_state_changed()
 
         except Exception as e:
             error_msg = "Failed to set feeder flow rate"
@@ -488,6 +490,7 @@ class EquipmentService:
 
             await self._tag_cache.set_tag("gas_control.main_valve.open", open)
             logger.info(f"Set main gas valve state to {'open' if open else 'closed'}")
+            await self._notify_state_changed()
 
         except Exception as e:
             error_msg = "Failed to set main gas valve state"
@@ -512,6 +515,7 @@ class EquipmentService:
 
             await self._tag_cache.set_tag("gas_control.feeder_valve.open", open)
             logger.info(f"Set feeder gas valve state to {'open' if open else 'closed'}")
+            await self._notify_state_changed()
 
         except Exception as e:
             error_msg = "Failed to set feeder gas valve state"
@@ -536,6 +540,7 @@ class EquipmentService:
 
             await self._tag_cache.set_tag("vacuum.gate_valve.open", open)
             logger.info(f"Set vacuum gate valve state to {'open' if open else 'closed'}")
+            await self._notify_state_changed()
 
         except Exception as e:
             error_msg = "Failed to set gate valve state"
@@ -560,6 +565,7 @@ class EquipmentService:
 
             await self._tag_cache.set_tag("vacuum.vent_valve", open)
             logger.info(f"Set vacuum vent valve state to {'open' if open else 'closed'}")
+            await self._notify_state_changed()
 
         except Exception as e:
             error_msg = "Failed to set vent valve state"
@@ -584,6 +590,7 @@ class EquipmentService:
 
             await self._tag_cache.set_tag("vacuum.mechanical_pump.start", running)
             logger.info(f"Set mechanical pump state to {'running' if running else 'stopped'}")
+            await self._notify_state_changed()
 
         except Exception as e:
             error_msg = "Failed to set mechanical pump state"
@@ -608,6 +615,7 @@ class EquipmentService:
 
             await self._tag_cache.set_tag("vacuum.booster_pump.start", running)
             logger.info(f"Set booster pump state to {'running' if running else 'stopped'}")
+            await self._notify_state_changed()
 
         except Exception as e:
             error_msg = "Failed to set booster pump state"
@@ -640,6 +648,7 @@ class EquipmentService:
 
             await self._tag_cache.set_tag(f"feeders.feeder{feeder_id}.frequency", frequency)
             logger.info(f"Set feeder {feeder_id} frequency to {frequency} Hz")
+            await self._notify_state_changed()
 
         except Exception as e:
             error_msg = f"Failed to set feeder {feeder_id} frequency"
@@ -672,6 +681,7 @@ class EquipmentService:
 
             await self._tag_cache.set_tag(f"feeders.feeder{feeder_id}.running", running)
             logger.info(f"Set feeder {feeder_id} state to {'running' if running else 'stopped'}")
+            await self._notify_state_changed()
 
         except Exception as e:
             error_msg = f"Failed to set feeder {feeder_id} state"
@@ -703,6 +713,7 @@ class EquipmentService:
 
             await self._tag_cache.set_tag("nozzle.select", nozzle_id == 2)
             logger.info(f"Set active nozzle state to nozzle {nozzle_id}")
+            await self._notify_state_changed()
 
         except Exception as e:
             error_msg = "Failed to set nozzle state"
@@ -727,6 +738,7 @@ class EquipmentService:
 
             await self._tag_cache.set_tag("nozzle.shutter.open", open)
             logger.info(f"Set nozzle shutter state to {'open' if open else 'closed'}")
+            await self._notify_state_changed()
 
         except Exception as e:
             error_msg = "Failed to set shutter state"
@@ -766,6 +778,7 @@ class EquipmentService:
 
             await self._tag_cache.set_tag(f"deagglomerators.deagg{deagg_id}.duty_cycle", duty_cycle)
             logger.info(f"Set deagglomerator {deagg_id} duty cycle to {duty_cycle}%")
+            await self._notify_state_changed()
 
         except Exception as e:
             error_msg = f"Failed to set deagglomerator {deagg_id} duty cycle"
@@ -798,6 +811,7 @@ class EquipmentService:
 
             await self._tag_cache.set_tag(f"deagglomerators.deagg{deagg_id}.frequency", frequency)
             logger.info(f"Set deagglomerator {deagg_id} frequency to {frequency} Hz")
+            await self._notify_state_changed()
 
         except Exception as e:
             error_msg = f"Failed to set deagglomerator {deagg_id} frequency"
@@ -806,3 +820,15 @@ class EquipmentService:
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 message=error_msg
             )
+
+    async def _notify_state_changed(self) -> None:
+        """Notify subscribers that equipment state has changed."""
+        try:
+            state = await self.get_equipment_state()
+            for callback in self._state_callbacks:
+                try:
+                    await callback(state)
+                except Exception as e:
+                    logger.error(f"Error in state callback: {str(e)}")
+        except Exception as e:
+            logger.error(f"Error notifying state change: {str(e)}")

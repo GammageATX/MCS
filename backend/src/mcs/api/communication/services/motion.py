@@ -301,7 +301,7 @@ class MotionService:
             z_status = await self.get_axis_status("z")
 
             # Get module ready status
-            module_ready = await self._tag_cache.get_tag("interlocks.motion_ready")
+            module_ready = await self._tag_cache.get_tag("motion.status.module")
             if module_ready is None:
                 module_ready = False
 
@@ -351,7 +351,7 @@ class MotionService:
             # Parse status
             in_position = bool(complete)  # In position if move completed
             moving = bool(in_progress)  # Moving if in progress
-            error = not await self._tag_cache.get_tag("interlocks.motion_ready")  # Error if not enabled
+            error = not await self._tag_cache.get_tag("motion.status.module")  # Error if not enabled
             homed = bool(complete)  # Consider homed if last move completed
 
             # Default to 0 if position is None

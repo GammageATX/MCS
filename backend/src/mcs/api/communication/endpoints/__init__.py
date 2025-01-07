@@ -47,7 +47,7 @@ async def websocket_state(websocket: WebSocket):
 
         try:
             # Send initial state
-            equipment_state = await service.equipment.get_state()
+            equipment_state = await service.equipment.get_equipment_state()
             motion_position = await service.motion.get_position()
             motion_status = await service.motion.get_status()
             motion_state = MotionState(position=motion_position, status=motion_status)
@@ -77,7 +77,7 @@ async def websocket_state(websocket: WebSocket):
                         task.cancel()
                     
                     # Get latest states
-                    equipment_state = await service.equipment.get_state()
+                    equipment_state = await service.equipment.get_equipment_state()
                     motion_position = await service.motion.get_position()
                     motion_status = await service.motion.get_status()
                     motion_state = MotionState(position=motion_position, status=motion_status)

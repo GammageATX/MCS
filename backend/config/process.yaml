@@ -263,7 +263,7 @@ process:
             value: bool
           topic: tag/set
         validation:
-        - tag: interlocks.shutter_engaged
+        - tag: nozzle.shutter.open
     vacuum:
       booster_pump:
         description: Control booster pump

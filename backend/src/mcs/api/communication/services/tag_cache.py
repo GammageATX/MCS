@@ -119,11 +119,15 @@ class TagCacheService:
             # Get all mapped PLC tags
             plc_tags = []
             internal_to_plc = {}  # Track mapping for error reporting
+            plc_to_internal = {}  # Track all internal tags for each PLC tag
             for internal_tag, tag_info in self._tag_mapping._tag_map.items():
                 if tag_info.get("mapped", False) and tag_info.get("plc_tag"):
                     plc_tag = tag_info["plc_tag"]
                     plc_tags.append(plc_tag)
                     internal_to_plc[plc_tag] = internal_tag
+                    if plc_tag not in plc_to_internal:
+                        plc_to_internal[plc_tag] = []
+                    plc_to_internal[plc_tag].append(internal_tag)
                     logger.debug(f"Mapped internal tag {internal_tag} -> PLC tag {plc_tag}")
             
             logger.info(f"Found {len(plc_tags)} mapped PLC tags")
@@ -138,13 +142,13 @@ class TagCacheService:
                     
                     # Store both PLC and internal tag values
                     for plc_tag, value in values.items():
-                        internal_tag = internal_to_plc[plc_tag]
                         # Store raw PLC tag value
                         self._cache[plc_tag] = value
-                        # Store scaled internal tag value
-                        scaled_value = self._tag_mapping.scale_value(internal_tag, value)
-                        self._cache[internal_tag] = scaled_value
-                        logger.debug(f"Initialized {internal_tag} = {scaled_value} (PLC: {plc_tag} = {value})")
+                        # Store scaled internal tag values
+                        for internal_tag in plc_to_internal[plc_tag]:
+                            scaled_value = self._tag_mapping.scale_value(internal_tag, value)
+                            self._cache[internal_tag] = scaled_value
+                            logger.debug(f"Initialized {internal_tag} = {scaled_value} (PLC: {plc_tag} = {value})")
                         
                     # Log any missing tags
                     missing_tags = set(plc_tags) - set(values.keys())
@@ -341,11 +345,13 @@ class TagCacheService:
         is_ssh_tag = tag.startswith("ssh.")
 
         try:
+            old_value = self._cache.get(tag)
             if is_plc_tag:
                 # Write to PLC
                 plc_tag = tag_info["plc_tag"]
                 await self._plc_client.write_tag(plc_tag, value)
                 self._cache[tag] = value
+                self._cache[plc_tag] = value  # Also cache the raw PLC tag value
                 logger.debug(f"Set PLC tag {plc_tag} = {value}")
             elif is_ssh_tag and self._ssh_client:
                 # Write to SSH
@@ -357,6 +363,15 @@ class TagCacheService:
                 # Internal tag - just update cache
                 self._cache[tag] = value
                 logger.debug(f"Set internal tag {tag} = {value}")
+
+            # If value changed, notify subscribers and callbacks
+            if old_value != value:
+                # Notify tag subscribers
+                self._notify_tag_subscribers(tag, value)
+                
+                # Check if this is a state tag and notify state callbacks
+                if tag_info.get("state_type"):
+                    self._notify_state_callbacks(tag_info["state_type"], value)
 
         except Exception as e:
             error_msg = f"Failed to set tag {tag} = {value}"
@@ -383,11 +398,15 @@ class TagCacheService:
                 # Get all mapped PLC tags
                 plc_tags = []
                 internal_to_plc = {}  # Track mapping for error reporting
+                plc_to_internal = {}  # Track all internal tags for each PLC tag
                 for internal_tag, tag_info in self._tag_mapping._tag_map.items():
                     if tag_info.get("mapped", False) and tag_info.get("plc_tag"):
                         plc_tag = tag_info["plc_tag"]
                         plc_tags.append(plc_tag)
                         internal_to_plc[plc_tag] = internal_tag
+                        if plc_tag not in plc_to_internal:
+                            plc_to_internal[plc_tag] = []
+                        plc_to_internal[plc_tag].append(internal_tag)
                         # Only log mapping once
                         if internal_tag not in self._logged_tag_mappings:
                             logger.debug(f"Mapped internal tag {internal_tag} -> PLC tag {plc_tag}")
@@ -400,24 +419,23 @@ class TagCacheService:
                     
                     # Process each value
                     for plc_tag, value in values.items():
-                        internal_tag = internal_to_plc[plc_tag]
-                        
                         # Check if PLC value changed
                         if plc_tag not in self._cache or self._cache[plc_tag] != value:
                             # Store raw PLC tag value
                             self._cache[plc_tag] = value
                             
-                            # Scale and store internal tag value
-                            scaled_value = self._tag_mapping.scale_value(internal_tag, value)
-                            old_value = self._cache.get(internal_tag)
-                            self._cache[internal_tag] = scaled_value
-                            
-                            # If internal value changed, notify subscribers and callbacks
-                            if old_value != scaled_value:
-                                changed_values[internal_tag] = (scaled_value, plc_tag, value)
+                            # Scale and store internal tag values
+                            for internal_tag in plc_to_internal[plc_tag]:
+                                scaled_value = self._tag_mapping.scale_value(internal_tag, value)
+                                old_value = self._cache.get(internal_tag)
+                                self._cache[internal_tag] = scaled_value
                                 
-                                # Notify tag subscribers
-                                self._notify_tag_subscribers(internal_tag, scaled_value)
+                                # If internal value changed, add to changed values
+                                if old_value != scaled_value:
+                                    changed_values[internal_tag] = (scaled_value, plc_tag, value)
+                                    
+                                    # Notify tag subscribers
+                                    self._notify_tag_subscribers(internal_tag, scaled_value)
                                 
                                 # Check if this is a state tag and notify state callbacks
                                 tag_info = self._tag_mapping._tag_map.get(internal_tag, {})

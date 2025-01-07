@@ -101,7 +101,6 @@
         "vacuum",
         "nozzle",
         "motion",
-        "interlocks",
         "safety",
         "status",
         "pressure"
