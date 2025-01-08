@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { JsonForms } from '@jsonforms/react';
 import { materialRenderers, materialCells } from '@jsonforms/material-renderers';
+import { rankWith, isNumberControl, JsonFormsCore } from '@jsonforms/core';
 import {
   Box,
   Button,
@@ -16,9 +17,55 @@ import {
   CircularProgress,
   Divider,
   IconButton,
+  TextField,
 } from '@mui/material';
 import RefreshIcon from '@mui/icons-material/Refresh';
 import { API_CONFIG } from '../config/api';
+
+// Custom number renderer to preserve decimal places
+const NumberRenderer = ({ data, path, handleChange, schema }: any) => {
+  const [value, setValue] = useState(data);
+
+  useEffect(() => {
+    setValue(data);
+  }, [data]);
+
+  const handleInputChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const newValue = event.target.value;
+    setValue(newValue);
+    
+    // Convert to number while preserving decimal places
+    const numValue = Number(newValue);
+    if (!isNaN(numValue)) {
+      handleChange(path, numValue);
+    }
+  };
+
+  return (
+    <TextField
+      type="number"
+      value={value}
+      onChange={handleInputChange}
+      fullWidth
+      label={schema.title || path.split('.').pop()}
+      required={schema.required}
+      inputProps={{
+        step: "0.1",
+      }}
+    />
+  );
+};
+
+const numberRenderer = {
+  tester: rankWith(3, isNumberControl),
+  renderer: NumberRenderer
+};
+
+// Add the custom renderer to the list
+const renderers = [
+  ...materialRenderers,
+  numberRenderer
+];
 
 interface Config {
   name: string;
@@ -301,7 +348,7 @@ const ConfigManagement: React.FC = () => {
                 <JsonForms
                   schema={schemaData}
                   data={configData}
-                  renderers={materialRenderers}
+                  renderers={renderers}
                   cells={materialCells}
                   onChange={handleFormChange}
                 />

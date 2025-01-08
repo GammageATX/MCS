@@ -155,7 +155,8 @@
               "description": "Safe Z height for motion (mm)",
               "multipleOf": 0.1,
               "minimum": 0,
-              "maximum": 1000
+              "maximum": 1000,
+              "default": 40.0
             }
           }
         }
