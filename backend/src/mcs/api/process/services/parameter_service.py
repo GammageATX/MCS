@@ -153,7 +153,7 @@ class ParameterService:
 
             # Check critical components
             parameters_loaded = self._parameters is not None and len(self._parameters) > 0
-            parameter_dir = Path("data/parameters")
+            parameter_dir = Path("backend/data/parameters")
             dir_exists = parameter_dir.exists()
             dir_writable = dir_exists and os.access(parameter_dir, os.W_OK)
 
@@ -245,14 +245,29 @@ class ParameterService:
     async def _load_parameters(self) -> None:
         """Load parameters from configuration."""
         try:
+            # Load service config
             config_path = os.path.join("backend", "config", "process.yaml")
             if os.path.exists(config_path):
                 with open(config_path, "r") as f:
                     config = yaml.safe_load(f)
                     if "parameter" in config:
                         self._version = config["parameter"].get("version", self._version)
+            
+            # Load parameter files from data directory
+            parameter_dir = Path("backend/data/parameters")
+            if parameter_dir.exists():
+                for file_path in parameter_dir.glob("*.yaml"):
+                    try:
+                        with open(file_path, "r") as f:
+                            parameter_data = yaml.safe_load(f)
+                            parameter_id = file_path.stem
+                            self._parameters[parameter_id] = parameter_data
+                            logger.info(f"Loaded parameter file: {file_path.name}")
+                    except Exception as e:
+                        logger.error(f"Failed to load parameter file {file_path.name}: {str(e)}")
+                        self._failed_parameters[file_path.stem] = str(e)
                         
-            logger.info("Loaded parameters from configuration")
+            logger.info(f"Loaded {len(self._parameters)} parameters from configuration")
             
         except Exception as e:
             error_msg = f"Failed to load parameters: {str(e)}"

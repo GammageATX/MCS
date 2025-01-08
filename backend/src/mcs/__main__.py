@@ -247,17 +247,16 @@ async def main():
 
         # Define service dependencies
         dependencies: Dict[str, List[Tuple[str, int]]] = {
-            "ui": [("config", 8001), ("state", 8002)],
-            "process": [("config", 8001), ("state", 8002)],
-            "data_collection": [("config", 8001), ("state", 8002)],
-            "communication": [("config", 8001), ("state", 8002)]
+            "ui": [("config", 8001)],
+            "process": [("config", 8001)],
+            "data_collection": [("config", 8001)],
+            "communication": [("config", 8001)]
         }
 
         # Create all service apps with module paths for reloading
         services = [
             # Core services first (no dependencies)
             ("mcs.api.config.config_app:create_config_service", "Config", 8001, []),
-            ("mcs.api.state.state_app:create_state_service", "State", 8002, []),
             # Services with dependencies
             ("mcs.api.communication.communication_app:create_communication_service", "Communication", 8003, dependencies["communication"]),
             ("mcs.api.process.process_app:create_process_service", "Process", 8004, dependencies["process"]),

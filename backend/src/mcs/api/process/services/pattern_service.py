@@ -153,7 +153,7 @@ class PatternService:
 
             # Check critical components
             patterns_loaded = self._patterns is not None and len(self._patterns) > 0
-            pattern_dir = Path("data/patterns")
+            pattern_dir = Path("backend/data/patterns")
             dir_exists = pattern_dir.exists()
             dir_writable = dir_exists and os.access(pattern_dir, os.W_OK)
 
@@ -245,14 +245,29 @@ class PatternService:
     async def _load_patterns(self) -> None:
         """Load patterns from configuration."""
         try:
+            # Load service config
             config_path = os.path.join("backend", "config", "process.yaml")
             if os.path.exists(config_path):
                 with open(config_path, "r") as f:
                     config = yaml.safe_load(f)
                     if "pattern" in config:
                         self._version = config["pattern"].get("version", self._version)
+            
+            # Load pattern files from data directory
+            pattern_dir = Path("backend/data/patterns")
+            if pattern_dir.exists():
+                for file_path in pattern_dir.glob("*.yaml"):
+                    try:
+                        with open(file_path, "r") as f:
+                            pattern_data = yaml.safe_load(f)
+                            pattern_id = file_path.stem
+                            self._patterns[pattern_id] = pattern_data
+                            logger.info(f"Loaded pattern file: {file_path.name}")
+                    except Exception as e:
+                        logger.error(f"Failed to load pattern file {file_path.name}: {str(e)}")
+                        self._failed_patterns[file_path.stem] = str(e)
                         
-            logger.info("Loaded patterns from configuration")
+            logger.info(f"Loaded {len(self._patterns)} patterns from configuration")
             
         except Exception as e:
             error_msg = f"Failed to load patterns: {str(e)}"

@@ -241,51 +241,42 @@ class ProcessService:
         """Get service health status.
         
         Returns:
-            ServiceHealth: Service health status
+            ServiceHealth: Service health status including component health
         """
         try:
             if not self.is_running:
                 return create_error_health(
                     service_name=self.service_name,
                     version=self.version,
-                    error_msg=f"{self.service_name} service not running"
+                    error_msg=f"{self.service_name} not running"
                 )
 
-            # Check component health
             components = {}
             overall_status = HealthStatus.OK
-            error_msg = None
 
+            # Check critical components
             for name, component in self._components.items():
                 try:
                     if hasattr(component, "health"):
                         health = await component.health()
                         components[name] = health
                         if health.status != HealthStatus.OK:
-                            overall_status = HealthStatus.DEGRADED
+                            overall_status = HealthStatus.ERROR
                     else:
+                        status = HealthStatus.OK if component.is_running else HealthStatus.ERROR
                         components[name] = ComponentHealth(
-                            status=HealthStatus.OK if component.is_running else HealthStatus.ERROR,
-                            error="No health check implemented" if not component.is_running else None
+                            status=status,
+                            error=None if status == HealthStatus.OK else "Component not running"
                         )
-                        if not component.is_running:
-                            overall_status = HealthStatus.DEGRADED
+                        if status != HealthStatus.OK:
+                            overall_status = HealthStatus.ERROR
                 except Exception as e:
-                    error = f"{name} health check failed: {str(e)}"
-                    logger.error(error)
+                    logger.error(f"Component health check failed - {name}: {str(e)}")
                     components[name] = ComponentHealth(
                         status=HealthStatus.ERROR,
-                        error=error
+                        error=str(e)
                     )
-                    overall_status = HealthStatus.DEGRADED
-
-            # Map process status to health status
-            if self._process_status == ProcessStatus.ERROR:
-                overall_status = HealthStatus.ERROR
-                error_msg = "Process in error state"
-            elif self._process_status == ProcessStatus.PAUSED:
-                overall_status = HealthStatus.DEGRADED
-                error_msg = "Process paused"
+                    overall_status = HealthStatus.ERROR
 
             return ServiceHealth(
                 status=overall_status,
@@ -293,16 +284,14 @@ class ProcessService:
                 version=self.version,
                 is_running=self.is_running,
                 uptime=self.uptime,
-                error=error_msg,
-                mode="normal",
+                error=None,  # No need to aggregate component errors here
                 components=components
             )
 
         except Exception as e:
-            error_msg = f"Health check failed: {str(e)}"
-            logger.error(error_msg)
+            logger.error(f"Health check failed: {str(e)}")
             return create_error_health(
                 service_name=self.service_name,
                 version=self.version,
-                error_msg=error_msg
+                error_msg=str(e)
             )

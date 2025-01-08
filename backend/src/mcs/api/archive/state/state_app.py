@@ -12,7 +12,7 @@ from loguru import logger
 
 from mcs.utils.errors import create_error
 from mcs.utils.health import ServiceHealth, HealthStatus
-from mcs.api.state.state_service import StateService
+from mcs.api.archive.state.state_service import StateService
 
 
 def load_config() -> Dict[str, Any]:

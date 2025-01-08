@@ -5,7 +5,7 @@ from datetime import datetime
 from typing import Dict, Optional, Any
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, Request, status, Response, Depends
+from fastapi import FastAPI, Request, status, Response
 from fastapi.templating import Jinja2Templates
 from fastapi.responses import HTMLResponse, FileResponse
 from fastapi.middleware.gzip import GZipMiddleware
@@ -18,7 +18,11 @@ import time
 from functools import wraps
 
 from mcs.utils.errors import create_error
-from mcs.utils.health import ServiceHealth, ComponentHealth, HealthStatus
+from mcs.utils.health import (
+    ServiceHealth,
+    ComponentHealth,
+    HealthStatus
+)
 
 
 # Simple cache implementation
@@ -37,9 +41,18 @@ async def lifespan(app: FastAPI):
         yield
         if ui_app.is_running:
             await ui_app.stop()
+            logger.info("UI application stopped successfully")
     except Exception as e:
         logger.error(f"Application startup failed: {e}")
+        # Don't raise here - let the service start in degraded mode
+        # The health check will show which components failed
         yield
+        # Still try to stop service if it exists
+        if hasattr(app.state, "ui_app"):
+            try:
+                await app.state.ui_app.stop()
+            except Exception as stop_error:
+                logger.error(f"Failed to stop UI application: {stop_error}")
 
 
 class UIApp:
@@ -163,8 +176,8 @@ class UIApp:
                     version=self.version,
                     is_running=False,
                     uptime=0.0,
-                    error=f"{self.app_name} application not running",
                     mode="normal",
+                    error=f"{self.app_name} application not running",
                     components={
                         "main": ComponentHealth(
                             status=HealthStatus.ERROR,
@@ -198,8 +211,8 @@ class UIApp:
                 version=self.version,
                 is_running=False,
                 uptime=0.0,
-                error=error_msg,
                 mode="normal",
+                error=error_msg,
                 components={
                     "main": ComponentHealth(
                         status=HealthStatus.ERROR,
@@ -241,7 +254,6 @@ class ApiUrls(BaseModel):
     """API URLs configuration model."""
     ui: AnyHttpUrl = Field("http://localhost:8000", description="UI service URL")
     config: AnyHttpUrl = Field("http://localhost:8001", description="Config service URL")
-    state: AnyHttpUrl = Field("http://localhost:8002", description="State service URL")
     communication: AnyHttpUrl = Field("http://localhost:8003", description="Communication service URL")
     process: AnyHttpUrl = Field("http://localhost:8004", description="Process service URL")
     data_collection: AnyHttpUrl = Field("http://localhost:8005", description="Data collection service URL")
@@ -338,7 +350,6 @@ async def check_dependencies() -> Dict[str, bool]:
     """Check critical service dependencies."""
     dependencies = {
         "config": False,  # Config service is critical
-        "state": False    # State service is critical
     }
     api_urls = get_api_urls()
     
@@ -399,7 +410,6 @@ def create_ui_app() -> FastAPI:
                 "version": app.version
             })
             app.state.templates = templates
-            logger.info(f"Initialized templates from {templates_dir}")
         else:
             logger.error(f"Templates directory not found: {templates_dir}")
             raise FileNotFoundError(f"Templates directory not found: {templates_dir}")
@@ -449,11 +459,27 @@ def create_ui_app() -> FastAPI:
                 status.HTTP_500_INTERNAL_SERVER_ERROR: {"description": "Internal server error"}
             }
         )
-        async def health(
-            ui_app: UIApp = Depends(lambda r: r.app.state.ui_app)
-        ) -> ServiceHealth:
+        async def health() -> ServiceHealth:
             """Get UI application health status."""
-            return await ui_app.health()
+            try:
+                return await ui_app.health()
+            except Exception as e:
+                logger.error(f"Health check failed: {e}")
+                return ServiceHealth(
+                    status=HealthStatus.ERROR,
+                    service=ui_app.app_name,
+                    version=ui_app.version,
+                    is_running=False,
+                    uptime=0.0,
+                    mode="normal",
+                    error=str(e),
+                    components={
+                        "main": ComponentHealth(
+                            status=HealthStatus.ERROR,
+                            error=str(e)
+                        )
+                    }
+                )
 
         @app.get(
             "/monitoring/services/status",
@@ -472,7 +498,6 @@ def create_ui_app() -> FastAPI:
                 for service_name, url in {
                     "ui": api_urls.ui,
                     "config": api_urls.config,
-                    "state": api_urls.state,
                     "communication": api_urls.communication,
                     "process": api_urls.process,
                     "data_collection": api_urls.data_collection

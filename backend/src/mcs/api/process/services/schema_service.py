@@ -3,11 +3,8 @@
 This module implements the Schema service for managing process schemas.
 """
 
-import os
-from pathlib import Path
 from datetime import datetime
 
-import yaml
 from fastapi import status
 from loguru import logger
 
@@ -153,9 +150,6 @@ class SchemaService:
 
             # Check critical components
             schemas_loaded = self._schemas is not None and len(self._schemas) > 0
-            schema_dir = Path("data/schemas")
-            dir_exists = schema_dir.exists()
-            dir_writable = dir_exists and os.access(schema_dir, os.W_OK)
 
             # Map process status to health status
             if self._schema_status == ProcessStatus.ERROR:
@@ -168,11 +162,6 @@ class SchemaService:
                             "loaded": list(self._schemas.keys()) if self._schemas else [],
                             "failed": list(self._failed_schemas.keys()),
                             "recovery_attempts": len(self._failed_schemas)
-                        },
-                        "storage": {
-                            "path": str(schema_dir),
-                            "exists": dir_exists,
-                            "writable": dir_writable
                         }
                     }
                 )
@@ -186,17 +175,12 @@ class SchemaService:
                             "loaded": list(self._schemas.keys()) if self._schemas else [],
                             "failed": list(self._failed_schemas.keys()),
                             "recovery_attempts": len(self._failed_schemas)
-                        },
-                        "storage": {
-                            "path": str(schema_dir),
-                            "exists": dir_exists,
-                            "writable": dir_writable
                         }
                     }
                 )
 
-            # Check if any critical components are missing
-            if not (schemas_loaded and dir_exists and dir_writable):
+            # Check if schemas are loaded
+            if not schemas_loaded:
                 return ComponentHealth(
                     status=HealthStatus.DEGRADED,
                     error="Schema system partially operational",
@@ -206,11 +190,6 @@ class SchemaService:
                             "loaded": list(self._schemas.keys()) if self._schemas else [],
                             "failed": list(self._failed_schemas.keys()),
                             "recovery_attempts": len(self._failed_schemas)
-                        },
-                        "storage": {
-                            "path": str(schema_dir),
-                            "exists": dir_exists,
-                            "writable": dir_writable
                         }
                     }
                 )
@@ -225,11 +204,6 @@ class SchemaService:
                         "failed": list(self._failed_schemas.keys()),
                         "recovery_attempts": len(self._failed_schemas)
                     },
-                    "storage": {
-                        "path": str(schema_dir),
-                        "exists": dir_exists,
-                        "writable": dir_writable
-                    },
                     "uptime": self.uptime
                 }
             )
@@ -243,16 +217,60 @@ class SchemaService:
             )
 
     async def _load_schemas(self) -> None:
-        """Load schemas from configuration."""
+        """Load schema definitions."""
         try:
-            config_path = os.path.join("backend", "config", "process.yaml")
-            if os.path.exists(config_path):
-                with open(config_path, "r") as f:
-                    config = yaml.safe_load(f)
-                    if "schema" in config:
-                        self._version = config["schema"].get("version", self._version)
-                        
-            logger.info("Loaded schemas from configuration")
+            # Import all schema definitions
+            from mcs.api.process.schemas import (
+                NozzleData, Nozzle, NozzleType,
+                PatternData, Pattern, PatternParams, PatternType,
+                ParameterData, ProcessParameters,
+                PowderData, Powder, PowderMorphology, SizeRange,
+                SequenceData, Sequence, SequenceMetadata, SequenceStep, StepType
+            )
+            
+            # Store schema classes
+            self._schemas = {
+                "nozzle": {
+                    "data": NozzleData,
+                    "models": {
+                        "nozzle": Nozzle,
+                        "type": NozzleType
+                    }
+                },
+                "pattern": {
+                    "data": PatternData,
+                    "models": {
+                        "pattern": Pattern,
+                        "params": PatternParams,
+                        "type": PatternType
+                    }
+                },
+                "parameter": {
+                    "data": ParameterData,
+                    "models": {
+                        "parameters": ProcessParameters
+                    }
+                },
+                "powder": {
+                    "data": PowderData,
+                    "models": {
+                        "powder": Powder,
+                        "morphology": PowderMorphology,
+                        "size_range": SizeRange
+                    }
+                },
+                "sequence": {
+                    "data": SequenceData,
+                    "models": {
+                        "sequence": Sequence,
+                        "metadata": SequenceMetadata,
+                        "step": SequenceStep,
+                        "step_type": StepType
+                    }
+                }
+            }
+            
+            logger.info(f"Loaded {len(self._schemas)} schema definitions")
             
         except Exception as e:
             error_msg = f"Failed to load schemas: {str(e)}"

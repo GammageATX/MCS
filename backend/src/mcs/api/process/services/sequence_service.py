@@ -155,7 +155,7 @@ class SequenceService:
 
             # Check critical components
             sequences_loaded = self._sequences is not None and len(self._sequences) > 0
-            sequence_dir = Path("data/sequences")
+            sequence_dir = Path("backend/data/sequences")
             dir_exists = sequence_dir.exists()
             dir_writable = dir_exists and os.access(sequence_dir, os.W_OK)
 
@@ -291,14 +291,29 @@ class SequenceService:
     async def _load_sequences(self) -> None:
         """Load sequences from configuration."""
         try:
+            # Load service config
             config_path = os.path.join("backend", "config", "process.yaml")
             if os.path.exists(config_path):
                 with open(config_path, "r") as f:
                     config = yaml.safe_load(f)
                     if "sequence" in config:
                         self._version = config["sequence"].get("version", self._version)
+            
+            # Load sequence files from data directory
+            sequence_dir = Path("backend/data/sequences")
+            if sequence_dir.exists():
+                for file_path in sequence_dir.glob("*.yaml"):
+                    try:
+                        with open(file_path, "r") as f:
+                            sequence_data = yaml.safe_load(f)
+                            sequence_id = file_path.stem
+                            self._sequences[sequence_id] = sequence_data
+                            logger.info(f"Loaded sequence file: {file_path.name}")
+                    except Exception as e:
+                        logger.error(f"Failed to load sequence file {file_path.name}: {str(e)}")
+                        self._failed_sequences[file_path.stem] = str(e)
                         
-            logger.info("Loaded sequences from configuration")
+            logger.info(f"Loaded {len(self._sequences)} sequences from configuration")
             
         except Exception as e:
             error_msg = f"Failed to load sequences: {str(e)}"
