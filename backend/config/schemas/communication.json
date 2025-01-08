@@ -152,7 +152,10 @@
           "properties": {
             "safe_z": {
               "type": "number",
-              "description": "Safe Z height for motion (mm)"
+              "description": "Safe Z height for motion (mm)",
+              "multipleOf": 0.1,
+              "minimum": 0,
+              "maximum": 1000
             }
           }
         }

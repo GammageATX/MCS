@@ -50,12 +50,33 @@ class FormatService:
                 elif isinstance(d, bool):
                     return d
                 elif isinstance(d, (int, float)):
-                    # Preserve decimal points for floats and whole numbers
-                    s = f"{d:.1f}" if isinstance(d, float) or str(d).endswith(".0") else str(d)
-                    return scalarstring.DoubleQuotedScalarString(s) if "." in s else d
+                    # Keep original string representation for numbers
+                    orig_str = str(d)
+                    if isinstance(d, float):
+                        # Force decimal point for all floats
+                        if orig_str.endswith('.0'):
+                            # Keep original .0 format
+                            return float(orig_str)
+                        # Keep original precision
+                        return d
+                    elif '.0' in orig_str:
+                        # Keep .0 if it was in the original
+                        return float(orig_str)
+                    return d
                 elif isinstance(d, str):
-                    # Preserve quotes on strings
-                    return scalarstring.DoubleQuotedScalarString(d)
+                    # Don't quote strings that are actually numbers
+                    try:
+                        num = float(d)
+                        # If it was a string with .0, keep it as float
+                        if '.0' in d:
+                            return float(d)
+                        # Otherwise convert to int if it's a whole number
+                        if num.is_integer() and not d.endswith('.0'):
+                            return int(num)
+                        return num
+                    except ValueError:
+                        # Preserve quotes on actual strings
+                        return scalarstring.DoubleQuotedScalarString(d)
                 return d
 
             # Process data to preserve formats
