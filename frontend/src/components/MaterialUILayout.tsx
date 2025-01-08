@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React from 'react';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { 
   AppBar, 
   Toolbar, 
@@ -10,21 +11,16 @@ import {
   ListItemIcon, 
   ListItemText, 
   Container, 
-  CssBaseline,
   Box,
   SvgIcon,
   SvgIconProps
 } from '@mui/material';
-import SystemMonitoring from './SystemMonitoring';
+import { WebSocketProvider } from '../context/WebSocketContext';
+import ConfigManagement from './ConfigManagement';
 import EquipmentControl from './EquipmentControl';
 import FileManagement from './FileManagement';
 import SequenceExecution from './SequenceExecution';
-import ConfigManagement from './ConfigManagement';
-import { WebSocketProvider } from '../context/WebSocketContext';
-
-interface MaterialUILayoutProps {
-  children?: React.ReactNode;
-}
+import SystemMonitoring from './SystemMonitoring';
 
 const drawerWidth = 240;
 
@@ -58,45 +54,49 @@ const ConfigIcon = (props: SvgIconProps) => (
   </SvgIcon>
 );
 
-export default function MaterialUILayout({ children }: MaterialUILayoutProps) {
-  const [selectedSection, setSelectedSection] = useState('Sequence Execution');
+interface Props {
+  component: string;
+}
 
-  const sections = [
-    { name: 'Sequence Execution', icon: ExecuteIcon, description: 'Execute and monitor spray sequences' },
-    { name: 'Equipment Control', icon: ControlIcon, description: 'Monitor and control system hardware' },
-    { name: 'File Management', icon: FileIcon, description: 'Manage nozzle, powder, pattern, and sequence files' },
-    { name: 'System Monitoring', icon: MonitorIcon, description: 'Monitor system status and parameters' },
-    { name: 'Configuration', icon: ConfigIcon, description: 'Manage system configuration files' }
-  ];
+const sections = [
+  { name: 'Sequence Execution', icon: ExecuteIcon, path: '/sequences', description: 'Execute and monitor spray sequences' },
+  { name: 'Equipment Control', icon: ControlIcon, path: '/equipment', description: 'Monitor and control system hardware' },
+  { name: 'File Management', icon: FileIcon, path: '/files', description: 'Manage nozzle, powder, pattern, and sequence files' },
+  { name: 'System Monitoring', icon: MonitorIcon, path: '/monitor', description: 'Monitor system status and parameters' },
+  { name: 'Configuration', icon: ConfigIcon, path: '/config', description: 'Manage system configuration files' }
+];
 
-  const renderSection = () => {
-    switch (selectedSection) {
-      case 'Sequence Execution':
-        return (
-          <WebSocketProvider>
-            <SequenceExecution />
-          </WebSocketProvider>
-        );
-      case 'Equipment Control':
-        return (
-          <WebSocketProvider>
-            <EquipmentControl />
-          </WebSocketProvider>
-        );
-      case 'File Management':
-        return <FileManagement />;
-      case 'System Monitoring':
-        return <SystemMonitoring />;
-      case 'Configuration':
+const MaterialUILayout: React.FC<Props> = ({ component }) => {
+  const navigate = useNavigate();
+  const location = useLocation();
+  
+  // Components that need WebSocket connection
+  const needsWebSocket = ['EquipmentControl', 'SystemMonitoring', 'SequenceExecution'];
+  
+  const renderComponent = () => {
+    switch (component) {
+      case 'ConfigManagement':
         return <ConfigManagement />;
+      case 'EquipmentControl':
+        return <EquipmentControl />;
+      case 'FileManagement':
+        return <FileManagement />;
+      case 'SequenceExecution':
+        return <SequenceExecution />;
+      case 'SystemMonitoring':
+        return <SystemMonitoring />;
       default:
-        return <Typography>Select a section</Typography>;
+        return <ConfigManagement />;
     }
   };
 
+  const content = renderComponent();
+  const wrappedContent = needsWebSocket.includes(component) ? (
+    <WebSocketProvider>{content}</WebSocketProvider>
+  ) : content;
+
   return (
     <Box sx={{ display: 'flex' }}>
-      <CssBaseline />
       <AppBar position="fixed" sx={{ zIndex: (theme) => theme.zIndex.drawer + 1 }}>
         <Toolbar>
           <Typography variant="h6" noWrap component="div">
@@ -114,11 +114,11 @@ export default function MaterialUILayout({ children }: MaterialUILayoutProps) {
       >
         <Toolbar />
         <List>
-          {sections.map(({ name, icon: Icon, description }) => (
+          {sections.map(({ name, icon: Icon, path, description }) => (
             <ListItem key={name} disablePadding>
               <ListItemButton 
-                onClick={() => setSelectedSection(name)} 
-                selected={selectedSection === name}
+                onClick={() => navigate(path)}
+                selected={location.pathname === path}
                 title={description}
               >
                 <ListItemIcon>
@@ -133,10 +133,12 @@ export default function MaterialUILayout({ children }: MaterialUILayoutProps) {
       <Box component="main" sx={{ flexGrow: 1, p: 3 }}>
         <Toolbar />
         <Container>
-          {renderSection()}
+          {wrappedContent}
         </Container>
       </Box>
     </Box>
   );
-}
+};
+
+export default MaterialUILayout;
 

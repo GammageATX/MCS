@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { JsonForms } from '@jsonforms/react';
 import { materialRenderers, materialCells } from '@jsonforms/material-renderers';
-import { rankWith, isNumberControl, JsonFormsCore } from '@jsonforms/core';
+import { rankWith, isNumberControl, and, scopeEndsWith, isObjectControl } from '@jsonforms/core';
 import {
   Box,
   Button,
@@ -23,11 +23,12 @@ import RefreshIcon from '@mui/icons-material/Refresh';
 import { API_CONFIG } from '../config/api';
 
 // Custom number renderer to preserve decimal places
-const NumberRenderer = ({ data, path, handleChange, schema }: any) => {
-  const [value, setValue] = useState(data);
+const NumberRenderer = ({ data, path, handleChange, schema, uischema }: any) => {
+  const [value, setValue] = useState(data?.toString() || '');
+  const label = schema?.title || uischema?.label || (path ? path.split('.').pop() : '');
 
   useEffect(() => {
-    setValue(data);
+    setValue(data?.toString() || '');
   }, [data]);
 
   const handleInputChange = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -37,7 +38,13 @@ const NumberRenderer = ({ data, path, handleChange, schema }: any) => {
     // Convert to number while preserving decimal places
     const numValue = Number(newValue);
     if (!isNaN(numValue)) {
-      handleChange(path, numValue);
+      // Force decimal places if schema specifies multipleOf
+      if (schema?.multipleOf && schema.multipleOf < 1) {
+        const decimalPlaces = schema.multipleOf.toString().split('.')[1].length;
+        handleChange(path, Number(numValue.toFixed(decimalPlaces)));
+      } else {
+        handleChange(path, numValue);
+      }
     }
   };
 
@@ -47,24 +54,50 @@ const NumberRenderer = ({ data, path, handleChange, schema }: any) => {
       value={value}
       onChange={handleInputChange}
       fullWidth
-      label={schema.title || path.split('.').pop()}
-      required={schema.required}
+      label={label}
+      required={schema?.required}
       inputProps={{
-        step: "0.1",
+        step: schema?.multipleOf || "any",
+        min: schema?.minimum,
+        max: schema?.maximum
       }}
+      helperText={schema?.description}
     />
   );
 };
 
-const numberRenderer = {
-  tester: rankWith(3, isNumberControl),
-  renderer: NumberRenderer
+// Custom object renderer for better nested object handling
+const ObjectRenderer = ({ schema, uischema, path, renderers, cells, data }: any) => {
+  const label = schema?.title || uischema?.label || (path ? path.split('.').pop() : '');
+  
+  return (
+    <Box sx={{ mb: 2 }}>
+      <Typography variant="subtitle1" sx={{ mb: 1 }}>
+        {label}
+      </Typography>
+      <Box sx={{ pl: 2 }}>
+        <JsonForms
+          schema={schema || {}}
+          uischema={uischema || {}}
+          data={data || {}}
+          renderers={renderers}
+          cells={cells}
+        />
+      </Box>
+    </Box>
+  );
 };
 
-// Add the custom renderer to the list
 const renderers = [
   ...materialRenderers,
-  numberRenderer
+  {
+    tester: rankWith(3, isNumberControl),
+    renderer: NumberRenderer
+  },
+  {
+    tester: rankWith(3, and(isObjectControl, scopeEndsWith('safety'))),
+    renderer: ObjectRenderer
+  }
 ];
 
 interface Config {
@@ -146,55 +179,42 @@ const ConfigManagement: React.FC = () => {
     }
   };
 
-  const fetchConfigContent = async (configName: string) => {
-    try {
-      setIsLoading(true);
-      const response = await fetch(`${API_CONFIG.CONFIG_SERVICE}/config/${configName}`);
-      if (!response.ok) {
-        throw new Error(`Failed to fetch config content: ${response.status}`);
-      }
-      const config: Config = await response.json();
-      setOriginalFormat(config.format);
-      setConfigData(config.data);
-      setError('');
-    } catch (err) {
-      setError('Failed to fetch config content');
-      console.error('Config content fetch failed:', err);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const fetchSchemaContent = async (schemaName: string) => {
-    try {
-      setIsLoading(true);
-      const response = await fetch(`${API_CONFIG.CONFIG_SERVICE}/config/schema/${schemaName}`);
-      if (!response.ok) {
-        throw new Error(`Failed to fetch schema content: ${response.status}`);
-      }
-      const schema: Schema = await response.json();
-      setSchemaData(schema.schema_definition);
-      setError('');
-    } catch (err) {
-      setError('Failed to fetch schema content');
-      console.error('Schema content fetch failed:', err);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
   const handleConfigSelect = async (configName: string) => {
+    console.log('Selected config:', configName);
     setSelectedConfig(configName);
     setIsLoading(true);
+    setConfigData(null);
+    setSchemaData(null);
+    
     try {
-      await Promise.all([
-        fetchConfigContent(configName),
-        fetchSchemaContent(configName)
+      const [configResponse, schemaResponse] = await Promise.all([
+        fetch(`${API_CONFIG.CONFIG_SERVICE}/config/${configName}`),
+        fetch(`${API_CONFIG.CONFIG_SERVICE}/config/schema/${configName}`)
       ]);
+
+      if (!configResponse.ok) {
+        throw new Error(`Failed to fetch config content: ${configResponse.status}`);
+      }
+      if (!schemaResponse.ok) {
+        throw new Error(`Failed to fetch schema content: ${schemaResponse.status}`);
+      }
+
+      const config: Config = await configResponse.json();
+      const schema: Schema = await schemaResponse.json();
+
+      console.log('Loaded config:', config);
+      console.log('Loaded schema:', schema);
+
+      setOriginalFormat(config.format);
+      setConfigData(config.data);
+      setSchemaData(schema.schema_definition);
       setSelectedSchema(configName);
+      setError('');
     } catch (err) {
-      setError('Failed to load configuration and schema');
       console.error('Config selection failed:', err);
+      setError('Failed to load configuration and schema');
+      setConfigData(null);
+      setSchemaData(null);
     } finally {
       setIsLoading(false);
     }
@@ -202,7 +222,6 @@ const ConfigManagement: React.FC = () => {
 
   const handleSchemaSelect = async (schemaName: string) => {
     setSelectedSchema(schemaName);
-    await fetchSchemaContent(schemaName);
   };
 
   const handleSave = async () => {
@@ -230,7 +249,15 @@ const ConfigManagement: React.FC = () => {
       setSuccessMessage('Config saved successfully');
       setTimeout(() => setSuccessMessage(''), 3000);
       
-      await fetchConfigContent(selectedConfig);
+      // Reload the config after saving
+      const configResponse = await fetch(`${API_CONFIG.CONFIG_SERVICE}/config/${selectedConfig}`);
+      if (!configResponse.ok) {
+        throw new Error(`Failed to reload config: ${configResponse.status}`);
+      }
+      const config: Config = await configResponse.json();
+      setOriginalFormat(config.format);
+      setConfigData(config.data);
+      
     } catch (err) {
       setError('Failed to save config');
       console.error('Save failed:', err);
@@ -240,6 +267,7 @@ const ConfigManagement: React.FC = () => {
   };
 
   const handleFormChange = ({ data }: any) => {
+    console.log('Form data changed:', data);
     setConfigData(data);
   };
 
@@ -345,13 +373,29 @@ const ConfigManagement: React.FC = () => {
                     Save Changes
                   </Button>
                 </Box>
-                <JsonForms
-                  schema={schemaData}
-                  data={configData}
-                  renderers={renderers}
-                  cells={materialCells}
-                  onChange={handleFormChange}
-                />
+                {configData && schemaData ? (
+                  <>
+                    {console.log('Rendering form with:', { configData, schemaData })}
+                    <JsonForms
+                      schema={schemaData}
+                      data={configData}
+                      renderers={renderers}
+                      cells={materialCells}
+                      onChange={handleFormChange}
+                      config={{
+                        showUnfocusedDescription: true,
+                        hideRequiredAsterisk: false,
+                        restrict: true,
+                        trim: false,
+                        preserveOptionalEmptyStrings: true
+                      }}
+                    />
+                  </>
+                ) : (
+                  <Typography color="text.secondary">
+                    Loading configuration data...
+                  </Typography>
+                )}
               </>
             ) : (
               <Box sx={{ 
