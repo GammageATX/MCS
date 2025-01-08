@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Grid, Paper, Typography, Button, Box, Chip } from '@mui/material';
 import { useWebSocket } from '../context/WebSocketContext';
+import { API_CONFIG } from '../config/api';
 
 interface SequenceStep {
   id: string;
@@ -28,7 +29,7 @@ export default function SequenceExecution() {
   useEffect(() => {
     const fetchSequences = async () => {
       try {
-        const response = await fetch('/process/sequences');
+        const response = await fetch(`${API_CONFIG.PROCESS_SERVICE}/process/sequences`);
         if (!response.ok) {
           throw new Error(`Failed to fetch sequences: ${response.status}`);
         }
@@ -48,14 +49,14 @@ export default function SequenceExecution() {
 
   const handleStartSequence = async (sequenceId: string) => {
     try {
-      const response = await fetch(`/process/sequences/${sequenceId}/start`, {
+      const response = await fetch(`${API_CONFIG.PROCESS_SERVICE}/process/sequences/${sequenceId}/start`, {
         method: 'POST'
       });
       if (!response.ok) {
         throw new Error(`Failed to start sequence: ${response.status}`);
       }
       // Refresh sequences after starting
-      const updatedResponse = await fetch('/process/sequences');
+      const updatedResponse = await fetch(`${API_CONFIG.PROCESS_SERVICE}/process/sequences`);
       if (updatedResponse.ok) {
         const data = await updatedResponse.json();
         setSequences(data);
@@ -68,14 +69,14 @@ export default function SequenceExecution() {
 
   const handleStopSequence = async (sequenceId: string) => {
     try {
-      const response = await fetch(`/process/sequences/${sequenceId}/stop`, {
+      const response = await fetch(`${API_CONFIG.PROCESS_SERVICE}/process/sequences/${sequenceId}/stop`, {
         method: 'POST'
       });
       if (!response.ok) {
         throw new Error(`Failed to stop sequence: ${response.status}`);
       }
       // Refresh sequences after stopping
-      const updatedResponse = await fetch('/process/sequences');
+      const updatedResponse = await fetch(`${API_CONFIG.PROCESS_SERVICE}/process/sequences`);
       if (updatedResponse.ok) {
         const data = await updatedResponse.json();
         setSequences(data);

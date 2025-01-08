@@ -2,88 +2,99 @@
   "$schema": "http://json-schema.org/draft-07/schema#",
   "type": "object",
   "required": ["version", "service", "components"],
+  "description": "Configuration service configuration schema",
   "properties": {
     "version": {
       "type": "string",
       "pattern": "^\\d+\\.\\d+\\.\\d+$",
-      "description": "Service version"
+      "description": "Configuration service version"
     },
     "service": {
       "type": "object",
       "required": ["name", "host", "port", "log_level"],
+      "description": "Service configuration settings",
       "properties": {
         "name": {
           "type": "string",
-          "description": "Service name"
+          "enum": ["config"],
+          "description": "Service name identifier"
         },
         "host": {
           "type": "string",
-          "description": "Service host"
+          "description": "Service host address (e.g. '0.0.0.0' for all interfaces)"
         },
         "port": {
           "type": "integer",
           "minimum": 1,
           "maximum": 65535,
-          "description": "Service port"
+          "description": "Service port number (1-65535)"
         },
         "log_level": {
           "type": "string",
           "enum": ["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"],
-          "description": "Service log level"
+          "description": "Service logging level"
         }
       }
     },
     "components": {
       "type": "object",
       "required": ["file", "format", "schema"],
+      "description": "Configuration service component settings",
       "properties": {
         "file": {
           "type": "object",
           "required": ["version", "base_path"],
+          "description": "File management component settings",
           "properties": {
             "version": {
               "type": "string",
               "pattern": "^\\d+\\.\\d+\\.\\d+$",
-              "description": "File service version"
+              "description": "File service component version"
             },
             "base_path": {
               "type": "string",
-              "description": "Base path for configuration files"
+              "pattern": "^[\\w./\\\\-]+$",
+              "description": "Base directory path for configuration files (relative to project root)"
             }
           }
         },
         "format": {
           "type": "object",
           "required": ["version", "enabled_formats"],
+          "description": "Format handling component settings",
           "properties": {
             "version": {
               "type": "string",
               "pattern": "^\\d+\\.\\d+\\.\\d+$",
-              "description": "Format service version"
+              "description": "Format service component version"
             },
             "enabled_formats": {
               "type": "array",
               "items": {
                 "type": "string",
-                "enum": ["yaml", "json"]
+                "enum": ["yaml", "json"],
+                "description": "Supported configuration file format"
               },
               "minItems": 1,
-              "description": "List of enabled configuration formats"
+              "uniqueItems": true,
+              "description": "List of enabled configuration file formats"
             }
           }
         },
         "schema": {
           "type": "object",
           "required": ["version", "schema_path"],
+          "description": "Schema validation component settings",
           "properties": {
             "version": {
               "type": "string",
               "pattern": "^\\d+\\.\\d+\\.\\d+$",
-              "description": "Schema service version"
+              "description": "Schema service component version"
             },
             "schema_path": {
               "type": "string",
-              "description": "Path to schema directory"
+              "pattern": "^[\\w./\\\\-]+$",
+              "description": "Directory path containing JSON schema files (relative to project root)"
             }
           }
         }

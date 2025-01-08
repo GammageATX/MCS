@@ -63,7 +63,7 @@ async def lifespan(app: FastAPI):
         logger.info("Starting config service...")
         
         # Get service from app state
-        service = app.state.service
+        service = app.state.config_service
         
         # Initialize and start service
         await service.initialize()
@@ -74,8 +74,8 @@ async def lifespan(app: FastAPI):
         yield  # Server is running
         
         # Shutdown
-        if hasattr(app.state, "service") and app.state.service.is_running:
-            await app.state.service.stop()
+        if hasattr(app.state, "config_service") and app.state.config_service.is_running:
+            await app.state.config_service.stop()
             logger.info("Config service stopped")
             
     except Exception as e:
@@ -84,9 +84,9 @@ async def lifespan(app: FastAPI):
         # The health check will show which components failed
         yield
         # Still try to stop service if it exists
-        if hasattr(app.state, "service"):
+        if hasattr(app.state, "config_service"):
             try:
-                await app.state.service.stop()
+                await app.state.config_service.stop()
             except Exception as stop_error:
                 logger.error(f"Failed to stop config service: {stop_error}")
 
@@ -125,19 +125,19 @@ def create_config_service() -> FastAPI:
             content={"detail": exc.errors()},
         )
     
-    # Create service and router
+    # Create service and store in app state FIRST
     service = ConfigService(version=config["version"])
-    app.include_router(config_router)
+    app.state.config_service = service
     
-    # Store service in app state
-    app.state.service = service
+    # THEN include router so it has access to the service
+    app.include_router(config_router)
     
     @app.get("/health", response_model=ServiceHealth)
     async def health() -> ServiceHealth:
         """Get service health status."""
         try:
             # Check if service exists and is initialized
-            if not hasattr(app.state, "service"):
+            if not hasattr(app.state, "config_service"):
                 return ServiceHealth(
                     status="starting",
                     service="config",
@@ -149,7 +149,7 @@ def create_config_service() -> FastAPI:
                     components={}
                 )
             
-            return await app.state.service.health()
+            return await app.state.config_service.health()
             
         except Exception as e:
             error_msg = f"Health check failed: {str(e)}"

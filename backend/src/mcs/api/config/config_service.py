@@ -493,7 +493,7 @@ class ConfigService:
                 message=error_msg
             )
 
-    async def update_config(self, name: str, data: Dict[str, Any], format: str = "yaml") -> None:
+    async def update_config(self, name: str, data: Dict[str, Any], format: str = "yaml", preserve_format: bool = True) -> None:
         """Update configuration by name."""
         if not self._file or not self._format:
             raise create_error(
@@ -510,11 +510,17 @@ class ConfigService:
         try:
             # Write config to file
             file_path = os.path.join(self._file._base_path, f"{name}.{format}")
-            with open(file_path, 'w') as f:
-                if format == 'json':
-                    json.dump(data, f, indent=2)
-                elif format == 'yaml':
-                    yaml.safe_dump(data, f, default_flow_style=False)
+            
+            if format == 'yaml':
+                # Use format service for YAML with preservation
+                content = await self._format.save_yaml(data, preserve_format=preserve_format)
+                with open(file_path, 'w') as f:
+                    f.write(content)
+            else:
+                # Use format service for JSON
+                content = await self._format.save_json(data, preserve_format=preserve_format)
+                with open(file_path, 'w') as f:
+                    f.write(content)
             
         except Exception as e:
             error_msg = f"Failed to update config {name}: {str(e)}"

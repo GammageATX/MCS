@@ -1,7 +1,9 @@
 """Format service implementation."""
 
-from typing import List
 from datetime import datetime
+from typing import Dict, Any, List
+import yaml
+import json
 from fastapi import status
 from loguru import logger
 
@@ -28,6 +30,85 @@ class FormatService:
         self._init_enabled_formats = enabled_formats
         
         logger.info(f"{self.service_name} service initialized")
+
+    async def save_yaml(self, data: Dict[str, Any], preserve_format: bool = False) -> str:
+        """Save data as YAML with numeric and string format preservation."""
+        try:
+            from ruamel.yaml import YAML, scalarstring
+            yaml = YAML()
+            yaml.default_flow_style = False
+            yaml.indent(mapping=2, sequence=2, offset=0)  # Use 2 spaces everywhere
+            yaml.preserve_quotes = True
+            yaml.allow_unicode = True
+            yaml.width = 4096  # Prevent line wrapping
+
+            def preserve_format(d):
+                if isinstance(d, dict):
+                    return {k: preserve_format(v) for k, v in d.items()}
+                elif isinstance(d, list):
+                    return [preserve_format(v) for v in d]
+                elif isinstance(d, bool):
+                    return d
+                elif isinstance(d, (int, float)):
+                    # Preserve decimal points for floats and whole numbers
+                    s = f"{d:.1f}" if isinstance(d, float) or str(d).endswith(".0") else str(d)
+                    return scalarstring.DoubleQuotedScalarString(s) if "." in s else d
+                elif isinstance(d, str):
+                    # Preserve quotes on strings
+                    return scalarstring.DoubleQuotedScalarString(d)
+                return d
+
+            # Process data to preserve formats
+            processed_data = preserve_format(data)
+            
+            # Convert to string
+            import io
+            string_stream = io.StringIO()
+            yaml.dump(processed_data, string_stream)
+            return string_stream.getvalue()
+            
+        except Exception as e:
+            logger.error(f"Failed to save YAML: {e}")
+            raise create_error(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                message=f"Failed to save YAML: {str(e)}"
+            )
+
+    async def load_yaml(self, content: str) -> Dict[str, Any]:
+        """Load YAML content."""
+        try:
+            return yaml.safe_load(content)
+        except Exception as e:
+            logger.error(f"Failed to load YAML: {e}")
+            raise create_error(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                message=f"Failed to load YAML: {str(e)}"
+            )
+
+    async def save_json(self, data: Dict[str, Any], preserve_format: bool = False) -> str:
+        """Save data as JSON with optional format preservation."""
+        try:
+            if preserve_format:
+                return json.dumps(data, indent=2, sort_keys=False)
+            else:
+                return json.dumps(data)
+        except Exception as e:
+            logger.error(f"Failed to save JSON: {e}")
+            raise create_error(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                message=f"Failed to save JSON: {str(e)}"
+            )
+
+    async def load_json(self, content: str) -> Dict[str, Any]:
+        """Load JSON content."""
+        try:
+            return json.loads(content)
+        except Exception as e:
+            logger.error(f"Failed to load JSON: {e}")
+            raise create_error(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                message=f"Failed to load JSON: {str(e)}"
+            )
 
     @property
     def service_name(self) -> str:

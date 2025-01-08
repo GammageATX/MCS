@@ -141,6 +141,243 @@
           }
         }
       }
+    },
+    "system_defaults": {
+      "type": "object",
+      "required": ["safety"],
+      "properties": {
+        "safety": {
+          "type": "object",
+          "required": ["safe_z"],
+          "properties": {
+            "safe_z": {
+              "type": "number",
+              "description": "Safe Z height for motion (mm)"
+            }
+          }
+        }
+      }
+    },
+    "internal_states": {
+      "type": "object",
+      "required": ["rules"],
+      "properties": {
+        "rules": {
+          "type": "object",
+          "required": [
+            "powder_feed_on",
+            "deagglomerator_on",
+            "flows_stable",
+            "pressures_stable",
+            "at_valid_position",
+            "at_trough_position",
+            "motion_enabled"
+          ],
+          "properties": {
+            "powder_feed_on": {
+              "type": "object",
+              "required": ["type", "tag", "operator", "value", "description"],
+              "properties": {
+                "type": {
+                  "type": "string",
+                  "enum": ["comparison"]
+                },
+                "tag": {
+                  "type": "string"
+                },
+                "operator": {
+                  "type": "string",
+                  "enum": ["equal"]
+                },
+                "value": {
+                  "type": "boolean"
+                },
+                "description": {
+                  "type": "string"
+                }
+              }
+            },
+            "deagglomerator_on": {
+              "type": "object",
+              "required": ["type", "tag", "operator", "value", "description"],
+              "properties": {
+                "type": {
+                  "type": "string",
+                  "enum": ["comparison"]
+                },
+                "tag": {
+                  "type": "string"
+                },
+                "operator": {
+                  "type": "string",
+                  "enum": ["less_than"]
+                },
+                "value": {
+                  "type": "number"
+                },
+                "description": {
+                  "type": "string"
+                }
+              }
+            },
+            "flows_stable": {
+              "type": "object",
+              "required": ["type", "description", "conditions"],
+              "properties": {
+                "type": {
+                  "type": "string",
+                  "enum": ["multi_condition"]
+                },
+                "description": {
+                  "type": "string"
+                },
+                "conditions": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "required": ["tag", "operator", "value"],
+                    "properties": {
+                      "tag": {
+                        "type": "string"
+                      },
+                      "operator": {
+                        "type": "string",
+                        "enum": ["greater_than"]
+                      },
+                      "value": {
+                        "type": "number"
+                      }
+                    }
+                  },
+                  "minItems": 2
+                }
+              }
+            },
+            "pressures_stable": {
+              "type": "object",
+              "required": ["type", "description", "conditions"],
+              "properties": {
+                "type": {
+                  "type": "string",
+                  "enum": ["multi_condition"]
+                },
+                "description": {
+                  "type": "string"
+                },
+                "conditions": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "required": ["tag", "operator", "value"],
+                    "properties": {
+                      "tag": {
+                        "type": "string"
+                      },
+                      "operator": {
+                        "type": "string",
+                        "enum": ["less_than", "greater_than"]
+                      },
+                      "value": {
+                        "type": "number"
+                      }
+                    }
+                  },
+                  "minItems": 2
+                }
+              }
+            },
+            "at_valid_position": {
+              "type": "object",
+              "required": ["type", "description", "conditions"],
+              "properties": {
+                "type": {
+                  "type": "string",
+                  "enum": ["multi_condition"]
+                },
+                "description": {
+                  "type": "string"
+                },
+                "conditions": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "required": ["tag", "operator", "value"],
+                    "properties": {
+                      "tag": {
+                        "type": "string"
+                      },
+                      "operator": {
+                        "type": "string",
+                        "enum": ["less_than_equal", "equal"]
+                      },
+                      "value": {
+                        "type": ["number", "string"]
+                      }
+                    }
+                  },
+                  "minItems": 2
+                }
+              }
+            },
+            "at_trough_position": {
+              "type": "object",
+              "required": ["type", "description", "conditions"],
+              "properties": {
+                "type": {
+                  "type": "string",
+                  "enum": ["multi_condition"]
+                },
+                "description": {
+                  "type": "string"
+                },
+                "conditions": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "required": ["tag", "operator", "value"],
+                    "properties": {
+                      "tag": {
+                        "type": "string"
+                      },
+                      "operator": {
+                        "type": "string",
+                        "enum": ["equal"]
+                      },
+                      "value": {
+                        "type": "number"
+                      }
+                    }
+                  },
+                  "minItems": 3
+                }
+              }
+            },
+            "motion_enabled": {
+              "type": "object",
+              "required": ["type", "description", "tag", "operator", "value"],
+              "properties": {
+                "type": {
+                  "type": "string",
+                  "enum": ["comparison"]
+                },
+                "description": {
+                  "type": "string"
+                },
+                "tag": {
+                  "type": "string"
+                },
+                "operator": {
+                  "type": "string",
+                  "enum": ["equal"]
+                },
+                "value": {
+                  "type": "boolean"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   }
 } 

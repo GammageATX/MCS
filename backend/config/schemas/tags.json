@@ -9,6 +9,16 @@
     },
     "tag_groups": {
       "type": "object",
+      "required": [
+        "gas_control",
+        "feeders",
+        "deagglomerators",
+        "vacuum",
+        "nozzle",
+        "motion",
+        "safety",
+        "pressure"
+      ],
       "additionalProperties": {
         "type": "object",
         "additionalProperties": {
@@ -93,18 +103,7 @@
             }
           }
         }
-      },
-      "required": [
-        "gas_control",
-        "feeders",
-        "deagglomerators",
-        "vacuum",
-        "nozzle",
-        "motion",
-        "safety",
-        "status",
-        "pressure"
-      ]
+      }
     }
   }
 } 

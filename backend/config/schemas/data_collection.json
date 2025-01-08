@@ -1,70 +1,115 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
   "type": "object",
-  "required": ["service", "database"],
+  "required": ["version", "service", "components"],
+  "description": "Data Collection service configuration schema",
   "properties": {
+    "version": {
+      "type": "string",
+      "pattern": "^\\d+\\.\\d+\\.\\d+$",
+      "description": "Data Collection service version"
+    },
     "service": {
       "type": "object",
-      "required": ["version", "host", "port", "history_retention_days"],
+      "required": ["name", "host", "port", "log_level", "history_retention_days"],
+      "description": "Service configuration settings",
       "properties": {
-        "version": {
+        "name": {
           "type": "string",
-          "pattern": "^\\d+\\.\\d+\\.\\d+$"
+          "enum": ["data_collection"],
+          "description": "Service name identifier"
         },
         "host": {
-          "type": "string"
+          "type": "string",
+          "description": "Service host address (e.g. '0.0.0.0' for all interfaces)"
         },
         "port": {
           "type": "integer",
           "minimum": 1,
-          "maximum": 65535
+          "maximum": 65535,
+          "description": "Service port number (1-65535)"
+        },
+        "log_level": {
+          "type": "string",
+          "enum": ["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"],
+          "description": "Service logging level"
         },
         "history_retention_days": {
           "type": "integer",
-          "minimum": 1
+          "minimum": 1,
+          "description": "Number of days to retain historical data"
         }
       }
     },
-    "database": {
+    "components": {
       "type": "object",
-      "required": ["host", "port", "user", "password", "database", "pool"],
+      "required": ["database"],
+      "description": "Data Collection service component settings",
       "properties": {
-        "host": {
-          "type": "string"
-        },
-        "port": {
-          "type": "integer",
-          "minimum": 1,
-          "maximum": 65535
-        },
-        "user": {
-          "type": "string"
-        },
-        "password": {
-          "type": "string"
-        },
         "database": {
-          "type": "string"
-        },
-        "pool": {
           "type": "object",
-          "required": ["min_size", "max_size", "command_timeout"],
+          "required": ["version", "host", "port", "user", "password", "database", "pool"],
+          "description": "Database connection settings",
           "properties": {
-            "min_size": {
-              "type": "integer",
-              "minimum": 1
+            "version": {
+              "type": "string",
+              "pattern": "^\\d+\\.\\d+\\.\\d+$",
+              "description": "Database component version"
             },
-            "max_size": {
-              "type": "integer",
-              "minimum": 1
+            "host": {
+              "type": "string",
+              "description": "Database server hostname"
             },
-            "command_timeout": {
-              "type": "number",
-              "minimum": 0
+            "port": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 65535,
+              "description": "Database server port"
+            },
+            "user": {
+              "type": "string",
+              "minLength": 1,
+              "description": "Database user name"
+            },
+            "password": {
+              "type": "string",
+              "minLength": 1,
+              "description": "Database user password"
+            },
+            "database": {
+              "type": "string",
+              "minLength": 1,
+              "description": "Database name"
+            },
+            "pool": {
+              "type": "object",
+              "required": ["min_size", "max_size", "command_timeout"],
+              "description": "Database connection pool settings",
+              "properties": {
+                "min_size": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "description": "Minimum number of connections in the pool"
+                },
+                "max_size": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "description": "Maximum number of connections in the pool"
+                },
+                "command_timeout": {
+                  "type": "number",
+                  "minimum": 0,
+                  "description": "Database command timeout in seconds"
+                }
+              },
+              "additionalProperties": false
             }
-          }
+          },
+          "additionalProperties": false
         }
-      }
+      },
+      "additionalProperties": false
     }
-  }
+  },
+  "additionalProperties": false
 } 

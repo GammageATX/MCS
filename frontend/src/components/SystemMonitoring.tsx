@@ -1,6 +1,8 @@
 import React, { useEffect, useState } from 'react';
-import { Grid, Paper, Typography, Chip, Box } from '@mui/material';
+import { Grid, Paper, Typography, Chip, Box, Button, IconButton, Divider } from '@mui/material';
+import RefreshIcon from '@mui/icons-material/Refresh';
 import { useWebSocket } from '../context/WebSocketContext';
+import { API_CONFIG } from '../config/api';
 
 interface ComponentHealth {
   status: 'ok' | 'error';
@@ -11,8 +13,9 @@ interface ServiceHealth {
   status: 'ok' | 'error';
   service_name: string;
   version: string;
-  running: boolean;
+  port: number;
   uptime: number;
+  mode: string;
   error_message?: string;
   components: {
     [key: string]: ComponentHealth;
@@ -21,91 +24,196 @@ interface ServiceHealth {
 
 export default function SystemMonitoring() {
   const { connected } = useWebSocket();
-  const [health, setHealth] = useState<ServiceHealth | null>(null);
+  const [services, setServices] = useState<{ [key: string]: ServiceHealth }>({});
+  const [lastUpdated, setLastUpdated] = useState<Date>(new Date());
+
+  const fetchHealth = async () => {
+    try {
+      const responses = await Promise.all([
+        fetch(`${API_CONFIG.UI_SERVICE}/health`),
+        fetch(`${API_CONFIG.CONFIG_SERVICE}/health`),
+        fetch(`${API_CONFIG.COMMUNICATION_SERVICE}/health`),
+        fetch(`${API_CONFIG.PROCESS_SERVICE}/health`),
+        fetch(`${API_CONFIG.DATA_COLLECTION_SERVICE}/health`)
+      ]);
+
+      const results = await Promise.all(responses.map(r => r.json()));
+      
+      const servicesMap = {
+        'UI Service': results[0],
+        'Config Service': results[1],
+        'Communication Service': results[2],
+        'Process Service': results[3],
+        'Data Collection Service': results[4]
+      };
+
+      setServices(servicesMap);
+      setLastUpdated(new Date());
+    } catch (err) {
+      console.error('Failed to fetch health status:', err);
+    }
+  };
 
   useEffect(() => {
-    const fetchHealth = async () => {
-      try {
-        const response = await fetch('/health');
-        if (!response.ok) {
-          throw new Error(`Health check failed: ${response.status}`);
-        }
-        const data = await response.json();
-        setHealth(data);
-      } catch (err) {
-        console.error('Failed to fetch health status:', err);
-      }
-    };
-
-    // Initial fetch
     fetchHealth();
-
-    // Refresh every 30 seconds
     const interval = setInterval(fetchHealth, 30000);
-
     return () => clearInterval(interval);
   }, []);
 
-  return (
-    <Grid container spacing={2}>
-      <Grid item xs={12}>
-        <Paper sx={{ p: 2 }}>
-          <Typography variant="h6" gutterBottom>System Status</Typography>
-          
-          <Box display="flex" alignItems="center" gap={1} mb={2}>
-            <Typography>Connection Status:</Typography>
-            <Chip 
-              label={connected ? 'Connected' : 'Disconnected'}
-              color={connected ? 'success' : 'error'}
-              size="small"
-            />
-          </Box>
+  const formatUptime = (uptime: number) => {
+    const hours = Math.floor(uptime / 3600);
+    const minutes = Math.floor((uptime % 3600) / 60);
+    return `${hours}h ${minutes}m`;
+  };
 
-          {health && (
-            <>
-              <Box display="flex" alignItems="center" gap={1} mb={1}>
-                <Typography>Service Status:</Typography>
+  return (
+    <Box sx={{ p: 3, maxWidth: 1400, margin: '0 auto' }}>
+      {/* Header */}
+      <Box sx={{ 
+        display: 'flex', 
+        justifyContent: 'space-between', 
+        alignItems: 'center', 
+        mb: 4,
+        borderBottom: '1px solid rgba(0, 0, 0, 0.12)',
+        pb: 2
+      }}>
+        <Box>
+          <Typography variant="h4" sx={{ fontWeight: 500, color: '#1a237e' }}>
+            System Status
+          </Typography>
+          <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
+            Last updated: {lastUpdated.toLocaleTimeString()}
+          </Typography>
+        </Box>
+        <IconButton 
+          onClick={fetchHealth}
+          sx={{ 
+            backgroundColor: '#1976d2',
+            color: 'white',
+            '&:hover': {
+              backgroundColor: '#1565c0'
+            }
+          }}
+        >
+          <RefreshIcon />
+        </IconButton>
+      </Box>
+
+      {/* Services Grid */}
+      <Grid container spacing={3}>
+        {Object.entries(services).map(([name, service]) => (
+          <Grid item xs={12} md={6} key={name}>
+            <Paper 
+              elevation={0}
+              sx={{ 
+                p: 3, 
+                borderRadius: 2,
+                border: '1px solid rgba(0, 0, 0, 0.12)',
+                transition: 'transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out',
+                '&:hover': {
+                  transform: 'translateY(-2px)',
+                  boxShadow: '0 4px 20px rgba(0,0,0,0.1)'
+                }
+              }}
+            >
+              {/* Service Header */}
+              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+                <Typography variant="h6" sx={{ fontWeight: 500 }}>
+                  {name}
+                </Typography>
                 <Chip 
-                  label={health.status}
-                  color={health.status === 'ok' ? 'success' : 'error'}
+                  label={service.status.toUpperCase()}
+                  color={service.status === 'ok' ? 'success' : 'error'}
                   size="small"
+                  sx={{ 
+                    fontWeight: 500,
+                    borderRadius: 1
+                  }}
                 />
               </Box>
 
-              <Typography variant="body2">
-                Service: {health.service_name} v{health.version}
-              </Typography>
-              
-              <Typography variant="body2">
-                Uptime: {Math.floor(health.uptime / 3600)}h {Math.floor((health.uptime % 3600) / 60)}m
-              </Typography>
-
-              {health.error_message && (
-                <Typography color="error" variant="body2">
-                  Error: {health.error_message}
-                </Typography>
-              )}
-
-              <Typography variant="subtitle1" sx={{ mt: 2, mb: 1 }}>
-                Component Status
-              </Typography>
-
-              <Grid container spacing={1}>
-                {Object.entries(health.components).map(([name, status]) => (
-                  <Grid item key={name}>
-                    <Chip
-                      label={`${name}: ${status.status}`}
-                      color={status.status === 'ok' ? 'success' : 'error'}
-                      size="small"
-                      title={status.error}
-                    />
-                  </Grid>
-                ))}
+              {/* Service Info */}
+              <Grid container spacing={2} sx={{ mb: 2 }}>
+                <Grid item xs={6}>
+                  <Typography variant="body2" color="text.secondary">Version</Typography>
+                  <Typography variant="body1" sx={{ fontWeight: 500 }}>{service.version}</Typography>
+                </Grid>
+                <Grid item xs={6}>
+                  <Typography variant="body2" color="text.secondary">Port</Typography>
+                  <Typography variant="body1" sx={{ fontWeight: 500 }}>{service.port}</Typography>
+                </Grid>
+                <Grid item xs={6}>
+                  <Typography variant="body2" color="text.secondary">Uptime</Typography>
+                  <Typography variant="body1" sx={{ fontWeight: 500 }}>{formatUptime(service.uptime)}</Typography>
+                </Grid>
+                <Grid item xs={6}>
+                  <Typography variant="body2" color="text.secondary">Mode</Typography>
+                  <Typography variant="body1" sx={{ fontWeight: 500, textTransform: 'capitalize' }}>
+                    {service.mode || 'normal'}
+                  </Typography>
+                </Grid>
               </Grid>
-            </>
-          )}
-        </Paper>
+
+              {/* Components */}
+              {service.components && Object.keys(service.components).length > 0 && (
+                <>
+                  <Divider sx={{ my: 2 }} />
+                  <Typography variant="subtitle2" sx={{ mb: 1.5, color: 'text.secondary' }}>
+                    Components
+                  </Typography>
+                  <Grid container spacing={1}>
+                    {Object.entries(service.components).map(([componentName, componentStatus]) => (
+                      <Grid item xs={12} sm={6} key={componentName}>
+                        <Box sx={{ 
+                          display: 'flex', 
+                          alignItems: 'center', 
+                          gap: 1,
+                          backgroundColor: 'rgba(0, 0, 0, 0.02)',
+                          p: 1,
+                          borderRadius: 1
+                        }}>
+                          <Typography 
+                            variant="body2" 
+                            sx={{ 
+                              flex: 1,
+                              fontWeight: 500,
+                              textTransform: 'capitalize'
+                            }}
+                          >
+                            {componentName.replace(/_/g, ' ')}
+                          </Typography>
+                          <Chip
+                            label={componentStatus.status}
+                            color={componentStatus.status === 'ok' ? 'success' : 'error'}
+                            size="small"
+                            sx={{ 
+                              minWidth: 60,
+                              borderRadius: 1
+                            }}
+                          />
+                        </Box>
+                      </Grid>
+                    ))}
+                  </Grid>
+                </>
+              )}
+            </Paper>
+          </Grid>
+        ))}
       </Grid>
-    </Grid>
+
+      {/* Footer */}
+      <Typography 
+        variant="caption" 
+        sx={{ 
+          display: 'block', 
+          textAlign: 'center', 
+          mt: 4,
+          color: 'text.secondary'
+        }}
+      >
+        MicroColdSpray v1.0.0 • © 2025
+      </Typography>
+    </Box>
   );
 } 
