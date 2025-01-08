@@ -155,16 +155,58 @@ class UIApp:
 
     async def health(self) -> ServiceHealth:
         """Get application health status."""
-        return ServiceHealth(
-            status=HealthStatus.OK,
-            service=self.app_name,
-            version=self.version,
-            is_running=True,
-            uptime=self.uptime,
-            mode="normal",
-            error=None,
-            components={}
-        )
+        try:
+            if not self.is_running:
+                return ServiceHealth(
+                    status=HealthStatus.ERROR,
+                    service=self.app_name,
+                    version=self.version,
+                    is_running=False,
+                    uptime=0.0,
+                    error=f"{self.app_name} application not running",
+                    mode="normal",
+                    components={
+                        "main": ComponentHealth(
+                            status=HealthStatus.ERROR,
+                            error="Service unavailable"
+                        )
+                    }
+                )
+
+            return ServiceHealth(
+                status=HealthStatus.OK,
+                service=self.app_name,
+                version=self.version,
+                is_running=True,
+                uptime=self.uptime,
+                mode="normal",
+                error=None,
+                components={
+                    "main": ComponentHealth(
+                        status=HealthStatus.OK,
+                        error=None
+                    )
+                }
+            )
+
+        except Exception as e:
+            error_msg = f"Health check failed: {str(e)}"
+            logger.error(error_msg)
+            return ServiceHealth(
+                status=HealthStatus.ERROR,
+                service=self.app_name,
+                version=self.version,
+                is_running=False,
+                uptime=0.0,
+                error=error_msg,
+                mode="normal",
+                components={
+                    "main": ComponentHealth(
+                        status=HealthStatus.ERROR,
+                        error=error_msg
+                    )
+                }
+            )
 
 
 def cache(expire_seconds: int = 5):
@@ -411,16 +453,7 @@ def create_ui_app() -> FastAPI:
             ui_app: UIApp = Depends(lambda r: r.app.state.ui_app)
         ) -> ServiceHealth:
             """Get UI application health status."""
-            return ServiceHealth(
-                status=HealthStatus.OK,
-                service=ui_app.app_name,
-                version=ui_app.version,
-                is_running=ui_app.is_running,
-                uptime=ui_app.uptime,
-                mode="normal",
-                error=None,
-                components={"main": ComponentHealth(status=HealthStatus.OK)}
-            )
+            return await ui_app.health()
 
         @app.get(
             "/monitoring/services/status",
