@@ -22,7 +22,15 @@ DEFAULT_SCHEMA_PATH = os.path.join(DEFAULT_CONFIG_PATH, "schemas")
 
 
 class ConfigService:
-    """Configuration service."""
+    """Configuration service.
+    
+    Lifecycle:
+    1. __init__: Set basic properties
+    2. initialize: Create and initialize components
+    3. prepare: Handle operations requiring running dependencies
+    4. start: Begin service operations
+    5. shutdown: Clean shutdown of service
+    """
 
     def __init__(self, version: str = "1.0.0"):
         """Initialize service.
@@ -33,6 +41,8 @@ class ConfigService:
         self._service_name = "config"
         self._version = version
         self._is_running = False
+        self._is_initialized = False
+        self._is_prepared = False
         self._start_time = None
         
         # Initialize components to None
@@ -62,13 +72,29 @@ class ConfigService:
         return self._is_running
 
     @property
+    def is_initialized(self) -> bool:
+        """Get service initialization state."""
+        return self._is_initialized
+
+    @property
+    def is_prepared(self) -> bool:
+        """Get service preparation state."""
+        return self._is_prepared
+
+    @property
     def uptime(self) -> float:
         """Get service uptime."""
         return (datetime.now() - self._start_time).total_seconds() if self._start_time else 0.0
 
     async def initialize(self) -> None:
-        """Initialize service."""
+        """Initialize service and components."""
         try:
+            if self.is_running:
+                raise create_error(
+                    status_code=status.HTTP_409_CONFLICT,
+                    message=f"{self.service_name} service already running"
+                )
+
             logger.info(f"Initializing {self.service_name} service...")
             
             # Load config
@@ -113,10 +139,159 @@ class ConfigService:
             if self._schema:
                 await self._schema.initialize()
             
+            self._is_initialized = True
             logger.info(f"{self.service_name} service initialized")
             
         except Exception as e:
             error_msg = f"Failed to initialize {self.service_name} service: {str(e)}"
+            logger.error(error_msg)
+            raise create_error(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                message=error_msg
+            )
+
+    async def prepare(self) -> None:
+        """Prepare service after initialization.
+        
+        This step handles operations that require running dependencies.
+        """
+        try:
+            if not self.is_initialized:
+                raise create_error(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    message=f"{self.service_name} service not initialized"
+                )
+
+            if self.is_prepared:
+                raise create_error(
+                    status_code=status.HTTP_409_CONFLICT,
+                    message=f"{self.service_name} service already prepared"
+                )
+
+            # Attempt recovery of any failed configurations
+            await self._attempt_recovery()
+
+            # Prepare components in dependency order
+            for name, component in [
+                ("file", self._file),
+                ("format", self._format),
+                ("schema", self._schema)
+            ]:
+                if component and hasattr(component, "prepare"):
+                    logger.info(f"Preparing {name} component...")
+                    await component.prepare()
+                    logger.info(f"Prepared {name} component")
+
+            self._is_prepared = True
+            logger.info(f"{self.service_name} service prepared")
+
+        except Exception as e:
+            error_msg = f"Failed to prepare {self.service_name} service: {str(e)}"
+            logger.error(error_msg)
+            raise create_error(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                message=error_msg
+            )
+
+    async def start(self) -> None:
+        """Start service operations."""
+        try:
+            if self.is_running:
+                raise create_error(
+                    status_code=status.HTTP_409_CONFLICT,
+                    message=f"{self.service_name} service already running"
+                )
+
+            if not self.is_initialized:
+                raise create_error(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    message=f"{self.service_name} service not initialized"
+                )
+
+            if not self.is_prepared:
+                raise create_error(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    message=f"{self.service_name} service not prepared"
+                )
+            
+            # Start services in dependency order
+            if self._file:
+                await self._file.start()
+            if self._format:
+                await self._format.start()
+            if self._schema:
+                await self._schema.start()
+            
+            self._is_running = True
+            self._start_time = datetime.now()
+            logger.info(f"{self.service_name} service started successfully")
+            
+        except Exception as e:
+            self._is_running = False
+            self._start_time = None
+            error_msg = f"Failed to start {self.service_name} service: {str(e)}"
+            logger.error(error_msg)
+            raise create_error(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                message=error_msg
+            )
+
+    async def _stop(self) -> None:
+        """Internal method to stop service operations.
+        
+        This is called by shutdown() and should not be called directly.
+        """
+        try:
+            if not self.is_running:
+                return  # Already stopped
+
+            # Stop services in reverse dependency order
+            for name, component in reversed([
+                ("schema", self._schema),
+                ("format", self._format),
+                ("file", self._file)
+            ]):
+                try:
+                    if component and hasattr(component, "stop"):
+                        logger.info(f"Stopping {name} component...")
+                        await component.stop()
+                        logger.info(f"Stopped {name} component")
+                except Exception as e:
+                    logger.error(f"Error stopping {name} component: {str(e)}")
+
+            self._is_running = False
+            self._start_time = None
+            logger.info(f"{self.service_name} service stopped")
+            
+        except Exception as e:
+            error_msg = f"Error during {self.service_name} service stop: {str(e)}"
+            logger.error(error_msg)
+            raise create_error(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                message=error_msg
+            )
+
+    async def shutdown(self) -> None:
+        """Shutdown service and cleanup resources."""
+        try:
+            # Stop running operations
+            await self._stop()
+            
+            # Clear component references
+            self._schema = None
+            self._format = None
+            self._file = None
+            self._config = None
+            
+            # Reset service state
+            self._is_initialized = False
+            self._is_prepared = False
+            self._failed_configs = {}
+            
+            logger.info(f"{self.service_name} service shut down successfully")
+            
+        except Exception as e:
+            error_msg = f"Error during {self.service_name} service shutdown: {str(e)}"
             logger.error(error_msg)
             raise create_error(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
@@ -195,64 +370,6 @@ class ConfigService:
                     self._failed_configs.pop("schema", None)
                 except Exception as e:
                     logger.error(f"Failed to recover schema service: {e}")
-
-    async def start(self) -> None:
-        """Start service."""
-        try:
-            logger.info(f"Starting {self.service_name} service...")
-            
-            # Initialize first
-            await self.initialize()
-            
-            # Start services in order
-            if self._file:
-                await self._file.start()
-            if self._format:
-                await self._format.start()
-            if self._schema:
-                await self._schema.start()
-            
-            self._is_running = True
-            self._start_time = datetime.now()
-            logger.info(f"{self.service_name} service started successfully")
-            
-        except Exception as e:
-            self._is_running = False
-            error_msg = f"Failed to start {self.service_name} service: {str(e)}"
-            logger.error(error_msg)
-            raise create_error(
-                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                message=error_msg
-            )
-
-    async def stop(self) -> None:
-        """Stop service."""
-        try:
-            if not self.is_running:
-                raise create_error(
-                    status_code=status.HTTP_409_CONFLICT,
-                    message=f"{self.service_name} service not running"
-                )
-
-            # Stop services in reverse order
-            if self._schema:
-                await self._schema.stop()
-            if self._format:
-                await self._format.stop()
-            if self._file:
-                await self._file.stop()
-
-            self._is_running = False
-            self._start_time = None
-            logger.info(f"{self.service_name} service stopped")
-            
-        except Exception as e:
-            error_msg = f"Failed to stop {self.service_name} service: {str(e)}"
-            logger.error(error_msg)
-            raise create_error(
-                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                message=error_msg
-            )
 
     async def health(self) -> ServiceHealth:
         """Get service health status."""

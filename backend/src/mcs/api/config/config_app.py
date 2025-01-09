@@ -11,7 +11,7 @@ from fastapi.exceptions import RequestValidationError
 from loguru import logger
 
 from mcs.utils.errors import create_error  # noqa: F401 - used in error handlers and endpoints
-from mcs.utils.health import ServiceHealth
+from mcs.utils.health import ServiceHealth, HealthStatus
 from mcs.api.config.config_service import ConfigService
 from mcs.api.config.endpoints.config_endpoints import router as config_router
 
@@ -65,8 +65,13 @@ async def lifespan(app: FastAPI):
         # Get service from app state
         service = app.state.config_service
         
-        # Initialize and start service
+        # Initialize service
         await service.initialize()
+        
+        # Prepare service after initialization
+        await service.prepare()
+        
+        # Start service operations
         await service.start()
         
         logger.info("Config service started successfully")
@@ -74,21 +79,22 @@ async def lifespan(app: FastAPI):
         yield  # Server is running
         
         # Shutdown
-        if hasattr(app.state, "config_service") and app.state.config_service.is_running:
-            await app.state.config_service.stop()
+        if hasattr(app.state, "config_service"):
+            await app.state.config_service.shutdown()
             logger.info("Config service stopped")
             
     except Exception as e:
-        logger.error(f"Config service startup failed: {e}")
-        # Don't raise here - let the service start in degraded mode
-        # The health check will show which components failed
-        yield
-        # Still try to stop service if it exists
+        error_msg = f"Config service startup failed: {e}"
+        logger.error(error_msg)
         if hasattr(app.state, "config_service"):
             try:
-                await app.state.config_service.stop()
-            except Exception as stop_error:
-                logger.error(f"Failed to stop config service: {stop_error}")
+                await app.state.config_service.shutdown()
+            except Exception as shutdown_error:
+                logger.error(f"Failed to shutdown config service: {shutdown_error}")
+        raise create_error(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            message=error_msg
+        )
 
 
 def create_config_service() -> FastAPI:
@@ -139,13 +145,12 @@ def create_config_service() -> FastAPI:
             # Check if service exists and is initialized
             if not hasattr(app.state, "config_service"):
                 return ServiceHealth(
-                    status="starting",
+                    status=HealthStatus.STARTING,
                     service="config",
                     version=config["version"],
                     is_running=False,
                     uptime=0.0,
                     error="Service initializing",
-                    mode=config.get("mode", "normal"),
                     components={}
                 )
             
@@ -155,18 +160,68 @@ def create_config_service() -> FastAPI:
             error_msg = f"Health check failed: {str(e)}"
             logger.error(error_msg)
             return ServiceHealth(
-                status="error",
+                status=HealthStatus.ERROR,
                 service="config",
                 version=config["version"],
                 is_running=False,
                 uptime=0.0,
                 error=error_msg,
-                mode=config.get("mode", "normal"),
                 components={
-                    "file": {"status": "error", "error": error_msg},
-                    "format": {"status": "error", "error": error_msg},
-                    "schema": {"status": "error", "error": error_msg}
+                    "file": {"status": HealthStatus.ERROR, "error": error_msg},
+                    "format": {"status": HealthStatus.ERROR, "error": error_msg},
+                    "schema": {"status": HealthStatus.ERROR, "error": error_msg}
                 }
+            )
+
+    @app.post(
+        "/start",
+        responses={
+            status.HTTP_409_CONFLICT: {"description": "Service already running"},
+            status.HTTP_400_BAD_REQUEST: {"description": "Service not initialized"},
+            status.HTTP_503_SERVICE_UNAVAILABLE: {"description": "Service failed to start"}
+        }
+    )
+    async def start():
+        """Start service operations.
+        
+        If the service is not initialized, it will be initialized and prepared first.
+        """
+        try:
+            service = app.state.config_service
+            
+            # Initialize and prepare if needed
+            if not service.is_initialized:
+                logger.info("Service needs initialization, initializing first...")
+                await service.initialize()
+                await service.prepare()
+            
+            # Start service operations
+            await service.start()
+            return {"status": "started"}
+        except Exception as e:
+            logger.error(f"Failed to start service: {e}")
+            raise create_error(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                message=str(e)
+            )
+
+    @app.post(
+        "/stop",
+        responses={
+            status.HTTP_409_CONFLICT: {"description": "Service not running"},
+            status.HTTP_503_SERVICE_UNAVAILABLE: {"description": "Service failed to stop"}
+        }
+    )
+    async def stop():
+        """Stop service operations and cleanup resources."""
+        try:
+            await app.state.config_service.shutdown()
+            return {"status": "stopped"}
+        except Exception as e:
+            logger.error(f"Failed to stop service: {e}")
+            raise create_error(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                message=str(e)
             )
     
     return app
