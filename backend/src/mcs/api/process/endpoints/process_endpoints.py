@@ -37,33 +37,6 @@ async def health(
 
 
 @router.post(
-    "/initialize",
-    responses={
-        status.HTTP_409_CONFLICT: {"description": "Service already initialized"},
-        status.HTTP_503_SERVICE_UNAVAILABLE: {"description": "Service failed to initialize"}
-    }
-)
-async def initialize(
-    service: ProcessService = Depends(get_process_service)
-):
-    """Initialize service and prepare for operations."""
-    try:
-        # Initialize service
-        await service.initialize()
-        
-        # Prepare service after initialization
-        await service.prepare()
-        
-        return {"status": "initialized"}
-    except Exception as e:
-        logger.error(f"Failed to initialize service: {e}")
-        raise create_error(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            message=str(e)
-        )
-
-
-@router.post(
     "/start",
     responses={
         status.HTTP_409_CONFLICT: {"description": "Service already running"},

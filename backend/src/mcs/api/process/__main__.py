@@ -57,11 +57,10 @@ def load_config():
         if not os.path.exists(config_path):
             logger.warning(f"Config file not found at {config_path}, using defaults")
             return {
-                "version": "1.0.0",
                 "service": {
-                    "name": "process",
+                    "version": "1.0.0",
                     "host": "0.0.0.0",
-                    "port": 8004,
+                    "port": 8003,
                     "log_level": "INFO"
                 }
             }
@@ -89,7 +88,7 @@ def main():
         
         # Get config from environment or use defaults
         host = os.getenv("PROCESS_HOST", config["service"].get("host", "0.0.0.0"))
-        port = int(os.getenv("PROCESS_PORT", config["service"].get("port", 8004)))
+        port = int(os.getenv("PROCESS_PORT", config["service"].get("port", 8003)))
         
         # Log startup configuration
         logger.info(f"Host: {host}")

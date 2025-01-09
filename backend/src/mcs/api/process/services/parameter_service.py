@@ -7,6 +7,7 @@ import os
 from pathlib import Path
 from datetime import datetime
 from typing import List
+import uuid
 
 import yaml
 from fastapi import status
@@ -516,6 +517,302 @@ class ParameterService:
 
         except Exception as e:
             error_msg = f"Failed to get powder: {str(e)}"
+            logger.error(error_msg)
+            raise create_error(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                message=error_msg
+            )
+
+    async def create_nozzle(self, nozzle: Nozzle) -> str:
+        """Create new nozzle configuration.
+        
+        Args:
+            nozzle: Nozzle configuration
+            
+        Returns:
+            str: Nozzle ID
+            
+        Raises:
+            HTTPException: If service error
+        """
+        try:
+            if not self.is_running:
+                raise create_error(
+                    status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                    message=f"{self.service_name} service not running"
+                )
+
+            # Generate unique ID
+            nozzle_id = str(uuid.uuid4())
+            
+            # Create nozzle data structure
+            nozzle_data = {
+                "nozzle": {
+                    "name": nozzle.name,
+                    "manufacturer": nozzle.manufacturer,
+                    "type": nozzle.type,
+                    "description": nozzle.description,
+                    "created": datetime.now().isoformat()
+                }
+            }
+            
+            # Save to file
+            nozzle_dir = Path("backend/data/nozzles")
+            nozzle_dir.mkdir(parents=True, exist_ok=True)
+            
+            nozzle_path = nozzle_dir / f"{nozzle_id}.yaml"
+            with open(nozzle_path, "w") as f:
+                yaml.safe_dump(nozzle_data, f)
+            
+            # Add to memory
+            self._nozzles[nozzle_id] = nozzle_data
+            
+            logger.info(f"Created nozzle configuration: {nozzle_id}")
+            return nozzle_id
+
+        except Exception as e:
+            error_msg = f"Failed to create nozzle: {str(e)}"
+            logger.error(error_msg)
+            raise create_error(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                message=error_msg
+            )
+
+    async def update_nozzle(self, nozzle_id: str, nozzle: Nozzle) -> None:
+        """Update nozzle configuration.
+        
+        Args:
+            nozzle_id: Nozzle identifier
+            nozzle: Updated nozzle configuration
+            
+        Raises:
+            HTTPException: If nozzle not found or service error
+        """
+        try:
+            if not self.is_running:
+                raise create_error(
+                    status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                    message=f"{self.service_name} service not running"
+                )
+
+            if nozzle_id not in self._nozzles:
+                raise create_error(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    message=f"Nozzle {nozzle_id} not found"
+                )
+            
+            # Update nozzle data
+            nozzle_data = {
+                "nozzle": {
+                    "name": nozzle.name,
+                    "manufacturer": nozzle.manufacturer,
+                    "type": nozzle.type,
+                    "description": nozzle.description,
+                    "updated": datetime.now().isoformat()
+                }
+            }
+            
+            # Save to file
+            nozzle_path = Path(f"backend/data/nozzles/{nozzle_id}.yaml")
+            with open(nozzle_path, "w") as f:
+                yaml.safe_dump(nozzle_data, f)
+            
+            # Update memory
+            self._nozzles[nozzle_id] = nozzle_data
+            
+            logger.info(f"Updated nozzle configuration: {nozzle_id}")
+
+        except Exception as e:
+            error_msg = f"Failed to update nozzle: {str(e)}"
+            logger.error(error_msg)
+            raise create_error(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                message=error_msg
+            )
+
+    async def delete_nozzle(self, nozzle_id: str) -> None:
+        """Delete nozzle configuration.
+        
+        Args:
+            nozzle_id: Nozzle identifier
+            
+        Raises:
+            HTTPException: If nozzle not found or service error
+        """
+        try:
+            if not self.is_running:
+                raise create_error(
+                    status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                    message=f"{self.service_name} service not running"
+                )
+
+            if nozzle_id not in self._nozzles:
+                raise create_error(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    message=f"Nozzle {nozzle_id} not found"
+                )
+            
+            # Delete file
+            nozzle_path = Path(f"backend/data/nozzles/{nozzle_id}.yaml")
+            if nozzle_path.exists():
+                nozzle_path.unlink()
+            
+            # Remove from memory
+            del self._nozzles[nozzle_id]
+            
+            logger.info(f"Deleted nozzle configuration: {nozzle_id}")
+
+        except Exception as e:
+            error_msg = f"Failed to delete nozzle: {str(e)}"
+            logger.error(error_msg)
+            raise create_error(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                message=error_msg
+            )
+
+    async def create_powder(self, powder: Powder) -> str:
+        """Create new powder configuration.
+        
+        Args:
+            powder: Powder configuration
+            
+        Returns:
+            str: Powder ID
+            
+        Raises:
+            HTTPException: If service error
+        """
+        try:
+            if not self.is_running:
+                raise create_error(
+                    status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                    message=f"{self.service_name} service not running"
+                )
+
+            # Generate unique ID
+            powder_id = str(uuid.uuid4())
+            
+            # Create powder data structure
+            powder_data = {
+                "powder": {
+                    "name": powder.name,
+                    "type": powder.type,
+                    "size": powder.size,
+                    "manufacturer": powder.manufacturer,
+                    "lot": powder.lot,
+                    "created": datetime.now().isoformat()
+                }
+            }
+            
+            # Save to file
+            powder_dir = Path("backend/data/powders")
+            powder_dir.mkdir(parents=True, exist_ok=True)
+            
+            powder_path = powder_dir / f"{powder_id}.yaml"
+            with open(powder_path, "w") as f:
+                yaml.safe_dump(powder_data, f)
+            
+            # Add to memory
+            self._powders[powder_id] = powder_data
+            
+            logger.info(f"Created powder configuration: {powder_id}")
+            return powder_id
+
+        except Exception as e:
+            error_msg = f"Failed to create powder: {str(e)}"
+            logger.error(error_msg)
+            raise create_error(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                message=error_msg
+            )
+
+    async def update_powder(self, powder_id: str, powder: Powder) -> None:
+        """Update powder configuration.
+        
+        Args:
+            powder_id: Powder identifier
+            powder: Updated powder configuration
+            
+        Raises:
+            HTTPException: If powder not found or service error
+        """
+        try:
+            if not self.is_running:
+                raise create_error(
+                    status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                    message=f"{self.service_name} service not running"
+                )
+
+            if powder_id not in self._powders:
+                raise create_error(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    message=f"Powder {powder_id} not found"
+                )
+            
+            # Update powder data
+            powder_data = {
+                "powder": {
+                    "name": powder.name,
+                    "type": powder.type,
+                    "size": powder.size,
+                    "manufacturer": powder.manufacturer,
+                    "lot": powder.lot,
+                    "updated": datetime.now().isoformat()
+                }
+            }
+            
+            # Save to file
+            powder_path = Path(f"backend/data/powders/{powder_id}.yaml")
+            with open(powder_path, "w") as f:
+                yaml.safe_dump(powder_data, f)
+            
+            # Update memory
+            self._powders[powder_id] = powder_data
+            
+            logger.info(f"Updated powder configuration: {powder_id}")
+
+        except Exception as e:
+            error_msg = f"Failed to update powder: {str(e)}"
+            logger.error(error_msg)
+            raise create_error(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                message=error_msg
+            )
+
+    async def delete_powder(self, powder_id: str) -> None:
+        """Delete powder configuration.
+        
+        Args:
+            powder_id: Powder identifier
+            
+        Raises:
+            HTTPException: If powder not found or service error
+        """
+        try:
+            if not self.is_running:
+                raise create_error(
+                    status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                    message=f"{self.service_name} service not running"
+                )
+
+            if powder_id not in self._powders:
+                raise create_error(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    message=f"Powder {powder_id} not found"
+                )
+            
+            # Delete file
+            powder_path = Path(f"backend/data/powders/{powder_id}.yaml")
+            if powder_path.exists():
+                powder_path.unlink()
+            
+            # Remove from memory
+            del self._powders[powder_id]
+            
+            logger.info(f"Deleted powder configuration: {powder_id}")
+
+        except Exception as e:
+            error_msg = f"Failed to delete powder: {str(e)}"
             logger.error(error_msg)
             raise create_error(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,

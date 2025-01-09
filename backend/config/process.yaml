@@ -7,7 +7,7 @@ version: "1.0.0"
 service:
   name: "process"
   host: "0.0.0.0"
-  port: 8004
+  port: 8003
   log_level: "INFO"
 
 # Component settings

@@ -60,7 +60,8 @@ def load_config():
                 "service": {
                     "version": "1.0.0",
                     "host": "0.0.0.0",
-                    "port": 8005,
+                    "port": 8004,
+                    "log_level": "INFO",
                     "history_retention_days": 30
                 }
             }
@@ -88,7 +89,7 @@ def main():
         
         # Get config from environment or use defaults
         host = os.getenv("DATA_COLLECTION_HOST", config["service"].get("host", "0.0.0.0"))
-        port = int(os.getenv("DATA_COLLECTION_PORT", config["service"].get("port", 8005)))
+        port = int(os.getenv("DATA_COLLECTION_PORT", config["service"].get("port", 8004)))
         
         # Log startup configuration
         logger.info(f"Host: {host}")

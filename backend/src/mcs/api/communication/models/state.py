@@ -1,4 +1,3 @@
-from typing import Optional
 from pydantic import BaseModel, Field
 
 
@@ -30,14 +29,12 @@ class FeederState(BaseModel):
     """Feeder state model."""
     running: bool = Field(..., description="True if feeder is running")
     frequency: float = Field(..., description="Feeder frequency in Hz")
-    powder_level: Optional[float] = Field(None, description="Powder level percentage")
 
 
 class NozzleState(BaseModel):
     """Nozzle state model."""
     active_nozzle: int = Field(..., description="Currently active nozzle ID (1 or 2)")
     shutter_state: bool = Field(..., description="True if shutter is open")
-    temperature: Optional[float] = Field(None, description="Nozzle temperature in °C")
 
 
 class DeagglomeratorState(BaseModel):

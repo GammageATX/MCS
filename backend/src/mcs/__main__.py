@@ -258,9 +258,9 @@ async def main():
             # Core services first (no dependencies)
             ("mcs.api.config.config_app:create_config_service", "Config", 8001, []),
             # Services with dependencies
-            ("mcs.api.communication.communication_app:create_communication_service", "Communication", 8003, dependencies["communication"]),
-            ("mcs.api.process.process_app:create_process_service", "Process", 8004, dependencies["process"]),
-            ("mcs.api.data_collection.data_collection_app:create_data_collection_service", "Data Collection", 8005, dependencies["data_collection"]),
+            ("mcs.api.communication.communication_app:create_communication_service", "Communication", 8002, dependencies["communication"]),
+            ("mcs.api.process.process_app:create_process_service", "Process", 8003, dependencies["process"]),
+            ("mcs.api.data_collection.data_collection_app:create_data_collection_service", "Data Collection", 8004, dependencies["data_collection"]),
             # UI last as it depends on other services
             ("mcs.ui.router:create_ui_app", "UI", 8000, dependencies["ui"])
         ]

@@ -832,3 +832,95 @@ class EquipmentService:
                     logger.error(f"Error in state callback: {str(e)}")
         except Exception as e:
             logger.error(f"Error notifying state change: {str(e)}")
+
+    async def get_feeder_state(self, feeder_id: int) -> FeederState:
+        """Get state of specific feeder.
+        
+        Args:
+            feeder_id: ID of feeder to get state for (1 or 2)
+            
+        Returns:
+            FeederState: Current feeder state
+        """
+        try:
+            if not self.is_running:
+                raise create_error(
+                    status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                    message=f"{self.service_name} service not running"
+                )
+
+            # Validate feeder ID
+            if feeder_id not in [1, 2]:
+                raise create_error(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    message=f"Invalid feeder ID: {feeder_id}"
+                )
+
+            # Get feeder state from individual tags
+            try:
+                running = await self._tag_cache.get_tag(f"feeders.feeder{feeder_id}.running")
+                frequency = await self._tag_cache.get_tag(f"feeders.feeder{feeder_id}.frequency")
+                
+                return FeederState(
+                    running=running,
+                    frequency=frequency
+                )
+            except Exception as e:
+                logger.error(f"Failed to get feeder {feeder_id} state: {str(e)}")
+                raise create_error(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    message=f"Failed to get feeder {feeder_id} state"
+                )
+
+        except Exception as e:
+            error_msg = f"Failed to get feeder {feeder_id} state"
+            logger.error(f"{error_msg}: {str(e)}")
+            raise create_error(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                message=error_msg
+            )
+
+    async def get_deagglomerator_state(self, deagg_id: int) -> DeagglomeratorState:
+        """Get state of specific deagglomerator.
+        
+        Args:
+            deagg_id: ID of deagglomerator to get state for (1 or 2)
+            
+        Returns:
+            DeagglomeratorState: Current deagglomerator state
+        """
+        try:
+            if not self.is_running:
+                raise create_error(
+                    status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                    message=f"{self.service_name} service not running"
+                )
+
+            # Validate deagglomerator ID
+            if deagg_id not in [1, 2]:
+                raise create_error(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    message=f"Invalid deagglomerator ID: {deagg_id}"
+                )
+
+            # Get deagglomerator state from individual tags
+            try:
+                duty_cycle = await self._tag_cache.get_tag(f"deagglomerators.deagg{deagg_id}.duty_cycle")
+                
+                return DeagglomeratorState(
+                    duty_cycle=duty_cycle
+                )
+            except Exception as e:
+                logger.error(f"Failed to get deagglomerator {deagg_id} state: {str(e)}")
+                raise create_error(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    message=f"Failed to get deagglomerator {deagg_id} state"
+                )
+
+        except Exception as e:
+            error_msg = f"Failed to get deagglomerator {deagg_id} state"
+            logger.error(f"{error_msg}: {str(e)}")
+            raise create_error(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                message=error_msg
+            )

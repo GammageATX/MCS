@@ -80,83 +80,24 @@
                             x-transition:leave="transition ease-in duration-75"
                             x-transition:leave-start="transform opacity-100 scale-100"
                             x-transition:leave-end="transform opacity-0 scale-95"
-                            class="absolute right-0 mt-2 w-64 bg-white rounded-md shadow-lg divide-y divide-gray-100"
+                            class="absolute right-0 mt-2 w-64 bg-white rounded-md shadow-lg py-1"
                             style="display: none;"
                         >
-                            <!-- UI Service (8000) -->
-                            <div class="py-1">
-                                <div class="px-4 py-1 text-xs font-medium text-gray-500 uppercase">UI Service</div>
-                                <a href="/docs" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100" target="_blank">
-                                    Swagger UI
-                                </a>
-                                <a href="/redoc" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100" target="_blank">
-                                    ReDoc
-                                </a>
-                            </div>
-
-                            <!-- Config Service (8001) -->
-                            <div class="py-1">
-                                <div class="px-4 py-1 text-xs font-medium text-gray-500 uppercase">Config Service</div>
-                                <a href="http://localhost:8001/docs" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100" target="_blank">
-                                    Swagger UI
-                                </a>
-                                <a href="http://localhost:8001/redoc" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100" target="_blank">
-                                    ReDoc
-                                </a>
-                            </div>
-
-                            <!-- Communication Service (8003) -->
-                            <div class="py-1">
-                                <div class="px-4 py-1 text-xs font-medium text-gray-500 uppercase">Communication Service</div>
-                                <a href="http://localhost:8003/docs" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100" target="_blank">
-                                    Swagger UI
-                                </a>
-                                <a href="http://localhost:8003/redoc" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100" target="_blank">
-                                    ReDoc
-                                </a>
-                            </div>
-
-                            <!-- Process Service (8004) -->
-                            <div class="py-1">
-                                <div class="px-4 py-1 text-xs font-medium text-gray-500 uppercase">Process Service</div>
-                                <a href="http://localhost:8004/docs" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100" target="_blank">
-                                    Swagger UI
-                                </a>
-                                <a href="http://localhost:8004/redoc" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100" target="_blank">
-                                    ReDoc
-                                </a>
-                            </div>
-
-                            <!-- Data Collection Service (8005) -->
-                            <div class="py-1">
-                                <div class="px-4 py-1 text-xs font-medium text-gray-500 uppercase">Data Collection Service</div>
-                                <a href="http://localhost:8005/docs" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100" target="_blank">
-                                    Swagger UI
-                                </a>
-                                <a href="http://localhost:8005/redoc" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100" target="_blank">
-                                    ReDoc
-                                </a>
-                            </div>
-
-                            <!-- OpenAPI Schemas -->
-                            <div class="py-1">
-                                <div class="px-4 py-1 text-xs font-medium text-gray-500 uppercase">OpenAPI Schemas</div>
-                                <a href="/openapi.json" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100" target="_blank">
-                                    UI Service
-                                </a>
-                                <a href="http://localhost:8001/openapi.json" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100" target="_blank">
-                                    Config Service
-                                </a>
-                                <a href="http://localhost:8003/openapi.json" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100" target="_blank">
-                                    Communication Service
-                                </a>
-                                <a href="http://localhost:8004/openapi.json" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100" target="_blank">
-                                    Process Service
-                                </a>
-                                <a href="http://localhost:8005/openapi.json" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100" target="_blank">
-                                    Data Collection Service
-                                </a>
-                            </div>
+                            <a href="/docs" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100" target="_blank">
+                                UI Service
+                            </a>
+                            <a href="http://localhost:8001/docs" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100" target="_blank">
+                                Config Service
+                            </a>
+                            <a href="http://localhost:8002/docs" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100" target="_blank">
+                                Communication Service
+                            </a>
+                            <a href="http://localhost:8003/docs" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100" target="_blank">
+                                Process Service
+                            </a>
+                            <a href="http://localhost:8004/docs" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100" target="_blank">
+                                Data Collection Service
+                            </a>
                         </div>
                     </div>
                     {% block nav_items %}{% endblock %}

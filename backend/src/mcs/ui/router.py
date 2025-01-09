@@ -254,9 +254,9 @@ class ApiUrls(BaseModel):
     """API URLs configuration model."""
     ui: AnyHttpUrl = Field("http://localhost:8000", description="UI service URL")
     config: AnyHttpUrl = Field("http://localhost:8001", description="Config service URL")
-    communication: AnyHttpUrl = Field("http://localhost:8003", description="Communication service URL")
-    process: AnyHttpUrl = Field("http://localhost:8004", description="Process service URL")
-    data_collection: AnyHttpUrl = Field("http://localhost:8005", description="Data collection service URL")
+    communication: AnyHttpUrl = Field("http://localhost:8002", description="Communication service URL")
+    process: AnyHttpUrl = Field("http://localhost:8003", description="Process service URL")
+    data_collection: AnyHttpUrl = Field("http://localhost:8004", description="Data collection service URL")
 
     class Config:
         """Pydantic model configuration."""
@@ -538,3 +538,21 @@ def create_ui_app() -> FastAPI:
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             message=f"Failed to create UI application: {str(e)}"
         )
+
+
+class Documentation(BaseModel):
+    """Documentation links model."""
+    ui_swagger: AnyHttpUrl = Field("http://localhost:8000/docs", description="UI Service Swagger")
+    config_swagger: AnyHttpUrl = Field("http://localhost:8001/docs", description="Config Service Swagger")
+    communication_swagger: AnyHttpUrl = Field("http://localhost:8002/docs", description="Communication Service Swagger")
+    process_swagger: AnyHttpUrl = Field("http://localhost:8003/docs", description="Process Service Swagger")
+    data_collection_swagger: AnyHttpUrl = Field("http://localhost:8004/docs", description="Data Collection Service Swagger")
+
+    class Config:
+        """Pydantic model configuration."""
+        validate_assignment = True
+
+
+def get_documentation() -> Documentation:
+    """Get documentation links for templates."""
+    return Documentation()

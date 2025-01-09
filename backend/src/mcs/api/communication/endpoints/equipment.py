@@ -1,12 +1,17 @@
 """Equipment control endpoints."""
 
 from typing import Dict, Literal
-from fastapi import APIRouter, Request, WebSocket, WebSocketDisconnect, status
+from fastapi import APIRouter, Request, WebSocket, WebSocketDisconnect, status, Path, Depends
 from loguru import logger
 import asyncio
 
 from mcs.utils.errors import create_error
-from mcs.api.communication.models.state import EquipmentState
+from mcs.api.communication.services.equipment import EquipmentService
+from mcs.api.communication.models.state import (
+    EquipmentState,
+    FeederState,
+    DeagglomeratorState
+)
 from mcs.api.communication.models.equipment import (
     GasFlowRequest,
     GasValveRequest,
@@ -510,3 +515,21 @@ async def get_equipment_internal_state(request: Request, state_name: str) -> boo
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             message=f"{error_msg}: {str(e)}"
         )
+
+
+@router.get("/feeders/{feeder_id}", response_model=FeederState)
+async def get_feeder_state(
+    feeder_id: int = Path(..., description="ID of feeder to get state for (1 or 2)"),
+    equipment_service: EquipmentService = Depends()
+) -> FeederState:
+    """Get state of specific feeder."""
+    return await equipment_service.get_feeder_state(feeder_id)
+
+
+@router.get("/deagglomerators/{deagg_id}", response_model=DeagglomeratorState)
+async def get_deagglomerator_state(
+    deagg_id: int = Path(..., description="ID of deagglomerator to get state for (1 or 2)"),
+    equipment_service: EquipmentService = Depends()
+) -> DeagglomeratorState:
+    """Get state of specific deagglomerator."""
+    return await equipment_service.get_deagglomerator_state(deagg_id)

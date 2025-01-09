@@ -60,7 +60,7 @@ def load_config():
                 "service": {
                     "version": "1.0.0",
                     "host": "0.0.0.0",
-                    "port": 8003,
+                    "port": 8002,
                     "history_retention_days": 30
                 }
             }
@@ -89,7 +89,7 @@ def main():
         
         # Get config from environment or use defaults
         host = os.getenv("COMMUNICATION_HOST", service_config.get("host", "0.0.0.0"))
-        port = int(os.getenv("COMMUNICATION_PORT", service_config.get("port", 8003)))
+        port = int(os.getenv("COMMUNICATION_PORT", service_config.get("port", 8002)))
         
         # Log startup configuration
         logger.info(f"Host: {host}")

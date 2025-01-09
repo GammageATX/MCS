@@ -13,7 +13,9 @@ from mcs.api.process.models.process_models import (
     NozzleResponse,
     NozzleListResponse,
     PowderResponse,
-    PowderListResponse
+    PowderListResponse,
+    Nozzle,
+    Powder
 )
 
 router = APIRouter(tags=["parameters"])
@@ -46,6 +48,30 @@ async def list_nozzles(
         )
 
 
+@router.post(
+    "/nozzles",
+    response_model=BaseResponse,
+    responses={
+        status.HTTP_422_UNPROCESSABLE_ENTITY: {"description": "Validation failed"},
+        status.HTTP_500_INTERNAL_SERVER_ERROR: {"description": "Failed to create nozzle"}
+    }
+)
+async def create_nozzle(
+    nozzle: Nozzle,
+    service: ProcessService = Depends(get_process_service)
+) -> BaseResponse:
+    """Create new nozzle configuration."""
+    try:
+        nozzle_id = await service.parameter_service.create_nozzle(nozzle)
+        return BaseResponse(message=f"Nozzle {nozzle_id} created successfully")
+    except Exception as e:
+        logger.error(f"Failed to create nozzle: {e}")
+        raise create_error(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            message=f"Failed to create nozzle: {str(e)}"
+        )
+
+
 @router.get(
     "/nozzles/{nozzle_id}",
     response_model=NozzleResponse,
@@ -70,6 +96,56 @@ async def get_nozzle(
         )
 
 
+@router.put(
+    "/nozzles/{nozzle_id}",
+    response_model=BaseResponse,
+    responses={
+        status.HTTP_404_NOT_FOUND: {"description": "Nozzle not found"},
+        status.HTTP_422_UNPROCESSABLE_ENTITY: {"description": "Validation failed"},
+        status.HTTP_500_INTERNAL_SERVER_ERROR: {"description": "Failed to update nozzle"}
+    }
+)
+async def update_nozzle(
+    nozzle_id: str,
+    nozzle: Nozzle,
+    service: ProcessService = Depends(get_process_service)
+) -> BaseResponse:
+    """Update nozzle configuration."""
+    try:
+        await service.parameter_service.update_nozzle(nozzle_id, nozzle)
+        return BaseResponse(message=f"Nozzle {nozzle_id} updated successfully")
+    except Exception as e:
+        logger.error(f"Failed to update nozzle {nozzle_id}: {e}")
+        raise create_error(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            message=f"Failed to update nozzle: {str(e)}"
+        )
+
+
+@router.delete(
+    "/nozzles/{nozzle_id}",
+    response_model=BaseResponse,
+    responses={
+        status.HTTP_404_NOT_FOUND: {"description": "Nozzle not found"},
+        status.HTTP_500_INTERNAL_SERVER_ERROR: {"description": "Failed to delete nozzle"}
+    }
+)
+async def delete_nozzle(
+    nozzle_id: str,
+    service: ProcessService = Depends(get_process_service)
+) -> BaseResponse:
+    """Delete nozzle configuration."""
+    try:
+        await service.parameter_service.delete_nozzle(nozzle_id)
+        return BaseResponse(message=f"Nozzle {nozzle_id} deleted successfully")
+    except Exception as e:
+        logger.error(f"Failed to delete nozzle {nozzle_id}: {e}")
+        raise create_error(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            message=f"Failed to delete nozzle: {str(e)}"
+        )
+
+
 @router.get(
     "/powders",
     response_model=PowderListResponse,
@@ -89,6 +165,30 @@ async def list_powders(
         raise create_error(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             message=f"Failed to list powders: {str(e)}"
+        )
+
+
+@router.post(
+    "/powders",
+    response_model=BaseResponse,
+    responses={
+        status.HTTP_422_UNPROCESSABLE_ENTITY: {"description": "Validation failed"},
+        status.HTTP_500_INTERNAL_SERVER_ERROR: {"description": "Failed to create powder"}
+    }
+)
+async def create_powder(
+    powder: Powder,
+    service: ProcessService = Depends(get_process_service)
+) -> BaseResponse:
+    """Create new powder configuration."""
+    try:
+        powder_id = await service.parameter_service.create_powder(powder)
+        return BaseResponse(message=f"Powder {powder_id} created successfully")
+    except Exception as e:
+        logger.error(f"Failed to create powder: {e}")
+        raise create_error(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            message=f"Failed to create powder: {str(e)}"
         )
 
 
@@ -116,6 +216,56 @@ async def get_powder(
         )
 
 
+@router.put(
+    "/powders/{powder_id}",
+    response_model=BaseResponse,
+    responses={
+        status.HTTP_404_NOT_FOUND: {"description": "Powder not found"},
+        status.HTTP_422_UNPROCESSABLE_ENTITY: {"description": "Validation failed"},
+        status.HTTP_500_INTERNAL_SERVER_ERROR: {"description": "Failed to update powder"}
+    }
+)
+async def update_powder(
+    powder_id: str,
+    powder: Powder,
+    service: ProcessService = Depends(get_process_service)
+) -> BaseResponse:
+    """Update powder configuration."""
+    try:
+        await service.parameter_service.update_powder(powder_id, powder)
+        return BaseResponse(message=f"Powder {powder_id} updated successfully")
+    except Exception as e:
+        logger.error(f"Failed to update powder {powder_id}: {e}")
+        raise create_error(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            message=f"Failed to update powder: {str(e)}"
+        )
+
+
+@router.delete(
+    "/powders/{powder_id}",
+    response_model=BaseResponse,
+    responses={
+        status.HTTP_404_NOT_FOUND: {"description": "Powder not found"},
+        status.HTTP_500_INTERNAL_SERVER_ERROR: {"description": "Failed to delete powder"}
+    }
+)
+async def delete_powder(
+    powder_id: str,
+    service: ProcessService = Depends(get_process_service)
+) -> BaseResponse:
+    """Delete powder configuration."""
+    try:
+        await service.parameter_service.delete_powder(powder_id)
+        return BaseResponse(message=f"Powder {powder_id} deleted successfully")
+    except Exception as e:
+        logger.error(f"Failed to delete powder {powder_id}: {e}")
+        raise create_error(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            message=f"Failed to delete powder: {str(e)}"
+        )
+
+
 @router.get(
     "/",
     response_model=ParameterListResponse,
@@ -139,26 +289,26 @@ async def list_parameters(
 
 
 @router.post(
-    "/generate",
+    "/",
     response_model=BaseResponse,
     responses={
         status.HTTP_422_UNPROCESSABLE_ENTITY: {"description": "Validation failed"},
-        status.HTTP_500_INTERNAL_SERVER_ERROR: {"description": "Failed to generate parameter set"}
+        status.HTTP_500_INTERNAL_SERVER_ERROR: {"description": "Failed to create parameter set"}
     }
 )
-async def generate_parameter_set(
+async def create_parameter(
     parameter: Parameter,
     service: ProcessService = Depends(get_process_service)
 ) -> BaseResponse:
-    """Generate new parameter set."""
+    """Create new parameter set."""
     try:
-        param_id = await service.parameter_service.generate_parameter(parameter)
-        return BaseResponse(message=f"Parameter set {param_id} generated successfully")
+        param_id = await service.parameter_service.create_parameter(parameter)
+        return BaseResponse(message=f"Parameter set {param_id} created successfully")
     except Exception as e:
-        logger.error(f"Failed to generate parameter set: {e}")
+        logger.error(f"Failed to create parameter set: {e}")
         raise create_error(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            message=f"Failed to generate parameter set: {str(e)}"
+            message=f"Failed to create parameter set: {str(e)}"
         )
 
 
@@ -170,7 +320,7 @@ async def generate_parameter_set(
         status.HTTP_500_INTERNAL_SERVER_ERROR: {"description": "Failed to get parameter set"}
     }
 )
-async def get_parameter_set(
+async def get_parameter(
     param_id: str,
     service: ProcessService = Depends(get_process_service)
 ) -> ParameterResponse:
@@ -195,7 +345,7 @@ async def get_parameter_set(
         status.HTTP_500_INTERNAL_SERVER_ERROR: {"description": "Failed to update parameter set"}
     }
 )
-async def update_parameter_set(
+async def update_parameter(
     param_id: str,
     parameter: Parameter,
     service: ProcessService = Depends(get_process_service)
@@ -209,4 +359,28 @@ async def update_parameter_set(
         raise create_error(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             message=f"Failed to update parameter set: {str(e)}"
+        )
+
+
+@router.delete(
+    "/{param_id}",
+    response_model=BaseResponse,
+    responses={
+        status.HTTP_404_NOT_FOUND: {"description": "Parameter set not found"},
+        status.HTTP_500_INTERNAL_SERVER_ERROR: {"description": "Failed to delete parameter set"}
+    }
+)
+async def delete_parameter(
+    param_id: str,
+    service: ProcessService = Depends(get_process_service)
+) -> BaseResponse:
+    """Delete parameter set."""
+    try:
+        await service.parameter_service.delete_parameter(param_id)
+        return BaseResponse(message=f"Parameter set {param_id} deleted successfully")
+    except Exception as e:
+        logger.error(f"Failed to delete parameter set {param_id}: {e}")
+        raise create_error(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            message=f"Failed to delete parameter set: {str(e)}"
         )
