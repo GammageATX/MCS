@@ -29,7 +29,7 @@ export default function SequenceExecution() {
   useEffect(() => {
     const fetchSequences = async () => {
       try {
-        const response = await fetch(`${API_CONFIG.PROCESS_SERVICE}/process/sequences`);
+        const response = await fetch(`${API_CONFIG.PROCESS_SERVICE}/sequences`);
         if (!response.ok) {
           throw new Error(`Failed to fetch sequences: ${response.status}`);
         }
@@ -49,14 +49,14 @@ export default function SequenceExecution() {
 
   const handleStartSequence = async (sequenceId: string) => {
     try {
-      const response = await fetch(`${API_CONFIG.PROCESS_SERVICE}/process/sequences/${sequenceId}/start`, {
+      const response = await fetch(`${API_CONFIG.PROCESS_SERVICE}/sequences/${sequenceId}/start`, {
         method: 'POST'
       });
       if (!response.ok) {
         throw new Error(`Failed to start sequence: ${response.status}`);
       }
       // Refresh sequences after starting
-      const updatedResponse = await fetch(`${API_CONFIG.PROCESS_SERVICE}/process/sequences`);
+      const updatedResponse = await fetch(`${API_CONFIG.PROCESS_SERVICE}/sequences`);
       if (updatedResponse.ok) {
         const data = await updatedResponse.json();
         setSequences(data);

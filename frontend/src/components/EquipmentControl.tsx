@@ -108,7 +108,7 @@ export default function EquipmentControl() {
   useEffect(() => {
     const fetchEquipmentStatus = async () => {
       try {
-        const response = await fetch(`${API_CONFIG.PROCESS_SERVICE}/process/equipment/status`);
+        const response = await fetch(`${API_CONFIG.COMMUNICATION_SERVICE}/equipment/status`);
         if (!response.ok) {
           throw new Error(`Failed to fetch equipment status: ${response.status}`);
         }
@@ -141,7 +141,7 @@ export default function EquipmentControl() {
       }
 
       // Refresh equipment status after command
-      const statusResponse = await fetch(`${API_CONFIG.PROCESS_SERVICE}/process/equipment/status`);
+      const statusResponse = await fetch(`${API_CONFIG.COMMUNICATION_SERVICE}/equipment/status`);
       if (statusResponse.ok) {
         const data = await statusResponse.json();
         setEquipmentStatus(data);

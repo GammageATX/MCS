@@ -99,13 +99,13 @@ export default function FileManagement() {
     try {
       let response;
       if (type === 'sequence') {
-        response = await fetch(`${PROCESS_SERVICE}/process/sequences`, {
+        response = await fetch(`${PROCESS_SERVICE}/sequences`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: content
         });
       } else if (type === 'pattern') {
-        response = await fetch(`${PROCESS_SERVICE}/pattern/create`, {
+        response = await fetch(`${PROCESS_SERVICE}/patterns/generate`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: content
@@ -133,13 +133,13 @@ export default function FileManagement() {
     try {
       let response;
       if (type === 'sequence') {
-        response = await fetch(`${PROCESS_SERVICE}/process/sequences/${name}`, {
+        response = await fetch(`${PROCESS_SERVICE}/sequences/${name}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: content
         });
       } else if (type === 'pattern') {
-        response = await fetch(`${PROCESS_SERVICE}/pattern/update/${name}`, {
+        response = await fetch(`${PROCESS_SERVICE}/patterns/${name}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: content

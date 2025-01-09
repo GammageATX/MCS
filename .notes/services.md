@@ -19,16 +19,6 @@ Manages system configuration and schemas.
 - `GET /config/schema/list` - List available schemas
 - `GET /config/schema/{name}` - Get schema definition
 
-### State Service (Port 8002)
-
-Manages system state and transitions.
-
-#### Endpoints
-
-- `GET /state` - Get current state
-- `GET /transitions` - Get valid state transitions
-- `POST /transition/{new_state}` - Transition to new state
-- `GET /history` - Get state history
 
 ### Communication Service (Port 8003)
 
