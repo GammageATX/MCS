@@ -52,68 +52,258 @@ def create_example_service() -> FastAPI:
 
 ### Service Lifecycle Methods
 
-#### Initialization
+Each service must implement the following lifecycle methods to ensure proper initialization, dependency management, and cleanup:
 
-1. `__init__`
-   - Set basic properties only
-   - No component creation or config loading
+#### 1. Basic Properties (`__init__`)
 
-   ```python
-   self._service_name: str
-   self._version: str = "1.0.0"
-   self._is_running: bool = False
-   self._start_time: Optional[datetime] = None
-   ```
-
-2. `initialize()`
-   - Load configuration
-   - Create component services
-   - Initialize in dependency order
-
-   ```python
-   async def initialize(self):
-       await self._load_config()
-       await self._create_components()
-       await self._initialize_components()
-   ```
-
-3. `start()`
-   - Check prerequisites
-   - Start components in order
-   - Set service state
-
-   ```python
-   async def start(self):
-       if self.is_running:
-           raise create_error(
-               status_code=status.HTTP_409_CONFLICT,
-               message="Service already running"
-           )
-       # Start components
-       self._is_running = True
-   ```
-
-#### Shutdown
+- Set basic properties only
+- No component creation or config loading
 
 ```python
-async def stop(self):
-    """Stop service."""
+def __init__(self, config: Dict[str, Any]):
+    self._service_name: str
+    self._version: str = "1.0.0"
+    self._is_running: bool = False
+    self._start_time: Optional[datetime] = None
+    self._config = config
+    
+    # Initialize service references as None
+    self._component1 = None
+    self._component2 = None
+```
+
+#### 2. One-time Setup (`initialize()`)
+
+- Basic setup that doesn't require running dependencies
+- Create service instances
+- Load configurations
+
+```python
+async def initialize(self) -> None:
+    """One-time initialization and basic setup.
+    
+    The initialize method handles operations that don't require running dependencies:
+    1. Creating service instances
+    2. Loading configurations
+    3. Basic setup
+    """
+    try:
+        # Create core services
+        self._component1 = Component1Service(self._config)
+        await self._component1.initialize()
+        
+        # Create remaining services
+        self._component2 = Component2Service(self._config)
+        
+        logger.info(f"{self.service_name} service basic initialization complete")
+    except Exception as e:
+        raise create_error(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            message=f"Failed to initialize: {str(e)}"
+        )
+```
+
+#### 3. Dependency Setup (`prepare()`)
+
+- Setup that requires running dependencies
+- Start core services needed by others
+- Initialize services that need running dependencies
+
+```python
+async def prepare(self) -> None:
+    """Prepare service for operation.
+    
+    The prepare method handles operations that require running dependencies:
+    1. Starting core services needed by others
+    2. Initializing dependent services
+    3. Setting up service interconnections
+    """
+    try:
+        # 1. Start core services needed by others
+        await self._component1.start()
+        
+        # 2. Initialize and start dependent services
+        await self._component2.initialize()
+        await self._component2.start()
+        
+        # 3. Set up interconnections
+        self._component2.set_dependency(self._component1)
+        
+        logger.info(f"{self.service_name} service preparation complete")
+    except Exception as e:
+        raise create_error(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            message=f"Failed to prepare: {str(e)}"
+        )
+```
+
+#### 4. Start Operations (`start()`)
+
+- Begin actual service operations
+- Start remaining services
+- Set service state
+
+```python
+async def start(self) -> None:
+    """Start service operations.
+    
+    The start method handles:
+    1. Starting remaining services
+    2. Beginning actual operations
+    """
+    try:
+        if self.is_running:
+            raise create_error(
+                status_code=status.HTTP_409_CONFLICT,
+                message="Service already running"
+            )
+
+        # Ensure services are prepared
+        if not all([self._component1, self._component2]):
+            await self.initialize()
+            await self.prepare()
+
+        # Set service state
+        self._is_running = True
+        self._start_time = datetime.now()
+        
+        logger.info(f"{self.service_name} service started successfully")
+    except Exception as e:
+        self._is_running = False
+        self._start_time = None
+        raise create_error(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            message=f"Failed to start: {str(e)}"
+        )
+```
+
+#### 5. Stop Operations (`stop()`)
+
+- Stop service operations but allow restart
+- Stop components in reverse dependency order
+- Clear initialized state
+
+```python
+async def stop(self) -> None:
+    """Stop service components but maintain initialization state.
+    
+    The stop method:
+    1. Stops all services in reverse dependency order
+    2. Maintains service references but clears initialized state
+    3. Allows restart via start() which will reinitialize
+    """
     try:
         if not self.is_running:
             raise create_error(
                 status_code=status.HTTP_409_CONFLICT,
                 message="Service not running"
             )
-        # 1. Stop components
-        # 2. Clear state
+
+        # Stop in reverse dependency order
+        if self._component2:
+            await self._component2.stop()
+        if self._component1:
+            await self._component1.stop()
+
+        # Reset service state
         self._is_running = False
         self._start_time = None
+        
+        # Clear initialized state so start() will reinitialize
+        self._component1 = None
+        self._component2 = None
+        
+        logger.info(f"{self.service_name} service stopped")
     except Exception as e:
         raise create_error(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             message=f"Failed to stop: {str(e)}"
         )
 ```
+
+#### 6. Full Cleanup (`shutdown()`)
+
+- Complete service cleanup
+- Stop if running
+- Clear all resources
+
+```python
+async def shutdown(self) -> None:
+    """Shutdown service and cleanup resources.
+    
+    The shutdown method:
+    1. Stops all services if running
+    2. Cleans up resources and references
+    3. Requires re-initialization to use again
+    """
+    try:
+        # Stop if running
+        if self.is_running:
+            await self.stop()
+        else:
+            # Clear service references even if not running
+            self._component1 = None
+            self._component2 = None
+
+        logger.info(f"{self.service_name} service shutdown complete")
+    except Exception as e:
+        raise create_error(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            message=f"Failed to shutdown: {str(e)}"
+        )
+```
+
+#### FastAPI Integration
+
+Services should use FastAPI's lifespan for proper lifecycle management:
+
+```python
+@asynccontextmanager
+async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
+    """Handle application lifespan events.
+    
+    The lifespan context manager handles:
+    1. Service initialization during startup
+    2. Service preparation after initialization
+    3. Service startup after preparation
+    4. Service shutdown on application exit
+    """
+    try:
+        logger.info("Starting service...")
+        
+        # Get service from app state
+        service = app.state.service
+        
+        # Initialize service
+        await service.initialize()
+        
+        # Prepare service (handle operations requiring running dependencies)
+        await service.prepare()
+        
+        # Start service operations
+        await service.start()
+        
+        yield
+        
+        # Shutdown service
+        await service.shutdown()
+        logger.info("Service stopped successfully")
+        
+    except Exception as e:
+        error_msg = f"Service startup failed: {str(e)}"
+        logger.error(error_msg)
+        raise create_error(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            message=error_msg
+        )
+```
+
+This lifecycle pattern ensures:
+
+- Clear separation between initialization and runtime dependencies
+- Proper dependency ordering during startup and shutdown
+- Clean restart capability
+- Proper resource cleanup
 
 ### Error Handling
 

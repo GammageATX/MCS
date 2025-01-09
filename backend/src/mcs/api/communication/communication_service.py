@@ -113,18 +113,21 @@ class CommunicationService:
         return self._internal_state
 
     async def initialize(self) -> None:
-        """Initialize service."""
+        """One-time initialization and basic setup.
+        
+        The initialize method handles operations that don't require running dependencies:
+        1. Creating service instances
+        2. Loading configurations
+        3. Basic setup
+        """
         try:
             logger.info(f"Initializing {self.service_name} service...")
 
-            # Create services in dependency order
-            self._tag_mapping = TagMappingService(self._config)  # No dependencies
-
-            # Initialize and start tag_mapping first (needed by tag_cache initialization)
+            # Create core services
+            self._tag_mapping = TagMappingService(self._config)
             await self._tag_mapping.initialize()
-            await self._tag_mapping.start()
 
-            # Initialize clients based on mode
+            # Initialize clients
             mode = self._config.get("mode", "mock")
             if mode == "mock":
                 plc_client = MockPLCClient(self._config)
@@ -133,35 +136,13 @@ class CommunicationService:
                 plc_client = PLCClient(self._config)
                 ssh_client = SSHClient(self._config)
 
-            # Create remaining services in dependency order
-            self._tag_cache = TagCacheService(self._config, plc_client, ssh_client, self._tag_mapping)  # Depends on tag_mapping
-            self._equipment = EquipmentService(self._config)  # Depends on tag_cache
-            self._motion = MotionService(self._config)  # Depends on tag_cache
-            self._internal_state = InternalStateService(self._config)  # Depends on tag_cache and tag_mapping
+            # Create remaining services
+            self._tag_cache = TagCacheService(self._config, plc_client, ssh_client, self._tag_mapping)
+            self._equipment = EquipmentService(self._config)
+            self._motion = MotionService(self._config)
+            self._internal_state = InternalStateService(self._config)
 
-            # Initialize tag cache first (needed by all other services)
-            await self._tag_cache.initialize()
-            await self._tag_cache.start()
-
-            # Set dependencies for other services
-            self._equipment.set_tag_cache(self._tag_cache)
-            self._equipment.set_internal_state(self._internal_state)
-            self._motion.set_tag_cache(self._tag_cache)
-            self._motion.set_internal_state(self._internal_state)
-            self._internal_state.set_tag_cache(self._tag_cache)
-            self._internal_state.set_tag_mapping(self._tag_mapping)
-
-            # Initialize and start remaining services in order
-            await self._equipment.initialize()
-            await self._equipment.start()
-
-            await self._motion.initialize()
-            await self._motion.start()
-
-            await self._internal_state.initialize()
-            await self._internal_state.start()
-
-            logger.info(f"{self.service_name} service initialized")
+            logger.info(f"{self.service_name} service basic initialization complete")
 
         except Exception as e:
             error_msg = f"Failed to initialize {self.service_name} service: {str(e)}"
@@ -171,8 +152,54 @@ class CommunicationService:
                 message=error_msg
             )
 
+    async def prepare(self) -> None:
+        """Prepare service for operation.
+        
+        The prepare method handles operations that require running dependencies:
+        1. Starting core services needed by others
+        2. Initializing dependent services
+        3. Setting up service interconnections
+        """
+        try:
+            logger.info(f"Preparing {self.service_name} service...")
+
+            # 1. Initialize and start tag_mapping
+            await self._tag_mapping.start()
+
+            # 2. Initialize and start tag_cache
+            await self._tag_cache.initialize()
+            await self._tag_cache.start()
+
+            # 3. Set up service interconnections
+            self._equipment.set_tag_cache(self._tag_cache)
+            self._equipment.set_internal_state(self._internal_state)
+            self._motion.set_tag_cache(self._tag_cache)
+            self._motion.set_internal_state(self._internal_state)
+            self._internal_state.set_tag_cache(self._tag_cache)
+            self._internal_state.set_tag_mapping(self._tag_mapping)
+
+            # 4. Initialize remaining services
+            await self._equipment.initialize()
+            await self._motion.initialize()
+            await self._internal_state.initialize()
+
+            logger.info(f"{self.service_name} service preparation complete")
+
+        except Exception as e:
+            error_msg = f"Failed to prepare {self.service_name} service: {str(e)}"
+            logger.error(error_msg)
+            raise create_error(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                message=error_msg
+            )
+
     async def start(self) -> None:
-        """Start service and all components."""
+        """Start service operations.
+        
+        The start method handles:
+        1. Starting remaining services
+        2. Beginning actual operations
+        """
         try:
             if self.is_running:
                 raise create_error(
@@ -180,14 +207,18 @@ class CommunicationService:
                     message=f"{self.service_name} service already running"
                 )
 
-            if not all([self._tag_mapping, self._tag_cache, self._equipment, self._motion]):
-                raise create_error(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    message=f"{self.service_name} service not initialized"
-                )
+            # Ensure services are prepared
+            if not all([self._tag_mapping, self._tag_cache, self._equipment, self._motion, self._internal_state]):
+                logger.info(f"Services need initialization, preparing {self.service_name} service")
+                await self.initialize()
+                await self.prepare()
 
-            # All services are already started in initialize()
-            # Just set our running state
+            # Start remaining services (tag_mapping and tag_cache already running from prepare)
+            await self._equipment.start()
+            await self._motion.start()
+            await self._internal_state.start()
+
+            # Set main service state
             self._is_running = True
             self._start_time = datetime.now()
             logger.info(f"{self.service_name} service started successfully")
@@ -203,7 +234,13 @@ class CommunicationService:
             )
 
     async def stop(self) -> None:
-        """Stop service and all components."""
+        """Stop service components but maintain initialization state.
+        
+        The stop method:
+        1. Stops all services in reverse dependency order
+        2. Maintains service references but clears initialized state
+        3. Allows restart via start() which will reinitialize
+        """
         try:
             if not self.is_running:
                 raise create_error(
@@ -211,28 +248,63 @@ class CommunicationService:
                     message=f"{self.service_name} service not running"
                 )
 
-            # 1. Stop services in reverse dependency order
-            await self._internal_state.stop()
-            await self._motion.stop()
-            await self._equipment.stop()
-            await self._tag_cache.stop()
-            await self._tag_mapping.stop()
+            # Stop services in reverse dependency order
+            if self._internal_state:
+                await self._internal_state.stop()
+            if self._motion:
+                await self._motion.stop()
+            if self._equipment:
+                await self._equipment.stop()
+            if self._tag_cache:
+                await self._tag_cache.stop()
+            if self._tag_mapping:
+                await self._tag_mapping.stop()
 
-            # 2. Clear service references
-            self._internal_state = None
-            self._motion = None
-            self._equipment = None
-            self._tag_cache = None
-            self._tag_mapping = None
-
-            # 3. Reset service state
+            # Reset service state but maintain references
             self._is_running = False
             self._start_time = None
+
+            # Clear initialized state so start() will reinitialize
+            self._tag_mapping = None
+            self._tag_cache = None
+            self._equipment = None
+            self._motion = None
+            self._internal_state = None
 
             logger.info(f"{self.service_name} service stopped")
 
         except Exception as e:
             error_msg = f"Failed to stop {self.service_name} service: {str(e)}"
+            logger.error(error_msg)
+            raise create_error(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                message=error_msg
+            )
+
+    async def shutdown(self) -> None:
+        """Shutdown service and cleanup resources.
+        
+        The shutdown method:
+        1. Stops all services if running
+        2. Cleans up resources and references
+        3. Requires re-initialization to use again
+        """
+        try:
+            # Stop if running
+            if self.is_running:
+                await self.stop()
+            else:
+                # Clear service references even if not running
+                self._internal_state = None
+                self._motion = None
+                self._equipment = None
+                self._tag_cache = None
+                self._tag_mapping = None
+
+            logger.info(f"{self.service_name} service shutdown complete")
+
+        except Exception as e:
+            error_msg = f"Failed to shutdown {self.service_name} service: {str(e)}"
             logger.error(error_msg)
             raise create_error(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,

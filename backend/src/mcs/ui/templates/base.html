@@ -12,6 +12,7 @@
     <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🔧</text></svg>">
     
     <!-- Styles -->
+    <script defer src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="{{ url_for('static', path='css/base.css') }}">
     {% block extra_css %}{% endblock %}
@@ -61,6 +62,103 @@
                     </a>
                 </div>
                 <div class="flex items-center space-x-4">
+                    <div class="relative" x-data="{ open: false }" @click.outside="open = false">
+                        <button @click="open = !open" class="flex items-center space-x-2 text-gray-600 hover:text-primary">
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                            </svg>
+                            <span>Documentation</span>
+                            <svg class="w-4 h-4 transition-transform" :class="{ 'rotate-180': open }" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+                            </svg>
+                        </button>
+                        <div 
+                            x-show="open"
+                            x-transition:enter="transition ease-out duration-100"
+                            x-transition:enter-start="transform opacity-0 scale-95"
+                            x-transition:enter-end="transform opacity-100 scale-100"
+                            x-transition:leave="transition ease-in duration-75"
+                            x-transition:leave-start="transform opacity-100 scale-100"
+                            x-transition:leave-end="transform opacity-0 scale-95"
+                            class="absolute right-0 mt-2 w-64 bg-white rounded-md shadow-lg divide-y divide-gray-100"
+                            style="display: none;"
+                        >
+                            <!-- UI Service (8000) -->
+                            <div class="py-1">
+                                <div class="px-4 py-1 text-xs font-medium text-gray-500 uppercase">UI Service</div>
+                                <a href="/docs" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100" target="_blank">
+                                    Swagger UI
+                                </a>
+                                <a href="/redoc" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100" target="_blank">
+                                    ReDoc
+                                </a>
+                            </div>
+
+                            <!-- Config Service (8001) -->
+                            <div class="py-1">
+                                <div class="px-4 py-1 text-xs font-medium text-gray-500 uppercase">Config Service</div>
+                                <a href="http://localhost:8001/docs" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100" target="_blank">
+                                    Swagger UI
+                                </a>
+                                <a href="http://localhost:8001/redoc" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100" target="_blank">
+                                    ReDoc
+                                </a>
+                            </div>
+
+                            <!-- Communication Service (8003) -->
+                            <div class="py-1">
+                                <div class="px-4 py-1 text-xs font-medium text-gray-500 uppercase">Communication Service</div>
+                                <a href="http://localhost:8003/docs" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100" target="_blank">
+                                    Swagger UI
+                                </a>
+                                <a href="http://localhost:8003/redoc" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100" target="_blank">
+                                    ReDoc
+                                </a>
+                            </div>
+
+                            <!-- Process Service (8004) -->
+                            <div class="py-1">
+                                <div class="px-4 py-1 text-xs font-medium text-gray-500 uppercase">Process Service</div>
+                                <a href="http://localhost:8004/docs" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100" target="_blank">
+                                    Swagger UI
+                                </a>
+                                <a href="http://localhost:8004/redoc" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100" target="_blank">
+                                    ReDoc
+                                </a>
+                            </div>
+
+                            <!-- Data Collection Service (8005) -->
+                            <div class="py-1">
+                                <div class="px-4 py-1 text-xs font-medium text-gray-500 uppercase">Data Collection Service</div>
+                                <a href="http://localhost:8005/docs" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100" target="_blank">
+                                    Swagger UI
+                                </a>
+                                <a href="http://localhost:8005/redoc" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100" target="_blank">
+                                    ReDoc
+                                </a>
+                            </div>
+
+                            <!-- OpenAPI Schemas -->
+                            <div class="py-1">
+                                <div class="px-4 py-1 text-xs font-medium text-gray-500 uppercase">OpenAPI Schemas</div>
+                                <a href="/openapi.json" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100" target="_blank">
+                                    UI Service
+                                </a>
+                                <a href="http://localhost:8001/openapi.json" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100" target="_blank">
+                                    Config Service
+                                </a>
+                                <a href="http://localhost:8003/openapi.json" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100" target="_blank">
+                                    Communication Service
+                                </a>
+                                <a href="http://localhost:8004/openapi.json" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100" target="_blank">
+                                    Process Service
+                                </a>
+                                <a href="http://localhost:8005/openapi.json" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100" target="_blank">
+                                    Data Collection Service
+                                </a>
+                            </div>
+                        </div>
+                    </div>
                     {% block nav_items %}{% endblock %}
                 </div>
             </div>

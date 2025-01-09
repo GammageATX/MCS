@@ -35,6 +35,13 @@ class ProcessService:
     - Executing process sequences and patterns
     - Coordinating hardware control during processing
     - Monitoring process state and health
+    
+    Lifecycle:
+    1. __init__: Set basic properties
+    2. initialize: Create and initialize components
+    3. prepare: Handle operations requiring running dependencies
+    4. start: Begin service operations
+    5. shutdown: Clean shutdown of service
     """
 
     def __init__(self, version: str = "1.0.0"):
@@ -47,6 +54,7 @@ class ProcessService:
         self._version = version
         self._is_running = False
         self._is_initialized = False
+        self._is_prepared = False
         self._start_time = None
         
         # Default paths
@@ -86,6 +94,11 @@ class ProcessService:
     def is_initialized(self) -> bool:
         """Get service initialization state."""
         return self._is_initialized
+
+    @property
+    def is_prepared(self) -> bool:
+        """Get service preparation state."""
+        return self._is_prepared
 
     @property
     def uptime(self) -> float:
@@ -134,6 +147,42 @@ class ProcessService:
                 message=error_msg
             )
 
+    async def prepare(self) -> None:
+        """Prepare service after initialization.
+        
+        This step handles operations that require running dependencies.
+        """
+        try:
+            if not self.is_initialized:
+                raise create_error(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    message=f"{self.service_name} service not initialized"
+                )
+
+            if self.is_prepared:
+                raise create_error(
+                    status_code=status.HTTP_409_CONFLICT,
+                    message=f"{self.service_name} service already prepared"
+                )
+
+            # Prepare components in dependency order
+            for name, component in self._components.items():
+                if hasattr(component, "prepare"):
+                    logger.info(f"Preparing {name} component...")
+                    await component.prepare()
+                    logger.info(f"Prepared {name} component")
+
+            self._is_prepared = True
+            logger.info(f"{self.service_name} service prepared")
+
+        except Exception as e:
+            error_msg = f"Failed to prepare {self.service_name} service: {str(e)}"
+            logger.error(error_msg)
+            raise create_error(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                message=error_msg
+            )
+
     async def start(self) -> None:
         """Start service and components."""
         try:
@@ -147,6 +196,12 @@ class ProcessService:
                 raise create_error(
                     status_code=status.HTTP_400_BAD_REQUEST,
                     message=f"{self.service_name} service not initialized"
+                )
+
+            if not self.is_prepared:
+                raise create_error(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    message=f"{self.service_name} service not prepared"
                 )
 
             # Start components in dependency order
@@ -171,25 +226,58 @@ class ProcessService:
                 message=error_msg
             )
 
-    async def stop(self) -> None:
-        """Shutdown service and cleanup resources."""
+    async def _stop(self) -> None:
+        """Internal method to stop service operations.
+        
+        This is called by shutdown() and should not be called directly.
+        """
         try:
             if not self.is_running:
-                raise create_error(
-                    status_code=status.HTTP_409_CONFLICT,
-                    message=f"{self.service_name} service not running"
-                )
+                return  # Already stopped
 
             # Stop components in reverse dependency order
-            for component in reversed(list(self._components.values())):
-                if hasattr(component, "stop"):
-                    await component.stop()
+            for name, component in reversed(list(self._components.items())):
+                try:
+                    if hasattr(component, "stop"):
+                        logger.info(f"Stopping {name} component...")
+                        await component.stop()
+                        logger.info(f"Stopped {name} component")
+                except Exception as e:
+                    logger.error(f"Error stopping {name} component: {str(e)}")
                     
-            self._is_initialized = False
             self._is_running = False
             self._start_time = None
             self._process_status = ProcessStatus.IDLE
-            logger.info(f"{self.service_name} service stopped successfully")
+            logger.info(f"{self.service_name} service stopped")
+            
+        except Exception as e:
+            error_msg = f"Error during {self.service_name} service stop: {str(e)}"
+            logger.error(error_msg)
+            raise create_error(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                message=error_msg
+            )
+
+    async def shutdown(self) -> None:
+        """Shutdown service and cleanup resources."""
+        try:
+            # Stop running operations
+            await self._stop()
+            
+            # Cleanup components in reverse dependency order
+            for name, component in reversed(list(self._components.items())):
+                try:
+                    if hasattr(component, "shutdown"):
+                        logger.info(f"Shutting down {name} component...")
+                        await component.shutdown()
+                        logger.info(f"Shut down {name} component")
+                except Exception as e:
+                    logger.error(f"Error shutting down {name} component: {str(e)}")
+            
+            self._is_initialized = False
+            self._is_prepared = False
+            self._components = {}
+            logger.info(f"{self.service_name} service shut down successfully")
             
         except Exception as e:
             error_msg = f"Error during {self.service_name} service shutdown: {str(e)}"

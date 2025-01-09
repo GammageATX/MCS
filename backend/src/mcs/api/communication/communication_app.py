@@ -6,6 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.exceptions import RequestValidationError
 from loguru import logger
+from typing import AsyncGenerator
 
 from mcs.utils.errors import create_error  # noqa: F401 - used in error handlers and endpoints
 from mcs.utils.health import ServiceHealth, HealthStatus, create_error_health
@@ -16,27 +17,43 @@ from mcs.api.communication.communication_service import CommunicationService, lo
 
 
 @asynccontextmanager
-async def lifespan(app: FastAPI):
-    """Handle startup and shutdown events."""
+async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
+    """Handle application lifespan events.
+    
+    The lifespan context manager handles:
+    1. Service initialization during startup
+    2. Service preparation after initialization
+    3. Service startup after preparation
+    4. Service shutdown on application exit
+    """
     try:
         logger.info("Starting communication service...")
+        
+        # Get service from app state
         service = app.state.service
+        
+        # Initialize service
         await service.initialize()
+        
+        # Prepare service (handle operations requiring running dependencies)
+        await service.prepare()
+        
+        # Start service operations
         await service.start()
-        logger.info("Communication service started successfully")
+        
         yield
-        logger.info("Stopping communication service...")
-        if hasattr(app.state, "service") and app.state.service.is_running:
-            await app.state.service.stop()
-            logger.info("Communication service stopped successfully")
+        
+        # Shutdown service
+        await service.shutdown()
+        logger.info("Communication service stopped successfully")
+        
     except Exception as e:
-        logger.error(f"Communication service startup failed: {e}")
-        yield
-        if hasattr(app.state, "service"):
-            try:
-                await app.state.service.stop()
-            except Exception as stop_error:
-                logger.error(f"Failed to stop communication service: {stop_error}")
+        error_msg = f"Communication service startup failed: {str(e)}"
+        logger.error(error_msg)
+        raise create_error(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            message=error_msg
+        )
 
 
 def create_communication_service() -> FastAPI:

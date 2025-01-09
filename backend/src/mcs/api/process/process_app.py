@@ -51,34 +51,50 @@ def load_config(config_path: str = "backend/config/process.yaml") -> Dict:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Handle startup and shutdown events."""
+    """Handle application lifespan events.
+    
+    The lifespan context manager handles:
+    1. Service initialization during startup
+    2. Service preparation after initialization
+    3. Service startup after preparation
+    4. Service shutdown on application exit
+    """
     try:
         logger.info("Starting process service...")
         
         # Get service from app state
         service = app.state.service
         
-        # Initialize and start service
+        # Initialize service
         await service.initialize()
+        
+        # Prepare service (handle operations requiring running dependencies)
+        await service.prepare()
+        
+        # Start service operations
         await service.start()
         
         logger.info("Process service started successfully")
         
         yield  # Server is running
         
-        # Shutdown
-        if hasattr(app.state, "service") and app.state.service.is_running:
-            await app.state.service.stop()
+        # Shutdown service
+        if hasattr(app.state, "service"):
+            await app.state.service.shutdown()
             logger.info("Process service stopped successfully")
             
     except Exception as e:
-        logger.error(f"Process service startup failed: {e}")
-        yield
+        error_msg = f"Process service startup failed: {str(e)}"
+        logger.error(error_msg)
         if hasattr(app.state, "service"):
             try:
-                await app.state.service.stop()
-            except Exception as stop_error:
-                logger.error(f"Failed to stop process service: {stop_error}")
+                await app.state.service.shutdown()
+            except Exception as shutdown_error:
+                logger.error(f"Failed to shutdown process service: {shutdown_error}")
+        raise create_error(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            message=error_msg
+        )
 
 
 def create_process_service() -> FastAPI:

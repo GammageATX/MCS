@@ -125,10 +125,178 @@ const domUtils = {
     }
 };
 
+// Service monitoring utilities
+const monitoringUtils = {
+    // Service update interval in milliseconds
+    UPDATE_INTERVAL: 5000,
+    updateTimer: null,
+
+    /**
+     * Create service card element
+     * @param {string} name - Service name
+     * @param {Object} service - Service data
+     * @returns {HTMLElement} Card element
+     */
+    createServiceCard(name, service) {
+        const card = document.createElement('div');
+        
+        // Map status to display colors
+        let statusColor;
+        switch (service.status.toLowerCase()) {
+            case 'ok':
+            case 'running':
+                statusColor = 'success';
+                break;
+            case 'starting':
+                statusColor = 'warning';
+                break;
+            case 'error':
+            case 'stopped':
+                statusColor = 'error';
+                break;
+            default:
+                statusColor = 'error';
+        }
+        
+        card.className = `service-card p-6 rounded-lg border-2 border-${statusColor} bg-${statusColor}/10`;
+        card.innerHTML = `
+            <div class="flex justify-between items-center mb-4">
+                <h3 class="text-lg font-semibold">${formatUtils.formatServiceName(name)}</h3>
+                <span class="px-2 py-1 rounded text-sm text-white bg-${statusColor}">
+                    ${service.is_running ? 'RUNNING' : service.status.toUpperCase()}
+                </span>
+            </div>
+            <div class="space-y-2">
+                <p class="text-sm">
+                    <span class="font-medium">Version:</span> ${service.version || 'Not available'}
+                </p>
+                ${service.port ? `
+                    <p class="text-sm">
+                        <span class="font-medium">Port:</span> ${service.port}
+                    </p>
+                ` : ''}
+                <p class="text-sm">
+                    <span class="font-medium">Uptime:</span> ${formatUtils.formatUptime(service.uptime)}
+                </p>
+                ${service.mode ? `
+                    <p class="text-sm">
+                        <span class="font-medium">Mode:</span> ${service.mode}
+                    </p>
+                ` : ''}
+                ${service.error ? `
+                    <div class="error-message mt-2 text-sm text-red-600">
+                        <span class="font-medium">Error:</span> ${service.error}
+                    </div>
+                ` : ''}
+                ${service.components ? `
+                    <div class="mt-4 border-t pt-2">
+                        <p class="text-sm font-medium mb-2">Components:</p>
+                        ${Object.entries(service.components).map(([name, health]) => {
+                            let componentColor;
+                            switch (health.status.toLowerCase()) {
+                                case 'ok':
+                                    componentColor = 'success';
+                                    break;
+                                case 'warning':
+                                    componentColor = 'warning';
+                                    break;
+                                case 'error':
+                                    componentColor = 'error';
+                                    break;
+                                default:
+                                    componentColor = 'error';
+                            }
+                            return `
+                                <div class="component-status flex items-center justify-between mt-2 text-sm">
+                                    <span class="font-medium">${formatUtils.formatServiceName(name)}:</span>
+                                    <span class="px-2 py-0.5 rounded text-xs text-white bg-${componentColor}">
+                                        ${health.status.toUpperCase()}
+                                    </span>
+                                </div>
+                                ${health.error ? `<p class="text-xs text-red-600 mt-1">${health.error}</p>` : ''}
+                            `;
+                        }).join('')}
+                    </div>
+                ` : ''}
+            </div>
+        `;
+        return card;
+    },
+
+    /**
+     * Update services display
+     * @param {boolean} showLoading - Whether to show loading state
+     */
+    async updateServices(showLoading = false) {
+        const grid = document.getElementById('services-grid');
+        if (!grid) return;
+        
+        try {
+            if (showLoading) {
+                grid.innerHTML = '';
+                grid.appendChild(domUtils.createSpinner());
+            }
+            
+            const services = await apiUtils.fetchWithTimeout('/monitoring/services/status');
+            
+            const newGrid = document.createElement('div');
+            Object.entries(services).forEach(([name, service]) => {
+                newGrid.appendChild(this.createServiceCard(name, service));
+            });
+            
+            if (grid.innerHTML !== newGrid.innerHTML) {
+                grid.innerHTML = newGrid.innerHTML;
+            }
+        } catch (error) {
+            const errorDetails = apiUtils.handleError(error, 'services-update');
+            grid.innerHTML = '';
+            grid.appendChild(domUtils.createErrorMessage(
+                'Failed to fetch services status. Please try refreshing the page.'
+            ));
+        }
+    },
+
+    /**
+     * Initialize service monitoring
+     */
+    initialize() {
+        // Setup refresh button
+        const refreshBtn = document.getElementById('refresh-btn');
+        if (refreshBtn) {
+            refreshBtn.addEventListener('click', () => {
+                if (this.updateTimer) {
+                    clearInterval(this.updateTimer);
+                }
+                this.updateServices(true);
+                this.updateTimer = setInterval(() => this.updateServices(false), this.UPDATE_INTERVAL);
+            });
+        }
+
+        // Initial update with loading indicator
+        this.updateServices(true);
+
+        // Start update timer
+        this.updateTimer = setInterval(() => this.updateServices(false), this.UPDATE_INTERVAL);
+
+        // Cleanup on page unload
+        window.addEventListener('unload', () => {
+            if (this.updateTimer) {
+                clearInterval(this.updateTimer);
+            }
+        });
+    }
+};
+
 // Export utilities
 window.mcsprayUI = {
     STATUS_COLORS,
     formatUtils,
     apiUtils,
-    domUtils
-}; 
+    domUtils,
+    monitoringUtils
+};
+
+// Initialize monitoring when DOM is loaded
+document.addEventListener('DOMContentLoaded', () => {
+    window.mcsprayUI.monitoringUtils.initialize();
+}); 
