@@ -71,8 +71,13 @@ async def lifespan(app: FastAPI):
         # Get service from app state
         service = app.state.service
         
-        # Initialize and start service
+        # Initialize service
         await service.initialize()
+        
+        # Prepare service after initialization
+        await service.prepare()
+        
+        # Start service operations
         await service.start()
         
         logger.info("Data collection service started successfully")
@@ -80,21 +85,22 @@ async def lifespan(app: FastAPI):
         yield  # Server is running
         
         # Shutdown
-        if hasattr(app.state, "service") and app.state.service.is_running:
-            await app.state.service.stop()
-            logger.info("Data collection service stopped successfully")
+        if hasattr(app.state, "service"):
+            await app.state.service.shutdown()
+            logger.info("Data collection service stopped")
             
     except Exception as e:
-        logger.error(f"Data collection service startup failed: {e}")
-        # Don't raise here - let the service start in degraded mode
-        # The health check will show which components failed
-        yield
-        # Still try to stop service if it exists
+        error_msg = f"Data collection service startup failed: {e}"
+        logger.error(error_msg)
         if hasattr(app.state, "service"):
             try:
-                await app.state.service.stop()
-            except Exception as stop_error:
-                logger.error(f"Failed to stop data collection service: {stop_error}")
+                await app.state.service.shutdown()
+            except Exception as shutdown_error:
+                logger.error(f"Failed to shutdown data collection service: {shutdown_error}")
+        raise create_error(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            message=error_msg
+        )
 
 
 def create_data_collection_service() -> FastAPI:
@@ -175,6 +181,57 @@ def create_data_collection_service() -> FastAPI:
                     "storage": {"status": "error", "error": error_msg},
                     "collector": {"status": "error", "error": error_msg}
                 }
+            )
+
+    @app.post(
+        "/start",
+        responses={
+            status.HTTP_409_CONFLICT: {"description": "Service already running"},
+            status.HTTP_400_BAD_REQUEST: {"description": "Service not initialized"},
+            status.HTTP_503_SERVICE_UNAVAILABLE: {"description": "Service failed to start"}
+        }
+    )
+    async def start():
+        """Start service operations.
+        
+        If the service is not initialized, it will be initialized and prepared first.
+        """
+        try:
+            service = app.state.service
+            
+            # Initialize and prepare if needed
+            if not service.is_initialized:
+                logger.info("Service needs initialization, initializing first...")
+                await service.initialize()
+                await service.prepare()
+            
+            # Start service operations
+            await service.start()
+            return {"status": "started"}
+        except Exception as e:
+            logger.error(f"Failed to start service: {e}")
+            raise create_error(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                message=str(e)
+            )
+
+    @app.post(
+        "/stop",
+        responses={
+            status.HTTP_409_CONFLICT: {"description": "Service not running"},
+            status.HTTP_503_SERVICE_UNAVAILABLE: {"description": "Service failed to stop"}
+        }
+    )
+    async def stop():
+        """Stop service operations and cleanup resources."""
+        try:
+            await app.state.service.shutdown()
+            return {"status": "stopped"}
+        except Exception as e:
+            logger.error(f"Failed to stop service: {e}")
+            raise create_error(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                message=str(e)
             )
     
     return app

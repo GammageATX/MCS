@@ -3,7 +3,6 @@
 from fastapi import APIRouter, Depends, Request, status
 
 from mcs.utils.errors import create_error
-from mcs.utils.health import ServiceHealth
 from mcs.api.data_collection.data_collection_service import DataCollectionService
 from mcs.api.data_collection.data_collection_models import (
     SprayEvent,
@@ -19,16 +18,6 @@ router = APIRouter(prefix="/data_collection", tags=["data_collection"])
 def get_service(request: Request) -> DataCollectionService:
     """Get service instance from app state."""
     return request.app.service
-
-
-@router.get("/health", response_model=ServiceHealth)
-async def health(service: DataCollectionService = Depends(get_service)) -> ServiceHealth:
-    """Get service health status.
-    
-    Returns:
-        ServiceHealth: Health status
-    """
-    return await service.health()
 
 
 @router.post("/data/start/{sequence_id}", response_model=CollectionResponse)

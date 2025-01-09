@@ -17,6 +17,8 @@ class DataCollectionStorage:
         """Initialize with database connection string and pool configuration."""
         self._service_name = "data_storage"
         self._version = "1.0.0"
+        self._is_initialized = False
+        self._is_prepared = False
         self._is_running = False
         self._start_time = None
         
@@ -42,6 +44,16 @@ class DataCollectionStorage:
         return self._version
 
     @property
+    def is_initialized(self) -> bool:
+        """Get service initialization state."""
+        return self._is_initialized
+
+    @property
+    def is_prepared(self) -> bool:
+        """Get service preparation state."""
+        return self._is_prepared
+
+    @property
     def is_running(self) -> bool:
         """Get service running state."""
         return self._is_running
@@ -54,11 +66,9 @@ class DataCollectionStorage:
     async def initialize(self) -> None:
         """Initialize storage service."""
         try:
-            if self.is_running:
-                raise create_error(
-                    status_code=status.HTTP_409_CONFLICT,
-                    message=f"{self.service_name} service already running"
-                )
+            if self._is_initialized:
+                logger.warning(f"{self.service_name} service already initialized")
+                return
 
             if not self._dsn:
                 raise create_error(
@@ -74,14 +84,44 @@ class DataCollectionStorage:
                 command_timeout=self._pool_config["command_timeout"]
             )
 
+            self._is_initialized = True
+            logger.info(f"{self.service_name} service initialized")
+
+        except Exception as e:
+            self._is_initialized = False
+            error_msg = f"Failed to initialize {self.service_name} service: {str(e)}"
+            logger.error(error_msg)
+            raise create_error(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                message=error_msg
+            )
+
+    async def prepare(self) -> None:
+        """Prepare service for operation.
+        
+        This step handles operations that require running dependencies.
+        """
+        try:
+            if not self._is_initialized:
+                raise create_error(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    message=f"{self.service_name} service not initialized"
+                )
+
+            if self._is_prepared:
+                logger.warning(f"{self.service_name} service already prepared")
+                return
+
             # Verify database connection and schema
             async with self._pool.acquire() as conn:
                 await conn.execute("SELECT 1")
 
-            logger.info(f"{self.service_name} service initialized")
+            self._is_prepared = True
+            logger.info(f"{self.service_name} service prepared")
 
         except Exception as e:
-            error_msg = f"Failed to initialize {self.service_name} service: {str(e)}"
+            self._is_prepared = False
+            error_msg = f"Failed to prepare {self.service_name} service: {str(e)}"
             logger.error(error_msg)
             raise create_error(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
@@ -97,10 +137,16 @@ class DataCollectionStorage:
                     message=f"{self.service_name} service already running"
                 )
             
-            if not self._pool:
+            if not self._is_initialized:
                 raise create_error(
                     status_code=status.HTTP_400_BAD_REQUEST,
                     message=f"{self.service_name} service not initialized"
+                )
+
+            if not self._is_prepared:
+                raise create_error(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    message=f"{self.service_name} service not prepared"
                 )
             
             self._is_running = True
@@ -117,14 +163,13 @@ class DataCollectionStorage:
                 message=error_msg
             )
 
-    async def stop(self) -> None:
-        """Stop service."""
+    async def _stop(self) -> None:
+        """Internal method to stop service operations."""
         try:
-            if not self.is_running:
-                raise create_error(
-                    status_code=status.HTTP_409_CONFLICT,
-                    message=f"{self.service_name} service not running"
-                )
+            # Close database pool
+            if self._pool:
+                await self._pool.close()
+                self._pool = None
 
             self._is_running = False
             self._start_time = None
@@ -132,6 +177,26 @@ class DataCollectionStorage:
             
         except Exception as e:
             error_msg = f"Failed to stop {self.service_name} service: {str(e)}"
+            logger.error(error_msg)
+            raise create_error(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                message=error_msg
+            )
+
+    async def shutdown(self) -> None:
+        """Stop service and cleanup resources."""
+        try:
+            if not self.is_running:
+                logger.warning(f"{self.service_name} service not running")
+                return
+
+            await self._stop()
+            self._is_prepared = False
+            self._is_initialized = False
+            logger.info(f"{self.service_name} service shut down")
+
+        except Exception as e:
+            error_msg = f"Failed to shut down {self.service_name} service: {str(e)}"
             logger.error(error_msg)
             raise create_error(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
