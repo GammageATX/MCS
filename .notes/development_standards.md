@@ -593,3 +593,95 @@ if __name__ == "__main__":
    - Use `create_error` utility
    - Include descriptive error messages
    - Log errors with appropriate level
+
+# Frontend Standards
+
+## UI Framework
+
+Material-UI (MUI) is our chosen UI framework for the following reasons:
+- Well-established and mature library with extensive documentation
+- Complete component ecosystem
+- Consistent design language
+- Strong TypeScript support
+- Built-in theming system
+- Responsive design out of the box
+
+### Component Guidelines
+
+1. **Layout Components**
+   - Use MUI Grid and Box for layouts
+   - Implement responsive designs using MUI breakpoints
+   - Follow Material Design spacing guidelines
+
+2. **Form Components**
+   - Use MUI form components (TextField, Select, etc.)
+   - Implement proper form validation
+   - Show clear error states
+   - Use loading states during submissions
+
+3. **Data Display**
+   - Use MUI DataGrid for data tables
+   - Implement proper loading states
+   - Handle empty states gracefully
+   - Show error states clearly
+
+4. **Feedback Components**
+   - Use Snackbars for notifications
+   - Show loading with CircularProgress/LinearProgress
+   - Use Dialog for confirmations
+   - Display errors with Alert components
+
+5. **Navigation**
+   - Use AppBar for main navigation
+   - Implement Drawer for side navigation
+   - Use Breadcrumbs for nested navigation
+   - Handle route transitions smoothly
+
+### Theme Configuration
+
+```typescript
+const theme = createTheme({
+  palette: {
+    primary: {
+      main: '#1976d2',  // Main brand color
+    },
+    secondary: {
+      main: '#dc004e',  // Secondary actions
+    },
+    error: {
+      main: '#f44336',  // Error states
+    },
+    warning: {
+      main: '#ff9800',  // Warning states
+    },
+    success: {
+      main: '#4caf50',  // Success states
+    },
+    background: {
+      default: '#f5f5f5',
+      paper: '#ffffff',
+    },
+  },
+  // Add custom theme overrides as needed
+});
+```
+
+### Best Practices
+
+1. **Component Structure**
+   - Keep components focused and single-responsibility
+   - Use TypeScript for props definitions
+   - Implement proper error boundaries
+   - Handle loading and error states
+
+2. **State Management**
+   - Use React Query for API state
+   - Implement proper caching strategies
+   - Handle optimistic updates
+   - Manage WebSocket connections efficiently
+
+3. **Performance**
+   - Implement proper memoization
+   - Use lazy loading for routes
+   - Optimize re-renders
+   - Monitor bundle size

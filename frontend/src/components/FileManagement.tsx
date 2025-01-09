@@ -1,216 +1,136 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   Box,
-  Typography,
-  Card,
-  CardContent,
   Grid,
+  Paper,
+  Typography,
   List,
   ListItem,
   ListItemText,
-  ListItemSecondaryAction,
-  IconButton,
   Button,
-  TextField,
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogActions,
   Alert,
   CircularProgress
 } from '@mui/material';
-import DeleteIcon from '@mui/icons-material/Delete';
-import EditIcon from '@mui/icons-material/Edit';
-import AddIcon from '@mui/icons-material/Add';
+import { API_CONFIG } from '../config/api';
 
-const PROCESS_SERVICE = 'http://localhost:8004';
-
-interface FileData {
+interface Pattern {
+  id: string;
   name: string;
-  content: string;
-  type: 'nozzle' | 'powder' | 'pattern' | 'sequence';
-  created_at: string;
-  modified_at: string;
+  type: string;
+  description: string;
+}
+
+interface Parameter {
+  id: string;
+  name: string;
+  value: any;
+}
+
+interface Nozzle {
+  id: string;
+  name: string;
+  type: string;
+}
+
+interface Powder {
+  id: string;
+  name: string;
+  properties: any;
+}
+
+interface Sequence {
+  id: string;
+  name: string;
+  steps: any[];
 }
 
 export default function FileManagement() {
-  const [files, setFiles] = useState<Record<string, FileData[]>>({
-    nozzle: [],
-    powder: [],
-    pattern: [],
-    sequence: []
-  });
+  const [patterns, setPatterns] = useState<Pattern[]>([]);
+  const [parameters, setParameters] = useState<Parameter[]>([]);
+  const [nozzles, setNozzles] = useState<Nozzle[]>([]);
+  const [powders, setPowders] = useState<Powder[]>([]);
+  const [sequences, setSequences] = useState<Sequence[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [openDialog, setOpenDialog] = useState(false);
-  const [selectedFile, setSelectedFile] = useState<FileData | null>(null);
-  const [selectedType, setSelectedType] = useState<string>('');
-  const [editContent, setEditContent] = useState('');
 
-  const fetchFiles = async () => {
-    setLoading(true);
+  // Fetch data functions
+  const fetchPatterns = async () => {
     try {
-      // Fetch sequences from process service
-      const sequencesResponse = await fetch(`${PROCESS_SERVICE}/process/sequences`);
-      if (!sequencesResponse.ok) {
-        throw new Error('Failed to fetch sequences');
-      }
-      const sequencesData = await sequencesResponse.json();
-      
-      // Fetch patterns from pattern service
-      const patternsResponse = await fetch(`${PROCESS_SERVICE}/pattern/list`);
-      if (!patternsResponse.ok) {
-        throw new Error('Failed to fetch patterns');
-      }
-      const patternsData = await patternsResponse.json();
-
-      // Update files state with the fetched data
-      setFiles({
-        ...files,
-        sequence: sequencesData.map((seq: any) => ({
-          name: seq.id,
-          content: JSON.stringify(seq, null, 2),
-          type: 'sequence',
-          created_at: new Date().toISOString(),
-          modified_at: new Date().toISOString()
-        })),
-        pattern: patternsData.map((pattern: any) => ({
-          name: pattern.id,
-          content: JSON.stringify(pattern, null, 2),
-          type: 'pattern',
-          created_at: new Date().toISOString(),
-          modified_at: new Date().toISOString()
-        }))
-      });
-      setError(null);
+      const response = await fetch(`${API_CONFIG.PROCESS_SERVICE}/patterns/`);
+      if (!response.ok) throw new Error('Failed to fetch patterns');
+      const data = await response.json();
+      setPatterns(data.patterns);
     } catch (err) {
-      console.error('Error fetching files:', err);
-      setError(err instanceof Error ? err.message : 'Failed to fetch files');
-    } finally {
-      setLoading(false);
+      setError('Failed to load patterns');
     }
   };
 
+  const fetchParameters = async () => {
+    try {
+      const response = await fetch(`${API_CONFIG.PROCESS_SERVICE}/parameters/`);
+      if (!response.ok) throw new Error('Failed to fetch parameters');
+      const data = await response.json();
+      setParameters(data.parameters);
+    } catch (err) {
+      setError('Failed to load parameters');
+    }
+  };
+
+  const fetchNozzles = async () => {
+    try {
+      const response = await fetch(`${API_CONFIG.PROCESS_SERVICE}/parameters/nozzles`);
+      if (!response.ok) throw new Error('Failed to fetch nozzles');
+      const data = await response.json();
+      setNozzles(data.nozzles);
+    } catch (err) {
+      setError('Failed to load nozzles');
+    }
+  };
+
+  const fetchPowders = async () => {
+    try {
+      const response = await fetch(`${API_CONFIG.PROCESS_SERVICE}/parameters/powders`);
+      if (!response.ok) throw new Error('Failed to fetch powders');
+      const data = await response.json();
+      setPowders(data.powders);
+    } catch (err) {
+      setError('Failed to load powders');
+    }
+  };
+
+  const fetchSequences = async () => {
+    try {
+      const response = await fetch(`${API_CONFIG.PROCESS_SERVICE}/sequences/`);
+      if (!response.ok) throw new Error('Failed to fetch sequences');
+      const data = await response.json();
+      setSequences(data.sequences);
+    } catch (err) {
+      setError('Failed to load sequences');
+    }
+  };
+
+  // Load all data on component mount
   useEffect(() => {
-    fetchFiles();
+    const loadData = async () => {
+      setLoading(true);
+      setError(null);
+      try {
+        await Promise.all([
+          fetchPatterns(),
+          fetchParameters(),
+          fetchNozzles(),
+          fetchPowders(),
+          fetchSequences()
+        ]);
+      } catch (err) {
+        setError('Failed to load data');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadData();
   }, []);
-
-  const handleCreateFile = async (type: string, content: string) => {
-    try {
-      let response;
-      if (type === 'sequence') {
-        response = await fetch(`${PROCESS_SERVICE}/sequences`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: content
-        });
-      } else if (type === 'pattern') {
-        response = await fetch(`${PROCESS_SERVICE}/patterns/generate`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: content
-        });
-      } else {
-        // Handle other file types if needed
-        return;
-      }
-      
-      if (!response.ok) {
-        throw new Error(`Failed to create ${type}`);
-      }
-      
-      await fetchFiles();
-      setOpenDialog(false);
-      setSelectedFile(null);
-      setEditContent('');
-    } catch (err) {
-      console.error(`Error creating ${type}:`, err);
-      setError(err instanceof Error ? err.message : `Failed to create ${type}`);
-    }
-  };
-
-  const handleUpdateFile = async (type: string, name: string, content: string) => {
-    try {
-      let response;
-      if (type === 'sequence') {
-        response = await fetch(`${PROCESS_SERVICE}/sequences/${name}`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: content
-        });
-      } else if (type === 'pattern') {
-        response = await fetch(`${PROCESS_SERVICE}/patterns/${name}`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: content
-        });
-      } else {
-        // Handle other file types if needed
-        return;
-      }
-      
-      if (!response.ok) {
-        throw new Error(`Failed to update ${type}`);
-      }
-      
-      await fetchFiles();
-      setOpenDialog(false);
-      setSelectedFile(null);
-      setEditContent('');
-    } catch (err) {
-      console.error(`Error updating ${type}:`, err);
-      setError(err instanceof Error ? err.message : `Failed to update ${type}`);
-    }
-  };
-
-  const handleDeleteFile = async (type: string, name: string) => {
-    try {
-      let response;
-      if (type === 'sequence') {
-        response = await fetch(`${PROCESS_SERVICE}/process/sequences/${name}`, {
-          method: 'DELETE'
-        });
-      } else if (type === 'pattern') {
-        response = await fetch(`${PROCESS_SERVICE}/pattern/delete/${name}`, {
-          method: 'DELETE'
-        });
-      } else {
-        // Handle other file types if needed
-        return;
-      }
-      
-      if (!response.ok) {
-        throw new Error(`Failed to delete ${type}`);
-      }
-      
-      await fetchFiles();
-    } catch (err) {
-      console.error(`Error deleting ${type}:`, err);
-      setError(err instanceof Error ? err.message : `Failed to delete ${type}`);
-    }
-  };
-
-  const handleEdit = (file: FileData, type: string) => {
-    setSelectedFile(file);
-    setSelectedType(type);
-    setEditContent(file.content);
-    setOpenDialog(true);
-  };
-
-  const handleAdd = (type: string) => {
-    setSelectedFile(null);
-    setSelectedType(type);
-    setEditContent('');
-    setOpenDialog(true);
-  };
-
-  const handleSave = () => {
-    if (selectedFile) {
-      handleUpdateFile(selectedType, selectedFile.name, editContent);
-    } else {
-      handleCreateFile(selectedType, editContent);
-    }
-  };
 
   if (loading) {
     return (
@@ -220,103 +140,112 @@ export default function FileManagement() {
     );
   }
 
+  if (error) {
+    return (
+      <Box sx={{ p: 3 }}>
+        <Alert severity="error">{error}</Alert>
+      </Box>
+    );
+  }
+
   return (
     <Box sx={{ p: 3 }}>
-      <Typography variant="h5" gutterBottom>
-        File Management
-      </Typography>
-
-      {error && (
-        <Alert severity="error" sx={{ mb: 2 }}>
-          {error}
-        </Alert>
-      )}
-
       <Grid container spacing={3}>
-        {Object.entries(files).map(([type, fileList]) => (
-          <Grid item xs={12} md={6} key={type}>
-            <Card>
-              <CardContent>
-                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-                  <Typography variant="h6">
-                    {type.charAt(0).toUpperCase() + type.slice(1)} Files
-                  </Typography>
-                  <Button
-                    startIcon={<AddIcon />}
-                    onClick={() => handleAdd(type)}
-                    variant="contained"
-                    size="small"
-                  >
-                    Add
-                  </Button>
-                </Box>
-                
-                <List>
-                  {fileList.map((file) => (
-                    <ListItem key={file.name}>
-                      <ListItemText
-                        primary={file.name}
-                        secondary={`Modified: ${new Date(file.modified_at).toLocaleString()}`}
-                      />
-                      <ListItemSecondaryAction>
-                        <IconButton 
-                          edge="end" 
-                          aria-label="edit"
-                          onClick={() => handleEdit(file, type)}
-                          sx={{ mr: 1 }}
-                        >
-                          <EditIcon />
-                        </IconButton>
-                        <IconButton 
-                          edge="end" 
-                          aria-label="delete"
-                          onClick={() => handleDeleteFile(type, file.name)}
-                        >
-                          <DeleteIcon />
-                        </IconButton>
-                      </ListItemSecondaryAction>
-                    </ListItem>
-                  ))}
-                  {fileList.length === 0 && (
-                    <ListItem>
-                      <ListItemText primary="No files" />
-                    </ListItem>
-                  )}
-                </List>
-              </CardContent>
-            </Card>
-          </Grid>
-        ))}
-      </Grid>
+        {/* Patterns */}
+        <Grid item xs={12} md={6}>
+          <Paper sx={{ p: 2 }}>
+            <Typography variant="h6" gutterBottom>
+              Patterns
+            </Typography>
+            <List>
+              {patterns.map((pattern) => (
+                <ListItem key={pattern.id}>
+                  <ListItemText
+                    primary={pattern.name}
+                    secondary={`Type: ${pattern.type}, ${pattern.description}`}
+                  />
+                </ListItem>
+              ))}
+            </List>
+          </Paper>
+        </Grid>
 
-      <Dialog 
-        open={openDialog} 
-        onClose={() => setOpenDialog(false)}
-        maxWidth="md"
-        fullWidth
-      >
-        <DialogTitle>
-          {selectedFile ? `Edit ${selectedFile.name}` : `New ${selectedType} File`}
-        </DialogTitle>
-        <DialogContent>
-          <TextField
-            autoFocus
-            multiline
-            rows={10}
-            value={editContent}
-            onChange={(e) => setEditContent(e.target.value)}
-            fullWidth
-            variant="outlined"
-            margin="normal"
-          />
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setOpenDialog(false)}>Cancel</Button>
-          <Button onClick={handleSave} variant="contained" color="primary">
-            Save
-          </Button>
-        </DialogActions>
-      </Dialog>
+        {/* Parameters */}
+        <Grid item xs={12} md={6}>
+          <Paper sx={{ p: 2 }}>
+            <Typography variant="h6" gutterBottom>
+              Parameters
+            </Typography>
+            <List>
+              {parameters.map((param) => (
+                <ListItem key={param.id}>
+                  <ListItemText
+                    primary={param.name}
+                    secondary={`Value: ${JSON.stringify(param.value)}`}
+                  />
+                </ListItem>
+              ))}
+            </List>
+          </Paper>
+        </Grid>
+
+        {/* Nozzles */}
+        <Grid item xs={12} md={6}>
+          <Paper sx={{ p: 2 }}>
+            <Typography variant="h6" gutterBottom>
+              Nozzles
+            </Typography>
+            <List>
+              {nozzles.map((nozzle) => (
+                <ListItem key={nozzle.id}>
+                  <ListItemText
+                    primary={nozzle.name}
+                    secondary={`Type: ${nozzle.type}`}
+                  />
+                </ListItem>
+              ))}
+            </List>
+          </Paper>
+        </Grid>
+
+        {/* Powders */}
+        <Grid item xs={12} md={6}>
+          <Paper sx={{ p: 2 }}>
+            <Typography variant="h6" gutterBottom>
+              Powders
+            </Typography>
+            <List>
+              {powders.map((powder) => (
+                <ListItem key={powder.id}>
+                  <ListItemText
+                    primary={powder.name}
+                    secondary={`Properties: ${JSON.stringify(powder.properties)}`}
+                  />
+                </ListItem>
+              ))}
+            </List>
+          </Paper>
+        </Grid>
+
+        {/* Sequences */}
+        <Grid item xs={12}>
+          <Paper sx={{ p: 2 }}>
+            <Typography variant="h6" gutterBottom>
+              Sequences
+            </Typography>
+            <List>
+              {sequences.map((sequence) => (
+                <ListItem key={sequence.id}>
+                  <ListItemText
+                    primary={sequence.name}
+                    secondary={`Steps: ${sequence.steps.length}`}
+                  />
+                </ListItem>
+              ))}
+            </List>
+          </Paper>
+        </Grid>
+      </Grid>
     </Box>
   );
 } 
