@@ -6,6 +6,7 @@ This module implements the Pattern service for managing process patterns.
 import os
 from pathlib import Path
 from datetime import datetime
+from typing import List
 
 import yaml
 from fastapi import status
@@ -16,7 +17,7 @@ from mcs.utils.health import (
     HealthStatus,
     ComponentHealth
 )
-from mcs.api.process.models.process_models import ProcessStatus
+from mcs.api.process.models.process_models import ProcessStatus, Pattern
 
 
 class PatternService:
@@ -271,6 +272,36 @@ class PatternService:
             
         except Exception as e:
             error_msg = f"Failed to load patterns: {str(e)}"
+            logger.error(error_msg)
+            raise create_error(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                message=error_msg
+            )
+
+    async def list_patterns(self) -> List[Pattern]:
+        """List available patterns."""
+        try:
+            if not self.is_running:
+                raise create_error(
+                    status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                    message=f"{self.service_name} service not running"
+                )
+
+            patterns = []
+            for pattern_id, pattern_data in self._patterns.items():
+                pattern = Pattern(
+                    id=pattern_id,
+                    name=pattern_data.get("name", pattern_id),
+                    description=pattern_data.get("description", ""),
+                    type=pattern_data.get("type", "linear"),
+                    params=pattern_data.get("params", {})
+                )
+                patterns.append(pattern)
+
+            return patterns
+
+        except Exception as e:
+            error_msg = f"Failed to list patterns: {str(e)}"
             logger.error(error_msg)
             raise create_error(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,

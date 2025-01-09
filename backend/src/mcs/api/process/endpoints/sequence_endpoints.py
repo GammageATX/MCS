@@ -15,7 +15,7 @@ from mcs.api.process.models.process_models import (  # noqa: F401
     StatusResponse
 )
 
-router = APIRouter(prefix="/sequences", tags=["sequences"])
+router = APIRouter(tags=["sequences"])
 
 
 def get_process_service(request: Request) -> ProcessService:
@@ -24,7 +24,7 @@ def get_process_service(request: Request) -> ProcessService:
 
 
 @router.get(
-    "",
+    "/",
     response_model=SequenceListResponse,
     responses={
         status.HTTP_500_INTERNAL_SERVER_ERROR: {"description": "Failed to list sequences"}

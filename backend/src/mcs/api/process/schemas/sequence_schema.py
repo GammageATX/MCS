@@ -8,12 +8,12 @@ from pydantic import BaseModel, Field
 
 class StepType(str, Enum):
     """Step types."""
-    INITIALIZE = "initialize"
-    TROUGH = "trough"
-    PATTERN = "pattern"
-    PARAMETER = "parameter"
-    SPRAY = "spray"
-    SHUTDOWN = "shutdown"
+    INITIALIZE = "INITIALIZE"
+    TROUGH = "TROUGH"
+    PATTERN = "PATTERN"
+    PARAMETERS = "PARAMETERS"
+    SPRAY = "SPRAY"
+    SHUTDOWN = "SHUTDOWN"
 
 
 class SequenceMetadata(BaseModel):

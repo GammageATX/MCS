@@ -6,6 +6,7 @@ This module implements the Parameter service for managing process parameters.
 import os
 from pathlib import Path
 from datetime import datetime
+from typing import List
 
 import yaml
 from fastapi import status
@@ -16,7 +17,7 @@ from mcs.utils.health import (
     HealthStatus,
     ComponentHealth
 )
-from mcs.api.process.models.process_models import ProcessStatus
+from mcs.api.process.models.process_models import ProcessStatus, Parameter, Nozzle, Powder
 
 
 class ParameterService:
@@ -30,10 +31,16 @@ class ParameterService:
         self._is_initialized = False
         self._start_time = None
         
-        # Initialize components to None
-        self._parameters = None
+        # Initialize components
+        self._parameters = {}  # Initialize as empty dict
         self._failed_parameters = {}
         self._parameter_status = ProcessStatus.IDLE
+        
+        # Initialize nozzles and powders
+        self._nozzles = {}
+        self._failed_nozzles = {}
+        self._powders = {}
+        self._failed_powders = {}
         
         logger.info(f"{self.service_name} service initialized")
 
@@ -266,11 +273,249 @@ class ParameterService:
                     except Exception as e:
                         logger.error(f"Failed to load parameter file {file_path.name}: {str(e)}")
                         self._failed_parameters[file_path.stem] = str(e)
-                        
-            logger.info(f"Loaded {len(self._parameters)} parameters from configuration")
+            
+            # Load nozzle files
+            nozzle_dir = Path("backend/data/nozzles")
+            if nozzle_dir.exists():
+                for file_path in nozzle_dir.glob("*.yaml"):
+                    try:
+                        with open(file_path, "r") as f:
+                            nozzle_data = yaml.safe_load(f)
+                            nozzle_id = file_path.stem
+                            self._nozzles[nozzle_id] = nozzle_data
+                            logger.info(f"Loaded nozzle file: {file_path.name}")
+                    except Exception as e:
+                        logger.error(f"Failed to load nozzle file {file_path.name}: {str(e)}")
+                        self._failed_nozzles[file_path.stem] = str(e)
+            
+            # Load powder files
+            powder_dir = Path("backend/data/powders")
+            if powder_dir.exists():
+                for file_path in powder_dir.glob("*.yaml"):
+                    try:
+                        with open(file_path, "r") as f:
+                            powder_data = yaml.safe_load(f)
+                            powder_id = file_path.stem
+                            self._powders[powder_id] = powder_data
+                            logger.info(f"Loaded powder file: {file_path.name}")
+                    except Exception as e:
+                        logger.error(f"Failed to load powder file {file_path.name}: {str(e)}")
+                        self._failed_powders[file_path.stem] = str(e)
+            
+            logger.info(f"Loaded {len(self._parameters)} parameters, {len(self._nozzles)} nozzles, and {len(self._powders)} powders")
             
         except Exception as e:
             error_msg = f"Failed to load parameters: {str(e)}"
+            logger.error(error_msg)
+            raise create_error(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                message=error_msg
+            )
+
+    async def list_parameters(self) -> List[Parameter]:
+        """List available parameters."""
+        try:
+            if not self.is_running:
+                raise create_error(
+                    status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                    message=f"{self.service_name} service not running"
+                )
+
+            parameters = []
+            for param_id, param_data in self._parameters.items():
+                if "process" in param_data:
+                    process_data = param_data["process"]
+                    parameter = Parameter(
+                        name=process_data.get("name", param_id),
+                        created=process_data.get("created", ""),
+                        author=process_data.get("author", ""),
+                        description=process_data.get("description", ""),
+                        nozzle=process_data.get("nozzle", ""),
+                        main_gas=float(process_data.get("main_gas", 0.0)),
+                        feeder_gas=float(process_data.get("feeder_gas", 0.0)),
+                        frequency=int(process_data.get("frequency", 0)),
+                        deagglomerator_speed=int(process_data.get("deagglomerator_speed", 0))
+                    )
+                    parameters.append(parameter)
+
+            return parameters
+
+        except Exception as e:
+            error_msg = f"Failed to list parameters: {str(e)}"
+            logger.error(error_msg)
+            raise create_error(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                message=error_msg
+            )
+
+    async def get_parameter(self, param_id: str):
+        """Get parameter by ID.
+        
+        Args:
+            param_id: Parameter identifier
+            
+        Returns:
+            Parameter: Parameter data
+            
+        Raises:
+            HTTPException: If parameter not found or service error
+        """
+        try:
+            if not self.is_running:
+                raise create_error(
+                    status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                    message=f"{self.service_name} service not running"
+                )
+            
+            if param_id not in self._parameters:
+                raise create_error(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    message=f"Parameter {param_id} not found"
+                )
+                
+            return self._parameters[param_id]
+            
+        except Exception as e:
+            logger.error(f"Failed to get parameter {param_id}: {e}")
+            raise create_error(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                message=f"Failed to get parameter: {str(e)}"
+            )
+
+    async def list_nozzles(self) -> List[Nozzle]:
+        """List available nozzles."""
+        try:
+            if not self.is_running:
+                raise create_error(
+                    status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                    message=f"{self.service_name} service not running"
+                )
+
+            nozzles = []
+            for nozzle_id, nozzle_data in self._nozzles.items():
+                if "nozzle" in nozzle_data:
+                    nozzle_info = nozzle_data["nozzle"]
+                    nozzle = Nozzle(
+                        name=nozzle_info.get("name", nozzle_id),
+                        manufacturer=nozzle_info.get("manufacturer", ""),
+                        type=nozzle_info.get("type", ""),
+                        description=nozzle_info.get("description", "")
+                    )
+                    nozzles.append(nozzle)
+
+            return nozzles
+
+        except Exception as e:
+            error_msg = f"Failed to list nozzles: {str(e)}"
+            logger.error(error_msg)
+            raise create_error(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                message=error_msg
+            )
+
+    async def list_powders(self) -> List[Powder]:
+        """List available powders."""
+        try:
+            if not self.is_running:
+                raise create_error(
+                    status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                    message=f"{self.service_name} service not running"
+                )
+
+            powders = []
+            for powder_id, powder_data in self._powders.items():
+                if "powder" in powder_data:
+                    powder_info = powder_data["powder"]
+                    powder = Powder(
+                        name=powder_info.get("name", powder_id),
+                        type=powder_info.get("type", ""),
+                        size=powder_info.get("size", ""),
+                        manufacturer=powder_info.get("manufacturer", ""),
+                        lot=powder_info.get("lot", "")
+                    )
+                    powders.append(powder)
+
+            return powders
+
+        except Exception as e:
+            error_msg = f"Failed to list powders: {str(e)}"
+            logger.error(error_msg)
+            raise create_error(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                message=error_msg
+            )
+
+    async def get_nozzle(self, nozzle_id: str) -> Nozzle:
+        """Get nozzle by ID."""
+        try:
+            if not self.is_running:
+                raise create_error(
+                    status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                    message=f"{self.service_name} service not running"
+                )
+
+            if nozzle_id not in self._nozzles:
+                raise create_error(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    message=f"Nozzle {nozzle_id} not found"
+                )
+
+            nozzle_data = self._nozzles[nozzle_id]
+            if "nozzle" in nozzle_data:
+                nozzle_info = nozzle_data["nozzle"]
+                return Nozzle(
+                    name=nozzle_info.get("name", nozzle_id),
+                    manufacturer=nozzle_info.get("manufacturer", ""),
+                    type=nozzle_info.get("type", ""),
+                    description=nozzle_info.get("description", "")
+                )
+
+            raise create_error(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                message=f"Invalid nozzle data format for {nozzle_id}"
+            )
+
+        except Exception as e:
+            error_msg = f"Failed to get nozzle: {str(e)}"
+            logger.error(error_msg)
+            raise create_error(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                message=error_msg
+            )
+
+    async def get_powder(self, powder_id: str) -> Powder:
+        """Get powder by ID."""
+        try:
+            if not self.is_running:
+                raise create_error(
+                    status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                    message=f"{self.service_name} service not running"
+                )
+
+            if powder_id not in self._powders:
+                raise create_error(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    message=f"Powder {powder_id} not found"
+                )
+
+            powder_data = self._powders[powder_id]
+            if "powder" in powder_data:
+                powder_info = powder_data["powder"]
+                return Powder(
+                    name=powder_info.get("name", powder_id),
+                    type=powder_info.get("type", ""),
+                    size=powder_info.get("size", ""),
+                    manufacturer=powder_info.get("manufacturer", ""),
+                    lot=powder_info.get("lot", "")
+                )
+
+            raise create_error(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                message=f"Invalid powder data format for {powder_id}"
+            )
+
+        except Exception as e:
+            error_msg = f"Failed to get powder: {str(e)}"
             logger.error(error_msg)
             raise create_error(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,

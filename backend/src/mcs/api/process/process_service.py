@@ -101,15 +101,12 @@ class ProcessService:
                     message=f"{self.service_name} service already running"
                 )
 
-            # Load config
-            config = self._load_config()
-            
             # Initialize component services
-            self.action_service = ActionService(version=config.get("version", self.version))
-            self.parameter_service = ParameterService(version=config.get("version", self.version))
-            self.pattern_service = PatternService(version=config.get("version", self.version))
-            self.sequence_service = SequenceService(version=config.get("version", self.version))
-            self.schema_service = SchemaService(version=config.get("version", self.version))
+            self.action_service = ActionService(version=self.version)
+            self.parameter_service = ParameterService(version=self.version)
+            self.pattern_service = PatternService(version=self.version)
+            self.sequence_service = SequenceService(version=self.version)
+            self.schema_service = SchemaService(version=self.version)
             
             # Store components for health checks
             self._components = {
@@ -122,9 +119,9 @@ class ProcessService:
             
             # Initialize all components
             for name, component in self._components.items():
-                if hasattr(component, "initialize"):
-                    await component.initialize()
-                    logger.info(f"Initialized {name} component")
+                logger.info(f"Initializing {name} component...")
+                await component.initialize()
+                logger.info(f"Initialized {name} component")
 
             self._is_initialized = True
             logger.info(f"{self.service_name} service initialized")
@@ -154,9 +151,9 @@ class ProcessService:
 
             # Start components in dependency order
             for name, component in self._components.items():
-                if hasattr(component, "start"):
-                    await component.start()
-                    logger.info(f"Started {name} component")
+                logger.info(f"Starting {name} component...")
+                await component.start()
+                logger.info(f"Started {name} component")
 
             self._is_running = True
             self._start_time = datetime.now()

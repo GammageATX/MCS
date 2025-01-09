@@ -7,7 +7,7 @@ from mcs.utils.errors import create_error
 from mcs.api.process.process_service import ProcessService
 from mcs.api.process.models.process_models import PatternResponse, PatternListResponse, BaseResponse, Pattern  # noqa: F401
 
-router = APIRouter(prefix="/patterns", tags=["pattern"])
+router = APIRouter(tags=["patterns"])
 
 
 def get_process_service(request: Request) -> ProcessService:
@@ -16,7 +16,7 @@ def get_process_service(request: Request) -> ProcessService:
 
 
 @router.get(
-    "",
+    "/",
     response_model=PatternListResponse,
     responses={
         status.HTTP_500_INTERNAL_SERVER_ERROR: {"description": "Failed to list patterns"}

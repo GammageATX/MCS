@@ -31,8 +31,8 @@ class SequenceService:
         self._is_initialized = False
         self._start_time = None
         
-        # Initialize components to None
-        self._sequences = None
+        # Initialize components
+        self._sequences = {}  # Initialize as empty dict
         self._failed_sequences = {}
         self._active_sequence = None
         self._sequence_status = ProcessStatus.IDLE
@@ -98,22 +98,19 @@ class SequenceService:
                     status_code=status.HTTP_409_CONFLICT,
                     message=f"{self.service_name} service already running"
                 )
-
+                
             if not self.is_initialized:
                 raise create_error(
                     status_code=status.HTTP_400_BAD_REQUEST,
                     message=f"{self.service_name} service not initialized"
                 )
-
+            
+            logger.info(f"Starting {self.service_name} service...")
             self._is_running = True
             self._start_time = datetime.now()
-            self._sequence_status = ProcessStatus.IDLE
-            logger.info(f"{self.service_name} service started")
-
+            logger.info(f"{self.service_name} service started successfully")
+            
         except Exception as e:
-            self._is_running = False
-            self._start_time = None
-            self._sequence_status = ProcessStatus.ERROR
             error_msg = f"Failed to start {self.service_name} service: {str(e)}"
             logger.error(error_msg)
             raise create_error(
@@ -291,27 +288,37 @@ class SequenceService:
     async def _load_sequences(self) -> None:
         """Load sequences from configuration."""
         try:
+            logger.info("Loading sequences...")
+            
             # Load service config
             config_path = os.path.join("backend", "config", "process.yaml")
             if os.path.exists(config_path):
+                logger.info(f"Loading config from {config_path}")
                 with open(config_path, "r") as f:
                     config = yaml.safe_load(f)
                     if "sequence" in config:
                         self._version = config["sequence"].get("version", self._version)
+                        logger.info(f"Updated version to {self._version}")
             
             # Load sequence files from data directory
             sequence_dir = Path("backend/data/sequences")
             if sequence_dir.exists():
+                logger.info(f"Loading sequences from {sequence_dir}")
                 for file_path in sequence_dir.glob("*.yaml"):
                     try:
                         with open(file_path, "r") as f:
                             sequence_data = yaml.safe_load(f)
-                            sequence_id = file_path.stem
-                            self._sequences[sequence_id] = sequence_data
-                            logger.info(f"Loaded sequence file: {file_path.name}")
+                            # Unwrap the sequence key and get inner data
+                            if "sequence" in sequence_data:
+                                sequence_data = sequence_data["sequence"]
+                                sequence_id = file_path.stem
+                                self._sequences[sequence_id] = sequence_data
+                                logger.info(f"Loaded sequence file: {file_path.name}")
                     except Exception as e:
                         logger.error(f"Failed to load sequence file {file_path.name}: {str(e)}")
                         self._failed_sequences[file_path.stem] = str(e)
+            else:
+                logger.warning(f"Sequence directory not found: {sequence_dir}")
                         
             logger.info(f"Loaded {len(self._sequences)} sequences from configuration")
             
@@ -321,4 +328,66 @@ class SequenceService:
             raise create_error(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 message=error_msg
+            )
+
+    async def list_sequences(self):
+        """List available sequences.
+        
+        Returns:
+            List[Sequence]: List of available sequences
+            
+        Raises:
+            HTTPException: If service not running or error occurs
+        """
+        try:
+            logger.info(f"list_sequences called - running: {self.is_running}, initialized: {self.is_initialized}")
+            logger.info(f"Current sequences: {list(self._sequences.keys())}")
+            
+            if not self.is_running:
+                raise create_error(
+                    status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                    message=f"{self.service_name} service not running"
+                )
+            
+            return list(self._sequences.values())
+            
+        except Exception as e:
+            logger.error(f"Failed to list sequences: {e}")
+            raise create_error(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                message=f"Failed to list sequences: {str(e)}"
+            )
+
+    async def get_sequence(self, sequence_id: str):
+        """Get sequence by ID.
+        
+        Args:
+            sequence_id: Sequence identifier
+            
+        Returns:
+            Sequence: Sequence data
+            
+        Raises:
+            HTTPException: If sequence not found or service error
+        """
+        try:
+            if not self.is_running:
+                raise create_error(
+                    status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                    message=f"{self.service_name} service not running"
+                )
+            
+            if sequence_id not in self._sequences:
+                raise create_error(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    message=f"Sequence {sequence_id} not found"
+                )
+                
+            return self._sequences[sequence_id]
+            
+        except Exception as e:
+            logger.error(f"Failed to get sequence {sequence_id}: {e}")
+            raise create_error(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                message=f"Failed to get sequence: {str(e)}"
             )

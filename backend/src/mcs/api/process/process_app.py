@@ -155,9 +155,17 @@ def create_process_service() -> FastAPI:
             )
 
     # Include routers
-    app.include_router(process_router)
-    app.include_router(pattern_router)
-    app.include_router(parameter_router)
-    app.include_router(sequence_router)
+    app.include_router(process_router)  # Base router for /health etc
+    app.include_router(pattern_router, prefix="/patterns")
+    app.include_router(parameter_router, prefix="/parameters")
+    app.include_router(sequence_router, prefix="/sequences")
+
+    # Debug: Print all registered routes
+    logger.info("Registered routes:")
+    for route in app.routes:
+        if hasattr(route, "methods"):
+            logger.info(f"HTTP Route: {route.path} [{','.join(route.methods)}]")
+        else:
+            logger.info(f"WebSocket Route: {route.path}")
 
     return app
