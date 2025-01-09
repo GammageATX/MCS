@@ -4,6 +4,7 @@ uvicorn>=0.22.0       # ASGI server
 pydantic>=2.0.0       # Data validation
 PyQt6>=6.4.0          # UI framework
 pyyaml>=6.0.1         # Configuration handling
+ruamel.yaml>=0.17.21  # YAML handling with comments support
 paramiko>=3.4.0       # SSH client functionality
 loguru>=0.7.0         # Enhanced logging
 productivity>=0.11.1   # PLC communication
