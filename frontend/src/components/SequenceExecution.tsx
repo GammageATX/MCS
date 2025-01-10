@@ -20,16 +20,61 @@ interface Sequence {
   error_message?: string;
 }
 
+interface SequenceUpdate {
+  type: 'sequence_update';
+  data: {
+    sequence_id: string;
+    status: string;
+    error_message?: string;
+    steps?: SequenceStep[];
+  };
+}
+
 export default function SequenceExecution() {
-  const { connected } = useWebSocket();
+  const { connected, lastMessage } = useWebSocket();
   const [sequences, setSequences] = useState<Sequence[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  // Handle WebSocket updates
+  useEffect(() => {
+    if (lastMessage) {
+      try {
+        // Handle both string and object message formats
+        const messageData = typeof lastMessage.data === 'string' 
+          ? JSON.parse(lastMessage.data)
+          : lastMessage.data;
+
+        // Validate message structure
+        if (messageData && messageData.type === 'sequence_update' && messageData.data) {
+          const update = messageData as SequenceUpdate;
+          setSequences(prevSequences => 
+            prevSequences.map(seq => 
+              seq.id === update.data.sequence_id
+                ? { 
+                    ...seq, 
+                    status: update.data.status,
+                    error_message: update.data.error_message,
+                    steps: update.data.steps || seq.steps
+                  }
+                : seq
+            )
+          );
+        } else {
+          console.warn('Received invalid WebSocket message format:', messageData);
+        }
+      } catch (err) {
+        console.error('Failed to parse WebSocket message:', err, 'Raw message:', lastMessage.data);
+      }
+    }
+  }, [lastMessage]);
+
+  // Fetch sequences on mount and when connection changes
   useEffect(() => {
     const fetchSequences = async () => {
       try {
-        const response = await fetch(`${API_CONFIG.PROCESS_SERVICE}/sequences`);
+        setLoading(true);
+        const response = await fetch(`${API_CONFIG.PROCESS_SERVICE}/sequences/`);
         if (!response.ok) {
           throw new Error(`Failed to fetch sequences: ${response.status}`);
         }
@@ -38,14 +83,16 @@ export default function SequenceExecution() {
         setError(null);
       } catch (err) {
         console.error('Failed to fetch sequences:', err);
-        setError('Failed to load sequences');
+        setError('Failed to load sequences. Please check your connection and try again.');
       } finally {
         setLoading(false);
       }
     };
 
-    fetchSequences();
-  }, []);
+    if (connected) {
+      fetchSequences();
+    }
+  }, [connected]);
 
   const handleStartSequence = async (sequenceId: string) => {
     try {
@@ -55,39 +102,27 @@ export default function SequenceExecution() {
       if (!response.ok) {
         throw new Error(`Failed to start sequence: ${response.status}`);
       }
-      // Refresh sequences after starting
-      const updatedResponse = await fetch(`${API_CONFIG.PROCESS_SERVICE}/sequences`);
-      if (updatedResponse.ok) {
-        const data = await updatedResponse.json();
-        setSequences(data);
-      }
     } catch (err) {
       console.error('Failed to start sequence:', err);
-      setError('Failed to start sequence');
+      setError('Failed to start sequence. Please try again.');
     }
   };
 
   const handleStopSequence = async (sequenceId: string) => {
     try {
-      const response = await fetch(`${API_CONFIG.PROCESS_SERVICE}/process/sequences/${sequenceId}/stop`, {
+      const response = await fetch(`${API_CONFIG.PROCESS_SERVICE}/sequences/${sequenceId}/stop`, {
         method: 'POST'
       });
       if (!response.ok) {
         throw new Error(`Failed to stop sequence: ${response.status}`);
       }
-      // Refresh sequences after stopping
-      const updatedResponse = await fetch(`${API_CONFIG.PROCESS_SERVICE}/process/sequences`);
-      if (updatedResponse.ok) {
-        const data = await updatedResponse.json();
-        setSequences(data);
-      }
     } catch (err) {
       console.error('Failed to stop sequence:', err);
-      setError('Failed to stop sequence');
+      setError('Failed to stop sequence. Please try again.');
     }
   };
 
-  const getStatusColor = (status: string) => {
+  const getStatusColor = (status: string): "success" | "primary" | "error" | "default" => {
     switch (status) {
       case 'completed':
         return 'success';
@@ -100,21 +135,35 @@ export default function SequenceExecution() {
     }
   };
 
+  if (!connected) {
+    return (
+      <Typography color="error">
+        Not connected to server. Please check your connection.
+      </Typography>
+    );
+  }
+
   if (loading) {
     return (
-      <Typography>Loading sequences...</Typography>
+      <Box display="flex" justifyContent="center" alignItems="center" minHeight="200px">
+        <Typography>Loading sequences...</Typography>
+      </Box>
     );
   }
 
   if (error) {
     return (
-      <Typography color="error">{error}</Typography>
+      <Box display="flex" justifyContent="center" alignItems="center" minHeight="200px">
+        <Typography color="error">{error}</Typography>
+      </Box>
     );
   }
 
   if (!sequences || sequences.length === 0) {
     return (
-      <Typography>No sequences available</Typography>
+      <Box display="flex" justifyContent="center" alignItems="center" minHeight="200px">
+        <Typography>No sequences available. Create a sequence in File Management.</Typography>
+      </Box>
     );
   }
 
@@ -149,6 +198,7 @@ export default function SequenceExecution() {
                     variant="contained"
                     color="error"
                     onClick={() => handleStopSequence(sequence.id)}
+                    disabled={!connected}
                   >
                     Stop
                   </Button>
@@ -180,6 +230,11 @@ export default function SequenceExecution() {
                       <Typography variant="body2" color="textSecondary">
                         {step.description}
                       </Typography>
+                      {step.error_message && (
+                        <Typography color="error" variant="body2">
+                          Error: {step.error_message}
+                        </Typography>
+                      )}
                     </Box>
                     <Box display="flex" gap={1} alignItems="center">
                       <Chip
