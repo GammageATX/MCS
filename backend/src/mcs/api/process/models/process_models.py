@@ -101,6 +101,7 @@ class SequenceStep(BaseModel):
 
 class Sequence(BaseModel):
     """Sequence definition."""
+    id: str
     metadata: SequenceMetadata
     steps: List[SequenceStep]
 

@@ -108,7 +108,8 @@ async def get_status(
 ) -> StatusResponse:
     """Get sequence status."""
     try:
-        return await service.sequence_service.get_status(sequence_id)
+        status = await service.sequence_service.get_sequence_status(sequence_id)
+        return StatusResponse(status=status)
     except Exception as e:
         logger.error(f"Failed to get sequence status {sequence_id}: {e}")
         raise create_error(
@@ -157,3 +158,27 @@ async def sequence_status(
     except Exception as e:
         logger.error(f"Sequence WebSocket error: {str(e)}")
         await websocket.close(code=status.WS_1011_INTERNAL_ERROR)
+
+
+@router.get(
+    "/{sequence_id}",
+    response_model=SequenceResponse,
+    responses={
+        status.HTTP_404_NOT_FOUND: {"description": "Sequence not found"},
+        status.HTTP_500_INTERNAL_SERVER_ERROR: {"description": "Failed to get sequence"}
+    }
+)
+async def get_sequence(
+    sequence_id: str,
+    service: ProcessService = Depends(get_process_service)
+) -> SequenceResponse:
+    """Get sequence by ID."""
+    try:
+        sequence = await service.sequence_service.get_sequence(sequence_id)
+        return SequenceResponse(sequence=sequence)
+    except Exception as e:
+        logger.error(f"Failed to get sequence {sequence_id}: {e}")
+        raise create_error(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            message=f"Failed to get sequence: {str(e)}"
+        )

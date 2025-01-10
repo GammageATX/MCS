@@ -349,7 +349,18 @@ class SequenceService:
                     message=f"{self.service_name} service not running"
                 )
             
-            return list(self._sequences.values())
+            # Return sequences with their IDs
+            sequences = []
+            for sequence_id, sequence_data in self._sequences.items():
+                # Create a Sequence object with the ID
+                sequence = {
+                    "id": sequence_id,
+                    "metadata": sequence_data.get("metadata", {}),
+                    "steps": sequence_data.get("steps", [])
+                }
+                sequences.append(sequence)
+            
+            return sequences
             
         except Exception as e:
             logger.error(f"Failed to list sequences: {e}")
@@ -383,7 +394,14 @@ class SequenceService:
                     message=f"Sequence {sequence_id} not found"
                 )
                 
-            return self._sequences[sequence_id]
+            sequence_data = self._sequences[sequence_id]
+            # Add the ID to the sequence data
+            sequence = {
+                "id": sequence_id,
+                "metadata": sequence_data.get("metadata", {}),
+                "steps": sequence_data.get("steps", [])
+            }
+            return sequence
             
         except Exception as e:
             logger.error(f"Failed to get sequence {sequence_id}: {e}")
