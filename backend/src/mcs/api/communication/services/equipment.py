@@ -4,6 +4,7 @@ from typing import Dict, Any, Callable
 from datetime import datetime
 from fastapi import status
 from loguru import logger
+import asyncio
 
 from mcs.utils.errors import create_error
 from mcs.utils.health import ServiceHealth, ComponentHealth, HealthStatus, create_error_health
@@ -827,7 +828,10 @@ class EquipmentService:
             state = await self.get_equipment_state()
             for callback in self._state_callbacks:
                 try:
-                    await callback(state)
+                    if asyncio.iscoroutinefunction(callback):
+                        await callback(state)
+                    else:
+                        callback(state)
                 except Exception as e:
                     logger.error(f"Error in state callback: {str(e)}")
         except Exception as e:
