@@ -11,7 +11,8 @@ import {
   List,
   ListItem,
   ListItemText,
-  Chip
+  Chip,
+  TextField
 } from '@mui/material';
 import { API_CONFIG } from '../config/api';
 import { useWebSocket } from '../context/WebSocketContext';
@@ -37,6 +38,8 @@ interface GasState {
   feeder_flow_rate: number;
   main_valve_state: boolean;
   feeder_valve_state: boolean;
+  main_flow_actual: number;
+  feeder_flow_actual: number;
 }
 
 interface VacuumState {
@@ -95,12 +98,32 @@ interface EquipmentState {
   process: ProcessState;
 }
 
+interface WebSocketMessage {
+  type: 'equipment_state' | 'internal_states';
+  state?: EquipmentState;
+  states?: Record<string, boolean>;
+}
+
 export default function EquipmentControl() {
   const [equipmentState, setEquipmentState] = useState<EquipmentState | null>(null);
   const [internalStates, setInternalStates] = useState<Record<string, boolean>>({});
   const [error, setError] = useState<string>('');
   const [loading, setLoading] = useState(true);
+  const [mainFlowSetpoint, setMainFlowSetpoint] = useState(0);
+  const [feederFlowSetpoint, setFeederFlowSetpoint] = useState(0);
+  const [mainFlowInput, setMainFlowInput] = useState(0);
+  const [feederFlowInput, setFeederFlowInput] = useState(0);
   const { connected, lastMessage } = useWebSocket();
+
+  // Initialize setpoints when equipment state is first loaded
+  useEffect(() => {
+    if (equipmentState) {
+      setMainFlowSetpoint(equipmentState.gas.main_flow_rate);
+      setFeederFlowSetpoint(equipmentState.gas.feeder_flow_rate);
+      setMainFlowInput(equipmentState.gas.main_flow_rate);
+      setFeederFlowInput(equipmentState.gas.feeder_flow_rate);
+    }
+  }, [equipmentState?.gas.main_flow_rate, equipmentState?.gas.feeder_flow_rate]);
 
   useEffect(() => {
     // Initial data fetch
@@ -122,10 +145,21 @@ export default function EquipmentControl() {
   useEffect(() => {
     if (lastMessage) {
       try {
-        const data = lastMessage;
-        if (data.type === 'equipment_state') {
-          setEquipmentState(data.state);
-        } else if (data.type === 'internal_states') {
+        const data = JSON.parse(lastMessage.data) as WebSocketMessage;
+        if (data.type === 'equipment_state' && data.state) {
+          // Ensure we preserve any existing state values not included in the update
+          setEquipmentState(prevState => {
+            if (!prevState || !data.state) return prevState;
+            return {
+              ...prevState,
+              ...data.state,
+              gas: {
+                ...prevState.gas,
+                ...data.state.gas
+              }
+            };
+          });
+        } else if (data.type === 'internal_states' && data.states) {
           setInternalStates(data.states);
         }
       } catch (err) {
@@ -136,10 +170,20 @@ export default function EquipmentControl() {
 
   const fetchEquipmentState = async () => {
     try {
-      const response = await fetch(`${API_CONFIG.EQUIPMENT_SERVICE}/equipment/state`);
+      const response = await fetch(`${API_CONFIG.COMMUNICATION_SERVICE}/equipment/state`);
       if (!response.ok) throw new Error(`Failed to fetch equipment state: ${response.status}`);
-      const data = await response.json();
-      setEquipmentState(data);
+      const data = await response.json() as EquipmentState;
+      setEquipmentState(prevState => {
+        if (!prevState) return data;
+        return {
+          ...prevState,
+          ...data,
+          gas: {
+            ...prevState.gas,
+            ...data.gas
+          }
+        };
+      });
       setError('');
     } catch (err) {
       console.error('Failed to fetch equipment state:', err);
@@ -151,7 +195,7 @@ export default function EquipmentControl() {
 
   const fetchInternalStates = async () => {
     try {
-      const response = await fetch(`${API_CONFIG.EQUIPMENT_SERVICE}/equipment/internal_states`);
+      const response = await fetch(`${API_CONFIG.COMMUNICATION_SERVICE}/equipment/internal_states`);
       if (!response.ok) throw new Error(`Failed to fetch internal states: ${response.status}`);
       const data = await response.json();
       setInternalStates(data);
@@ -169,13 +213,7 @@ export default function EquipmentControl() {
         body: JSON.stringify({ flow_rate: value })
       });
       if (!response.ok) throw new Error('Failed to set main gas flow');
-      // Update local state
-      if (equipmentState) {
-        setEquipmentState({
-          ...equipmentState,
-          gas: { ...equipmentState.gas, main_flow_rate: value }
-        });
-      }
+      setMainFlowSetpoint(value);
     } catch (err) {
       setError('Failed to set main gas flow rate');
     }
@@ -189,13 +227,7 @@ export default function EquipmentControl() {
         body: JSON.stringify({ flow_rate: value })
       });
       if (!response.ok) throw new Error('Failed to set feeder gas flow');
-      // Update local state
-      if (equipmentState) {
-        setEquipmentState({
-          ...equipmentState,
-          gas: { ...equipmentState.gas, feeder_flow_rate: value }
-        });
-      }
+      setFeederFlowSetpoint(value);
     } catch (err) {
       setError('Failed to set feeder gas flow rate');
     }
@@ -363,22 +395,23 @@ export default function EquipmentControl() {
 
   const setDeagglomeratorDutyCycle = async (value: number) => {
     try {
-      // Validate duty cycle is within acceptable range (0-100)
-      if (value < 0 || value > 100) {
-        throw new Error('Duty cycle must be between 0 and 100');
-      }
-      
-      const response = await fetch(`${API_CONFIG.EQUIPMENT_SERVICE}/equipment/deagg/${equipmentState?.deagglomerator.id || 1}/duty_cycle`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ value })
-      });
+      const response = await fetch(
+        `${API_CONFIG.EQUIPMENT_SERVICE}/equipment/deagg/${equipmentState?.deagglomerator.id}/duty_cycle`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ duty_cycle: value })
+        }
+      );
       if (!response.ok) throw new Error('Failed to set deagglomerator duty cycle');
-      // Update local state
+      
       if (equipmentState) {
         setEquipmentState({
           ...equipmentState,
-          deagglomerator: { ...equipmentState.deagglomerator, duty_cycle: value }
+          deagglomerator: {
+            ...equipmentState.deagglomerator,
+            duty_cycle: value
+          }
         });
       }
     } catch (err) {
@@ -388,16 +421,33 @@ export default function EquipmentControl() {
 
   const setDeagglomeratorFrequency = async (value: number) => {
     try {
-      const response = await fetch(`${API_CONFIG.EQUIPMENT_SERVICE}/equipment/deagg/${equipmentState?.deagglomerator.id || 1}/frequency`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ value })
-      });
+      const response = await fetch(
+        `${API_CONFIG.EQUIPMENT_SERVICE}/equipment/deagg/${equipmentState?.deagglomerator.id}/frequency`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ frequency: value })
+        }
+      );
       if (!response.ok) throw new Error('Failed to set deagglomerator frequency');
+      
+      if (equipmentState) {
+        setEquipmentState({
+          ...equipmentState,
+          deagglomerator: {
+            ...equipmentState.deagglomerator,
+            frequency: value
+          }
+        });
+      }
     } catch (err) {
       setError('Failed to set deagglomerator frequency');
     }
   };
+
+  // Alias functions to match render function calls
+  const setDeaggDutyCycle = setDeagglomeratorDutyCycle;
+  const setDeaggFrequency = setDeagglomeratorFrequency;
 
   const selectNozzle = async (nozzleId: number) => {
     try {
@@ -439,321 +489,471 @@ export default function EquipmentControl() {
     }
   };
 
-  if (loading) {
+  const togglePump = async (type: 'mechanical' | 'booster', start?: boolean) => {
+    if (!equipmentState) return;
+    
+    const currentState = type === 'mechanical' 
+      ? equipmentState.vacuum.mechanical_pump_state
+      : equipmentState.vacuum.booster_pump_state;
+    
+    const newState = start ?? !currentState;
+    const endpoint = type === 'mechanical' ? 'mech' : 'booster';
+    const action = newState ? 'start' : 'stop';
+
+    try {
+      const response = await fetch(
+        `${API_CONFIG.EQUIPMENT_SERVICE}/equipment/vacuum/${endpoint}/${action}`,
+        { method: 'PUT' }
+      );
+      if (!response.ok) throw new Error(`Failed to ${action} ${type} pump`);
+      
+      // Update local state
+      if (equipmentState) {
+        setEquipmentState({
+          ...equipmentState,
+          vacuum: {
+            ...equipmentState.vacuum,
+            [`${type}_pump_state`]: newState
+          }
+        });
+      }
+    } catch (err) {
+      setError(`Failed to control ${type} pump`);
+    }
+  };
+
+  const renderProcessStatus = () => {
+    if (!equipmentState) return null;
+
     return (
-      <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}>
-        <CircularProgress />
-      </Box>
+      <Paper sx={{ p: 2, mb: 2, backgroundColor: '#f8f9fa' }}>
+        <Typography variant="h6" gutterBottom>Process Status</Typography>
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+          <Box sx={{ 
+            display: 'flex', 
+            alignItems: 'center', 
+            p: 1, 
+            borderRadius: 1,
+            backgroundColor: equipmentState.process.gas_flow_stable ? '#e8f5e9' : '#ffebee'
+          }}>
+            <Typography sx={{ flex: 1 }}>Gas Flow State</Typography>
+            <Chip 
+              label={equipmentState.process.gas_flow_stable ? "Stable" : "Unstable"}
+              color={equipmentState.process.gas_flow_stable ? "success" : "error"}
+              size="small"
+            />
+          </Box>
+          <Box sx={{ 
+            display: 'flex', 
+            alignItems: 'center', 
+            p: 1, 
+            borderRadius: 1,
+            backgroundColor: equipmentState.process.powder_feed_active ? '#e8f5e9' : '#ffebee'
+          }}>
+            <Typography sx={{ flex: 1 }}>Powder Feed</Typography>
+            <Chip 
+              label={equipmentState.process.powder_feed_active ? "Active" : "Inactive"}
+              color={equipmentState.process.powder_feed_active ? "success" : "error"}
+              size="small"
+            />
+          </Box>
+          <Box sx={{ 
+            display: 'flex', 
+            alignItems: 'center', 
+            p: 1, 
+            borderRadius: 1,
+            backgroundColor: equipmentState.process.process_ready ? '#e8f5e9' : '#ffebee'
+          }}>
+            <Typography sx={{ flex: 1 }}>Process State</Typography>
+            <Chip 
+              label={equipmentState.process.process_ready ? "Ready" : "Not Ready"}
+              color={equipmentState.process.process_ready ? "success" : "error"}
+              size="small"
+            />
+          </Box>
+        </Box>
+      </Paper>
     );
-  }
+  };
+
+  const renderGasControls = () => {
+    if (!equipmentState) return null;
+    
+    return (
+      <Paper sx={{ p: 2, mb: 2 }}>
+        <Typography variant="h6" gutterBottom>Gas Control</Typography>
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+          <Box>
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 1 }}>
+              <Box>
+                <Typography variant="subtitle1" sx={{ fontWeight: 500, fontSize: '1.1rem' }}>
+                  Main Flow Rate
+                </Typography>
+                <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+                  {equipmentState.gas.main_flow_actual?.toFixed(1) || '0.0'} SLPM
+                </Typography>
+              </Box>
+              <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
+                <Typography variant="body2">Set:</Typography>
+                <TextField
+                  type="number"
+                  value={mainFlowInput}
+                  onChange={(e) => setMainFlowInput(parseFloat(e.target.value))}
+                  inputProps={{
+                    min: 0,
+                    max: 100,
+                    step: 0.1,
+                    style: { 
+                      width: '50px', 
+                      textAlign: 'right',
+                      fontSize: '0.875rem',
+                    }
+                  }}
+                  sx={{
+                    '& input::-webkit-outer-spin-button, & input::-webkit-inner-spin-button': {
+                      WebkitAppearance: 'none',
+                      margin: 0,
+                    },
+                    '& input[type=number]': {
+                      MozAppearance: 'textfield',
+                    },
+                    width: '80px'
+                  }}
+                  size="small"
+                  variant="outlined"
+                />
+                <Typography variant="body2">SLPM</Typography>
+                <Button
+                  variant="contained"
+                  onClick={() => setMainGasFlow(mainFlowInput)}
+                  size="small"
+                  sx={{ 
+                    width: '80px',
+                    py: 0.5,
+                    fontSize: '0.875rem'
+                  }}
+                >
+                  SET
+                </Button>
+              </Box>
+            </Box>
+            <Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
+              <Slider
+                value={mainFlowInput}
+                onChange={(_, value) => setMainFlowInput(value as number)}
+                min={0}
+                max={100}
+                step={0.1}
+                sx={{ flex: 1 }}
+              />
+              <Button
+                variant="contained"
+                onClick={toggleMainGasValve}
+                color={equipmentState.gas.main_valve_state ? "error" : "primary"}
+                size="small"
+                sx={{ 
+                  width: '80px',
+                  py: 0.5,
+                  fontSize: '0.875rem'
+                }}
+              >
+                CLOSE
+              </Button>
+            </Box>
+          </Box>
+
+          <Box>
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 1 }}>
+              <Box>
+                <Typography variant="subtitle1" sx={{ fontWeight: 500, fontSize: '1.1rem' }}>
+                  Feeder Flow Rate
+                </Typography>
+                <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+                  {equipmentState.gas.feeder_flow_actual?.toFixed(1) || '0.0'} SLPM
+                </Typography>
+              </Box>
+              <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
+                <Typography variant="body2">Set:</Typography>
+                <TextField
+                  type="number"
+                  value={feederFlowInput}
+                  onChange={(e) => setFeederFlowInput(parseFloat(e.target.value))}
+                  inputProps={{
+                    min: 0,
+                    max: 10,
+                    step: 0.1,
+                    style: { 
+                      width: '50px', 
+                      textAlign: 'right',
+                      fontSize: '0.875rem',
+                    }
+                  }}
+                  sx={{
+                    '& input::-webkit-outer-spin-button, & input::-webkit-inner-spin-button': {
+                      WebkitAppearance: 'none',
+                      margin: 0,
+                    },
+                    '& input[type=number]': {
+                      MozAppearance: 'textfield',
+                    },
+                    width: '80px'
+                  }}
+                  size="small"
+                  variant="outlined"
+                />
+                <Typography variant="body2">SLPM</Typography>
+                <Button
+                  variant="contained"
+                  onClick={() => setFeederGasFlow(feederFlowInput)}
+                  size="small"
+                  sx={{ 
+                    width: '80px',
+                    py: 0.5,
+                    fontSize: '0.875rem'
+                  }}
+                >
+                  SET
+                </Button>
+              </Box>
+            </Box>
+            <Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
+              <Slider
+                value={feederFlowInput}
+                onChange={(_, value) => setFeederFlowInput(value as number)}
+                min={0}
+                max={10}
+                step={0.1}
+                sx={{ flex: 1 }}
+              />
+              <Button
+                variant="contained"
+                onClick={toggleFeederGasValve}
+                color={equipmentState.gas.feeder_valve_state ? "error" : "primary"}
+                size="small"
+                sx={{ 
+                  width: '80px',
+                  py: 0.5,
+                  fontSize: '0.875rem'
+                }}
+              >
+                CLOSE
+              </Button>
+            </Box>
+          </Box>
+        </Box>
+      </Paper>
+    );
+  };
+
+  const renderVacuumControls = () => {
+    if (!equipmentState) return null;
+
+    return (
+      <Paper sx={{ p: 2, mb: 2 }}>
+        <Typography variant="h6" gutterBottom>Vacuum Control</Typography>
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+          <Box sx={{ textAlign: 'center', mb: 2 }}>
+            <Typography variant="h4" sx={{ fontFamily: 'monospace' }}>
+              {equipmentState.vacuum.chamber_pressure.toExponential(2)} Torr
+            </Typography>
+          </Box>
+          
+          <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap' }}>
+            <Button
+              variant="contained"
+              onClick={toggleGateValve}
+              color={equipmentState.vacuum.gate_valve_state ? "error" : "primary"}
+              size="small"
+              sx={{ flex: 1, minWidth: 120 }}
+            >
+              Gate Valve {equipmentState.vacuum.gate_valve_state ? "Close" : "Open"}
+            </Button>
+            <Button
+              variant="contained"
+              onClick={toggleVentValve}
+              color={equipmentState.vacuum.vent_valve_state ? "error" : "primary"}
+              size="small"
+              sx={{ flex: 1, minWidth: 120 }}
+            >
+              Vent {equipmentState.vacuum.vent_valve_state ? "Close" : "Open"}
+            </Button>
+          </Box>
+
+          <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap' }}>
+            <Button
+              variant="contained"
+              onClick={() => togglePump('mechanical')}
+              color={equipmentState.vacuum.mechanical_pump_state ? "error" : "primary"}
+              size="small"
+              sx={{ flex: 1, minWidth: 120 }}
+            >
+              Mech Pump {equipmentState.vacuum.mechanical_pump_state ? "Stop" : "Start"}
+            </Button>
+            <Button
+              variant="contained"
+              onClick={() => togglePump('booster')}
+              color={equipmentState.vacuum.booster_pump_state ? "error" : "primary"}
+              size="small"
+              disabled={!equipmentState.vacuum.mechanical_pump_state}
+              sx={{ flex: 1, minWidth: 120 }}
+            >
+              Booster {equipmentState.vacuum.booster_pump_state ? "Stop" : "Start"}
+            </Button>
+          </Box>
+        </Box>
+      </Paper>
+    );
+  };
+
+  const renderFeederControls = () => {
+    if (!equipmentState) return null;
+
+    return (
+      <Paper sx={{ p: 2, mb: 2 }}>
+        <Typography variant="h6" gutterBottom>Feeder Control</Typography>
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+          <Box>
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
+              <Typography>Frequency</Typography>
+              <Typography>{equipmentState.feeder.frequency} Hz</Typography>
+            </Box>
+            <Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
+              <Slider
+                value={equipmentState.feeder.frequency}
+                onChange={(_, value) => setFeederFrequency(value as number)}
+                min={200}
+                max={1200}
+                step={200}
+                disabled={!equipmentState.feeder.running}
+                marks={[
+                  { value: 200, label: '200' },
+                  { value: 400, label: '400' },
+                  { value: 600, label: '600' },
+                  { value: 800, label: '800' },
+                  { value: 1000, label: '1000' },
+                  { value: 1200, label: '1200' }
+                ]}
+                sx={{ flex: 1 }}
+              />
+              <Button
+                variant="contained"
+                onClick={toggleFeeder}
+                color={equipmentState.feeder.running ? "error" : "primary"}
+                size="small"
+              >
+                {equipmentState.feeder.running ? "Stop" : "Start"}
+              </Button>
+            </Box>
+          </Box>
+        </Box>
+      </Paper>
+    );
+  };
+
+  const renderNozzleControls = () => {
+    if (!equipmentState) return null;
+
+    return (
+      <Paper sx={{ p: 2, mb: 2 }}>
+        <Typography variant="h6" gutterBottom>Nozzle Control</Typography>
+        <Box sx={{ display: 'flex', gap: 2 }}>
+          <Button
+            variant="contained"
+            onClick={toggleShutter}
+            color={equipmentState.nozzle.shutter_state ? "error" : "primary"}
+            size="small"
+            sx={{ flex: 1 }}
+          >
+            Shutter {equipmentState.nozzle.shutter_state ? "Close" : "Open"}
+          </Button>
+          <Button
+            variant="contained"
+            onClick={() => selectNozzle(equipmentState.nozzle.active_nozzle === 1 ? 2 : 1)}
+            size="small"
+            sx={{ flex: 1 }}
+          >
+            Nozzle {equipmentState.nozzle.active_nozzle === 1 ? "2" : "1"}
+          </Button>
+        </Box>
+      </Paper>
+    );
+  };
+
+  const renderDeagglomeratorControls = () => {
+    if (!equipmentState) return null;
+
+    return (
+      <Paper sx={{ p: 2, mb: 2 }}>
+        <Typography variant="h6" gutterBottom>Deagglomerator Control</Typography>
+        <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
+          <Button
+            variant="contained"
+            onClick={() => setDeaggDutyCycle(35)}
+            color={equipmentState.deagglomerator.duty_cycle === 35 ? "error" : "primary"}
+            size="small"
+            sx={{ flex: 1, minWidth: 100 }}
+          >
+            Stop
+          </Button>
+          <Button
+            variant="contained"
+            onClick={() => setDeaggDutyCycle(30)}
+            color={equipmentState.deagglomerator.duty_cycle === 30 ? "success" : "primary"}
+            size="small"
+            sx={{ flex: 1, minWidth: 100 }}
+          >
+            Low
+          </Button>
+          <Button
+            variant="contained"
+            onClick={() => setDeaggDutyCycle(25)}
+            color={equipmentState.deagglomerator.duty_cycle === 25 ? "success" : "primary"}
+            size="small"
+            sx={{ flex: 1, minWidth: 100 }}
+          >
+            Medium
+          </Button>
+          <Button
+            variant="contained"
+            onClick={() => setDeaggDutyCycle(20)}
+            color={equipmentState.deagglomerator.duty_cycle === 20 ? "success" : "primary"}
+            size="small"
+            sx={{ flex: 1, minWidth: 100 }}
+          >
+            High
+          </Button>
+        </Box>
+      </Paper>
+    );
+  };
 
   return (
-    <Box sx={{ p: 3 }}>
-      <Typography variant="h4" gutterBottom>
-        Equipment Control
-      </Typography>
-
+    <Box sx={{ p: 3, maxWidth: 800, margin: '0 auto' }}>
       {error && (
-        <Alert severity="error" sx={{ mb: 3 }}>
+        <Alert severity="error" sx={{ mb: 2 }}>
           {error}
         </Alert>
       )}
-
+      
       {!connected && (
-        <Alert severity="warning" sx={{ mb: 3 }}>
-          Real-time updates unavailable. Falling back to polling.
+        <Alert severity="warning" sx={{ mb: 2 }}>
+          WebSocket disconnected - Using polling fallback
         </Alert>
       )}
 
-      {equipmentState && (
-        <Grid container spacing={3}>
-          {/* System Status */}
-          <Grid item xs={12}>
-            <Paper sx={{ p: 2 }}>
-              <Typography variant="h6" gutterBottom>System Status</Typography>
-              <Grid container spacing={2}>
-                <Grid item xs={12} md={4}>
-                  <List dense>
-                    <ListItem>
-                      <ListItemText 
-                        primary="PLC Connection" 
-                        secondary={equipmentState.hardware.plc_connected ? 'Connected' : 'Disconnected'}
-                      />
-                    </ListItem>
-                    <ListItem>
-                      <ListItemText 
-                        primary="Motion Enabled"
-                        secondary={equipmentState.hardware.motion_enabled ? 'Yes' : 'No'}
-                      />
-                    </ListItem>
-                  </List>
-                </Grid>
-                <Grid item xs={12} md={4}>
-                  <List dense>
-                    <ListItem>
-                      <ListItemText 
-                        primary="Gas Flow"
-                        secondary={equipmentState.process.gas_flow_stable ? 'Stable' : 'Unstable'}
-                      />
-                    </ListItem>
-                    <ListItem>
-                      <ListItemText 
-                        primary="Powder Feed"
-                        secondary={equipmentState.process.powder_feed_active ? 'Active' : 'Inactive'}
-                      />
-                    </ListItem>
-                  </List>
-                </Grid>
-                <Grid item xs={12} md={4}>
-                  <Typography variant="subtitle2" gutterBottom>Process Ready</Typography>
-                  <Chip 
-                    label={equipmentState.process.process_ready ? 'Ready' : 'Not Ready'}
-                    color={equipmentState.process.process_ready ? 'success' : 'warning'}
-                  />
-                </Grid>
-              </Grid>
-            </Paper>
-          </Grid>
-
-          {/* Gas System Controls */}
-          <Grid item xs={12} md={6}>
-            <Paper sx={{ p: 2 }}>
-              <Typography variant="h6" gutterBottom>Gas System</Typography>
-              
-              {/* Main Gas */}
-              <Box sx={{ mb: 3 }}>
-                <Typography variant="subtitle2" gutterBottom>Main Gas</Typography>
-                <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
-                  <Button
-                    variant="contained"
-                    onClick={toggleMainGasValve}
-                    color={equipmentState.gas.main_valve_state ? 'error' : 'primary'}
-                    sx={{ mr: 2 }}
-                  >
-                    {equipmentState.gas.main_valve_state ? 'Close' : 'Open'} Valve
-                  </Button>
-                  <Typography>
-                    Flow Rate: {equipmentState.gas.main_flow_rate.toFixed(1)} SLPM
-                  </Typography>
-                </Box>
-                <Slider
-                  value={equipmentState.gas.main_flow_rate}
-                  onChange={(_, value) => setMainGasFlow(value as number)}
-                  min={0}
-                  max={100}
-                  step={0.1}
-                  valueLabelDisplay="auto"
-                  disabled={!equipmentState.gas.main_valve_state}
-                />
-              </Box>
-
-              {/* Feeder Gas */}
-              <Box>
-                <Typography variant="subtitle2" gutterBottom>Feeder Gas</Typography>
-                <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
-                  <Button
-                    variant="contained"
-                    onClick={toggleFeederGasValve}
-                    color={equipmentState.gas.feeder_valve_state ? 'error' : 'primary'}
-                    sx={{ mr: 2 }}
-                  >
-                    {equipmentState.gas.feeder_valve_state ? 'Close' : 'Open'} Valve
-                  </Button>
-                  <Typography>
-                    Flow Rate: {equipmentState.gas.feeder_flow_rate.toFixed(1)} SLPM
-                  </Typography>
-                </Box>
-                <Slider
-                  value={equipmentState.gas.feeder_flow_rate}
-                  onChange={(_, value) => setFeederGasFlow(value as number)}
-                  min={0}
-                  max={10}
-                  step={0.1}
-                  valueLabelDisplay="auto"
-                  disabled={!equipmentState.gas.feeder_valve_state}
-                />
-              </Box>
-            </Paper>
-          </Grid>
-
-          {/* Vacuum System Controls */}
-          <Grid item xs={12} md={6}>
-            <Paper sx={{ p: 2 }}>
-              <Typography variant="h6" gutterBottom>Vacuum System</Typography>
-              
-              {/* Valve Controls */}
-              <Box sx={{ mb: 3 }}>
-                <Typography variant="subtitle2" gutterBottom>Valve Controls</Typography>
-                <Box sx={{ display: 'flex', gap: 2 }}>
-                  <Button
-                    variant="contained"
-                    onClick={toggleGateValve}
-                    color={equipmentState.vacuum.gate_valve_state ? 'error' : 'primary'}
-                  >
-                    Gate Valve: {equipmentState.vacuum.gate_valve_state ? 'Close' : 'Open'}
-                  </Button>
-                  <Button
-                    variant="contained"
-                    onClick={toggleVentValve}
-                    color={equipmentState.vacuum.vent_valve_state ? 'error' : 'primary'}
-                  >
-                    Vent Valve: {equipmentState.vacuum.vent_valve_state ? 'Close' : 'Open'}
-                  </Button>
-                </Box>
-              </Box>
-
-              {/* Pump Controls */}
-              <Box sx={{ mb: 3 }}>
-                <Typography variant="subtitle2" gutterBottom>Pump Controls</Typography>
-                <Box sx={{ display: 'flex', gap: 2 }}>
-                  <Button
-                    variant="contained"
-                    onClick={toggleMechanicalPump}
-                    color={equipmentState.vacuum.mechanical_pump_state ? 'error' : 'primary'}
-                  >
-                    Mechanical Pump: {equipmentState.vacuum.mechanical_pump_state ? 'Stop' : 'Start'}
-                  </Button>
-                  <Button
-                    variant="contained"
-                    onClick={toggleBoosterPump}
-                    color={equipmentState.vacuum.booster_pump_state ? 'error' : 'primary'}
-                    disabled={!equipmentState.vacuum.mechanical_pump_state}
-                  >
-                    Booster Pump: {equipmentState.vacuum.booster_pump_state ? 'Stop' : 'Start'}
-                  </Button>
-                </Box>
-              </Box>
-
-              {/* Chamber Pressure */}
-              <Box>
-                <Typography variant="subtitle2" gutterBottom>Chamber Pressure</Typography>
-                <Typography variant="h4" align="center">
-                  {equipmentState.vacuum.chamber_pressure.toExponential(2)} Torr
-                </Typography>
-              </Box>
-            </Paper>
-          </Grid>
-
-          {/* Powder Feed System */}
-          <Grid item xs={12} md={6}>
-            <Paper sx={{ p: 2 }}>
-              <Typography variant="h6" gutterBottom>Powder Feed System</Typography>
-              
-              {/* Feeder Control */}
-              <Box sx={{ mb: 3 }}>
-                <Typography variant="subtitle2" gutterBottom>Feeder Control</Typography>
-                <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
-                  <Button
-                    variant="contained"
-                    onClick={toggleFeeder}
-                    color={equipmentState.feeder.running ? 'error' : 'primary'}
-                    sx={{ mr: 2 }}
-                  >
-                    {equipmentState.feeder.running ? 'Stop' : 'Start'} Feeder
-                  </Button>
-                  <Typography>
-                    Frequency: {equipmentState.feeder.frequency.toFixed(1)} Hz
-                  </Typography>
-                </Box>
-                <Slider
-                  value={equipmentState.feeder.frequency}
-                  onChange={(_, value) => setFeederFrequency(value as number)}
-                  min={200}
-                  max={1200}
-                  step={200}
-                  valueLabelDisplay="auto"
-                  disabled={!equipmentState.feeder.running}
-                  marks={[
-                    { value: 200, label: '200 Hz' },
-                    { value: 400, label: '400 Hz' },
-                    { value: 600, label: '600 Hz' },
-                    { value: 800, label: '800 Hz' },
-                    { value: 1000, label: '1000 Hz' },
-                    { value: 1200, label: '1200 Hz' }
-                  ]}
-                />
-              </Box>
-
-              {/* Deagglomerator Control */}
-              <Box>
-                <Typography variant="subtitle2" gutterBottom>Deagglomerator Control</Typography>
-                <Box sx={{ display: 'flex', gap: 2, mb: 2 }}>
-                  <Button
-                    variant="contained"
-                    onClick={() => setDeagglomeratorDutyCycle(35)}
-                    color={equipmentState.deagglomerator.duty_cycle === 35 ? 'error' : 'primary'}
-                  >
-                    Stop
-                  </Button>
-                  <Button
-                    variant="contained"
-                    onClick={() => setDeagglomeratorDutyCycle(30)}
-                    color={equipmentState.deagglomerator.duty_cycle === 30 ? 'success' : 'primary'}
-                  >
-                    Low Speed
-                  </Button>
-                  <Button
-                    variant="contained"
-                    onClick={() => setDeagglomeratorDutyCycle(25)}
-                    color={equipmentState.deagglomerator.duty_cycle === 25 ? 'success' : 'primary'}
-                  >
-                    Medium Speed
-                  </Button>
-                  <Button
-                    variant="contained"
-                    onClick={() => setDeagglomeratorDutyCycle(20)}
-                    color={equipmentState.deagglomerator.duty_cycle === 20 ? 'success' : 'primary'}
-                  >
-                    High Speed
-                  </Button>
-                </Box>
-                <Typography>
-                  Current Duty Cycle: {equipmentState.deagglomerator.duty_cycle}%
-                </Typography>
-              </Box>
-            </Paper>
-          </Grid>
-
-          {/* Nozzle System */}
-          <Grid item xs={12} md={6}>
-            <Paper sx={{ p: 2 }}>
-              <Typography variant="h6" gutterBottom>Nozzle System</Typography>
-              
-              {/* Nozzle Selection */}
-              <Box sx={{ mb: 3 }}>
-                <Typography variant="subtitle2" gutterBottom>Nozzle Selection</Typography>
-                <Box sx={{ display: 'flex', gap: 2 }}>
-                  <Button
-                    variant="contained"
-                    onClick={() => selectNozzle(1)}
-                    color={equipmentState.nozzle.active_nozzle === 1 ? 'success' : 'primary'}
-                  >
-                    Nozzle 1
-                  </Button>
-                  <Button
-                    variant="contained"
-                    onClick={() => selectNozzle(2)}
-                    color={equipmentState.nozzle.active_nozzle === 2 ? 'success' : 'primary'}
-                  >
-                    Nozzle 2
-                  </Button>
-                </Box>
-              </Box>
-
-              {/* Shutter Control */}
-              <Box>
-                <Typography variant="subtitle2" gutterBottom>Shutter Control</Typography>
-                <Button
-                  variant="contained"
-                  onClick={toggleShutter}
-                  color={equipmentState.nozzle.shutter_state ? 'error' : 'primary'}
-                >
-                  {equipmentState.nozzle.shutter_state ? 'Close' : 'Open'} Shutter
-                </Button>
-              </Box>
-            </Paper>
-          </Grid>
-        </Grid>
+      {loading ? (
+        <Box sx={{ display: 'flex', justifyContent: 'center', p: 4 }}>
+          <CircularProgress />
+        </Box>
+      ) : (
+        <>
+          {renderProcessStatus()}
+          {renderGasControls()}
+          {renderVacuumControls()}
+          {renderFeederControls()}
+          {renderNozzleControls()}
+          {renderDeagglomeratorControls()}
+        </>
       )}
     </Box>
   );
