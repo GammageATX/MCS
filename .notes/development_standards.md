@@ -558,7 +558,7 @@ if __name__ == "__main__":
 2. Value Control Methods
    - Numeric values: `set_<component>_<value_type>(value: float)`
    - Include units in documentation
-   - Example: `set_main_flow_rate(flow_rate: float)  # flow_rate in SLPM`
+   - Example: `set_main_flow_setpoint(flow_setpoint: float)  # flow_setpoint in SLPM`
 
 3. Component Selection
    - Use `set_<component>_state` for component selection

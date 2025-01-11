@@ -263,8 +263,10 @@ class EquipmentService:
             # Get gas state
             try:
                 gas_state = GasState(
-                    main_flow_rate=await self._tag_cache.get_tag("gas_control.main_flow.measured"),
-                    feeder_flow_rate=await self._tag_cache.get_tag("gas_control.feeder_flow.measured"),
+                    main_flow_setpoint=await self._tag_cache.get_tag("gas_control.main_flow.setpoint"),
+                    main_flow_actual=await self._tag_cache.get_tag("gas_control.main_flow.measured"),
+                    feeder_flow_setpoint=await self._tag_cache.get_tag("gas_control.feeder_flow.setpoint"),
+                    feeder_flow_actual=await self._tag_cache.get_tag("gas_control.feeder_flow.measured"),
                     main_valve_state=await self._tag_cache.get_tag("gas_control.main_valve.open"),
                     feeder_valve_state=await self._tag_cache.get_tag("gas_control.feeder_valve.open")
                 )
@@ -377,12 +379,12 @@ class EquipmentService:
             # Get gas state from individual tags
             try:
                 gas_state = GasState(
-                    main_flow=await self._tag_cache.get_tag("gas_control.main_flow.setpoint"),
-                    main_flow_measured=await self._tag_cache.get_tag("gas_control.main_flow.measured"),
-                    feeder_flow=await self._tag_cache.get_tag("gas_control.feeder_flow.setpoint"),
-                    feeder_flow_measured=await self._tag_cache.get_tag("gas_control.feeder_flow.measured"),
-                    main_valve=await self._tag_cache.get_tag("gas_control.main_valve.open"),
-                    feeder_valve=await self._tag_cache.get_tag("gas_control.feeder_valve.open")
+                    main_flow_setpoint=await self._tag_cache.get_tag("gas_control.main_flow.setpoint"),
+                    main_flow_actual=await self._tag_cache.get_tag("gas_control.main_flow.measured"),
+                    feeder_flow_setpoint=await self._tag_cache.get_tag("gas_control.feeder_flow.setpoint"),
+                    feeder_flow_actual=await self._tag_cache.get_tag("gas_control.feeder_flow.measured"),
+                    main_valve_state=await self._tag_cache.get_tag("gas_control.main_valve.open"),
+                    feeder_valve_state=await self._tag_cache.get_tag("gas_control.feeder_valve.open")
                 )
                 return gas_state
             except Exception as e:
@@ -434,8 +436,8 @@ class EquipmentService:
                 message=error_msg
             )
 
-    async def set_main_flow_rate(self, flow_rate: float) -> None:
-        """Set main gas flow rate setpoint."""
+    async def set_main_flow_setpoint(self, flow_setpoint: float) -> None:
+        """Set main gas flow setpoint."""
         try:
             if not self.is_running:
                 raise create_error(
@@ -443,20 +445,20 @@ class EquipmentService:
                     message=f"{self.service_name} service not running"
                 )
 
-            await self._tag_cache.set_tag("gas_control.main_flow.setpoint", flow_rate)
-            logger.info(f"Set main gas flow rate to {flow_rate} SLPM")
+            await self._tag_cache.set_tag("gas_control.main_flow.setpoint", flow_setpoint)
+            logger.info(f"Set main gas flow setpoint to {flow_setpoint} SLPM")
             await self._notify_state_changed()
 
         except Exception as e:
-            error_msg = "Failed to set main flow rate"
+            error_msg = "Failed to set main flow setpoint"
             logger.error(f"{error_msg}: {str(e)}")
             raise create_error(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 message=error_msg
             )
 
-    async def set_feeder_flow_rate(self, flow_rate: float) -> None:
-        """Set feeder gas flow rate setpoint."""
+    async def set_feeder_flow_setpoint(self, flow_setpoint: float) -> None:
+        """Set feeder gas flow setpoint."""
         try:
             if not self.is_running:
                 raise create_error(
@@ -464,12 +466,12 @@ class EquipmentService:
                     message=f"{self.service_name} service not running"
                 )
 
-            await self._tag_cache.set_tag("gas_control.feeder_flow.setpoint", flow_rate)
-            logger.info(f"Set feeder gas flow rate to {flow_rate} SLPM")
+            await self._tag_cache.set_tag("gas_control.feeder_flow.setpoint", flow_setpoint)
+            logger.info(f"Set feeder gas flow setpoint to {flow_setpoint} SLPM")
             await self._notify_state_changed()
 
         except Exception as e:
-            error_msg = "Failed to set feeder flow rate"
+            error_msg = "Failed to set feeder flow setpoint"
             logger.error(f"{error_msg}: {str(e)}")
             raise create_error(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,

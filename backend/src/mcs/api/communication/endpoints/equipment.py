@@ -56,7 +56,7 @@ async def get_state(request: Request) -> EquipmentState:
 async def set_main_flow(request: Request, flow: GasFlowRequest):
     """Set main gas flow setpoint."""
     try:
-        await request.app.state.service.equipment.set_main_flow_rate(flow.flow_setpoint)
+        await request.app.state.service.equipment.set_main_flow_setpoint(flow.flow_setpoint)
         return {"status": "success"}
     except Exception as e:
         logger.error(f"Failed to set main flow: {str(e)}")
@@ -70,7 +70,7 @@ async def set_main_flow(request: Request, flow: GasFlowRequest):
 async def set_feeder_flow(request: Request, flow: GasFlowRequest):
     """Set feeder gas flow setpoint."""
     try:
-        await request.app.state.service.equipment.set_feeder_flow_rate(flow.flow_setpoint)
+        await request.app.state.service.equipment.set_feeder_flow_setpoint(flow.flow_setpoint)
         return {"status": "success"}
     except Exception as e:
         logger.error(f"Failed to set feeder flow: {str(e)}")
@@ -271,54 +271,27 @@ async def websocket_equipment_state(websocket: WebSocket):
 
         # Create queue for state updates
         queue = asyncio.Queue()
-        internal_queue = asyncio.Queue()
         
         # Subscribe to equipment state updates
-        def state_changed(state: dict):
+        def state_changed(state: EquipmentState):
             asyncio.create_task(queue.put(state))
-            
-        def internal_state_changed(states: Dict[str, bool]):
-            asyncio.create_task(internal_queue.put(states))
         
-        # Register callbacks
+        # Register callback
         service.equipment.on_state_changed(state_changed)
-        service.internal_state.on_equipment_state_changed(internal_state_changed)
 
         try:
             # Send initial state
             initial_state = await service.equipment.get_equipment_state()
-            initial_internal = await service.internal_state.get_equipment_states()
-            
-            await websocket.send_json({
-                "state": initial_state.dict(),
-                "internal_states": initial_internal
-            })
+            await websocket.send_json(initial_state.dict())
 
             # Wait for state updates
             while True:
                 try:
-                    # Wait for either state update
-                    done, pending = await asyncio.wait(
-                        [
-                            asyncio.create_task(queue.get()),
-                            asyncio.create_task(internal_queue.get())
-                        ],
-                        return_when=asyncio.FIRST_COMPLETED
-                    )
-                    
-                    # Cancel pending tasks
-                    for task in pending:
-                        task.cancel()
-                    
-                    # Get latest states
-                    equipment_state = await service.equipment.get_equipment_state()
-                    internal_states = await service.internal_state.get_equipment_states()
+                    # Wait for state update
+                    state = await queue.get()
                     
                     # Send update
-                    await websocket.send_json({
-                        "state": equipment_state.dict(),
-                        "internal_states": internal_states
-                    })
+                    await websocket.send_json(state.dict())
 
                 except WebSocketDisconnect:
                     logger.info("Equipment WebSocket client disconnected")
@@ -328,9 +301,8 @@ async def websocket_equipment_state(websocket: WebSocket):
                     break
 
         finally:
-            # Unregister callbacks when connection closes
+            # Unregister callback when connection closes
             service.equipment.remove_state_changed_callback(state_changed)
-            service.internal_state.remove_equipment_state_changed_callback(internal_state_changed)
 
     except Exception as e:
         logger.error(f"Failed to handle equipment WebSocket connection: {str(e)}")
@@ -533,3 +505,37 @@ async def get_deagglomerator_state(
 ) -> DeagglomeratorState:
     """Get state of specific deagglomerator."""
     return await equipment_service.get_deagglomerator_state(deagg_id)
+
+
+@router.get("/gas/main/flow")
+async def get_main_flow(request: Request):
+    """Get main gas flow state."""
+    try:
+        gas_state = await request.app.state.service.equipment.get_gas_state()
+        return {
+            "setpoint": gas_state.main_flow_setpoint,
+            "actual": gas_state.main_flow_actual
+        }
+    except Exception as e:
+        logger.error(f"Failed to get main flow: {str(e)}")
+        raise create_error(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            message=f"Failed to get main flow: {str(e)}"
+        )
+
+
+@router.get("/gas/feeder/flow")
+async def get_feeder_flow(request: Request):
+    """Get feeder gas flow state."""
+    try:
+        gas_state = await request.app.state.service.equipment.get_gas_state()
+        return {
+            "setpoint": gas_state.feeder_flow_setpoint,
+            "actual": gas_state.feeder_flow_actual
+        }
+    except Exception as e:
+        logger.error(f"Failed to get feeder flow: {str(e)}")
+        raise create_error(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            message=f"Failed to get feeder flow: {str(e)}"
+        )

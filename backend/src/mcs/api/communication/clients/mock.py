@@ -5,6 +5,7 @@ import yaml
 from typing import Any, Dict, List
 from pathlib import Path
 from loguru import logger
+import random
 
 
 class MockPLCClient:
@@ -138,12 +139,23 @@ class MockPLCClient:
         """Background task to simulate tag value updates."""
         try:
             while self._running:
-                # Simulate some tag value changes
+                # Simulate tag value changes
                 for tag in self._plc_tags:
-                    if "Pressure" in tag:  # Check for PLC tag naming convention
-                        # Simulate pressure fluctuations
+                    if "Pressure" in tag:
+                        # Simulate pressure fluctuations with random walk
                         current = self._plc_tags[tag]
-                        self._plc_tags[tag] = current + (0.05 if current < 5 else -0.05)
+                        delta = random.uniform(-0.05, 0.05)
+                        self._plc_tags[tag] = max(0.0, min(10.0, current + delta))
+                    elif tag == "MainFlowRate":
+                        # Simulate main flow fluctuations around setpoint
+                        setpoint = self._plc_tags.get("AOS32-0.1.2.1", 0.0) / 4095 * 100  # Convert to SLPM
+                        noise = random.uniform(-0.9, 0.9)  # ±0.9 SLPM
+                        self._plc_tags[tag] = max(0.0, setpoint + noise)
+                    elif tag == "FeederFlowRate":
+                        # Simulate feeder flow fluctuations around setpoint
+                        setpoint = self._plc_tags.get("AOS32-0.1.2.2", 0.0) / 4095 * 10  # Convert to SLPM
+                        noise = random.uniform(-0.6, 0.6)  # ±0.6 SLPM
+                        self._plc_tags[tag] = max(0.0, setpoint + noise)
                         
                 await asyncio.sleep(0.1)  # Update every 100ms
                 

@@ -1,6 +1,6 @@
 """Internal state evaluation service."""
 
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, Callable
 from datetime import datetime
 from loguru import logger
 from fastapi import status
@@ -36,6 +36,10 @@ class InternalStateService:
         self._state_rules = {}
         self._tag_cache = None
         self._tag_mapping = None
+        
+        # Add callback lists
+        self._equipment_state_callbacks = []
+        self._motion_state_callbacks = []
         
         logger.info(f"{self.service_name} service initialized")
         
@@ -228,25 +232,26 @@ class InternalStateService:
             return create_error_health(self.service_name, self.version, error_msg)
 
     async def _on_tag_update(self, tag: str, value: Any) -> None:
-        """Handle tag update from cache.
+        """Handle tag update from tag cache.
         
         Args:
             tag: Updated tag name
             value: New tag value
         """
-        try:
-            # Find rules that depend on this tag
-            affected_states = []
-            for state, rule in self._state_rules.items():
-                if self._tag_affects_rule(tag, rule):
-                    affected_states.append(state)
+        # Re-evaluate states and notify callbacks if values changed
+        old_equipment_states = await self.get_equipment_states()
+        old_motion_states = await self.get_motion_states()
+        
+        await self._evaluate_all_states()
+        
+        new_equipment_states = await self.get_equipment_states()
+        new_motion_states = await self.get_motion_states()
+        
+        if new_equipment_states != old_equipment_states:
+            await self._notify_equipment_state_callbacks()
             
-            # Re-evaluate affected states
-            for state in affected_states:
-                await self._evaluate_state(state)
-                
-        except Exception as e:
-            logger.error(f"Failed to handle tag update: {e}")
+        if new_motion_states != old_motion_states:
+            await self._notify_motion_state_callbacks()
 
     def _tag_affects_rule(self, tag: str, rule: Dict[str, Any]) -> bool:
         """Check if tag affects a state rule.
@@ -559,3 +564,55 @@ class InternalStateService:
             return None
             
         return self._internal_states.get(state_name)
+
+    def on_equipment_state_changed(self, callback: Callable[[Dict[str, bool]], None]) -> None:
+        """Register callback for equipment state changes.
+        
+        Args:
+            callback: Function to call with updated equipment states
+        """
+        self._equipment_state_callbacks.append(callback)
+        
+    def remove_equipment_state_changed_callback(self, callback: Callable[[Dict[str, bool]], None]) -> None:
+        """Remove equipment state change callback.
+        
+        Args:
+            callback: Callback to remove
+        """
+        if callback in self._equipment_state_callbacks:
+            self._equipment_state_callbacks.remove(callback)
+            
+    def on_motion_state_changed(self, callback: Callable[[Dict[str, bool]], None]) -> None:
+        """Register callback for motion state changes.
+        
+        Args:
+            callback: Function to call with updated motion states
+        """
+        self._motion_state_callbacks.append(callback)
+        
+    def remove_motion_state_changed_callback(self, callback: Callable[[Dict[str, bool]], None]) -> None:
+        """Remove motion state change callback.
+        
+        Args:
+            callback: Callback to remove
+        """
+        if callback in self._motion_state_callbacks:
+            self._motion_state_callbacks.remove(callback)
+            
+    async def _notify_equipment_state_callbacks(self) -> None:
+        """Notify equipment state callbacks of current states."""
+        states = await self.get_equipment_states()
+        for callback in self._equipment_state_callbacks:
+            try:
+                callback(states)
+            except Exception as e:
+                logger.error(f"Error in equipment state callback: {e}")
+                
+    async def _notify_motion_state_callbacks(self) -> None:
+        """Notify motion state callbacks of current states."""
+        states = await self.get_motion_states()
+        for callback in self._motion_state_callbacks:
+            try:
+                callback(states)
+            except Exception as e:
+                logger.error(f"Error in motion state callback: {e}")
