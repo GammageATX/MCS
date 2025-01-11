@@ -56,7 +56,7 @@ async def get_state(request: Request) -> EquipmentState:
 async def set_main_flow(request: Request, flow: GasFlowRequest):
     """Set main gas flow setpoint."""
     try:
-        await request.app.state.service.equipment.set_main_flow_rate(flow.flow_rate)
+        await request.app.state.service.equipment.set_main_flow_rate(flow.flow_setpoint)
         return {"status": "success"}
     except Exception as e:
         logger.error(f"Failed to set main flow: {str(e)}")
@@ -70,7 +70,7 @@ async def set_main_flow(request: Request, flow: GasFlowRequest):
 async def set_feeder_flow(request: Request, flow: GasFlowRequest):
     """Set feeder gas flow setpoint."""
     try:
-        await request.app.state.service.equipment.set_feeder_flow_rate(flow.flow_rate)
+        await request.app.state.service.equipment.set_feeder_flow_rate(flow.flow_setpoint)
         return {"status": "success"}
     except Exception as e:
         logger.error(f"Failed to set feeder flow: {str(e)}")

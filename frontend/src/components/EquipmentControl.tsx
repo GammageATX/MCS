@@ -34,12 +34,12 @@ interface SystemStatus {
 }
 
 interface GasState {
-  main_flow_rate: number;
-  feeder_flow_rate: number;
+  main_flow_setpoint: number;
+  main_flow_actual: number;
+  feeder_flow_setpoint: number;
+  feeder_flow_actual: number;
   main_valve_state: boolean;
   feeder_valve_state: boolean;
-  main_flow_actual: number;
-  feeder_flow_actual: number;
 }
 
 interface VacuumState {
@@ -109,21 +109,9 @@ export default function EquipmentControl() {
   const [internalStates, setInternalStates] = useState<Record<string, boolean>>({});
   const [error, setError] = useState<string>('');
   const [loading, setLoading] = useState(true);
-  const [mainFlowSetpoint, setMainFlowSetpoint] = useState(0);
-  const [feederFlowSetpoint, setFeederFlowSetpoint] = useState(0);
-  const [mainFlowInput, setMainFlowInput] = useState(0);
-  const [feederFlowInput, setFeederFlowInput] = useState(0);
   const { connected, lastMessage } = useWebSocket();
-
-  // Initialize setpoints when equipment state is first loaded
-  useEffect(() => {
-    if (equipmentState) {
-      setMainFlowSetpoint(equipmentState.gas.main_flow_rate);
-      setFeederFlowSetpoint(equipmentState.gas.feeder_flow_rate);
-      setMainFlowInput(equipmentState.gas.main_flow_rate);
-      setFeederFlowInput(equipmentState.gas.feeder_flow_rate);
-    }
-  }, [equipmentState?.gas.main_flow_rate, equipmentState?.gas.feeder_flow_rate]);
+  const [mainFlowInput, setMainFlowInput] = useState<number>(0);
+  const [feederFlowInput, setFeederFlowInput] = useState<number>(0);
 
   useEffect(() => {
     // Initial data fetch
@@ -168,6 +156,13 @@ export default function EquipmentControl() {
     }
   }, [lastMessage]);
 
+  useEffect(() => {
+    if (equipmentState) {
+      setMainFlowInput(equipmentState.gas.main_flow_setpoint);
+      setFeederFlowInput(equipmentState.gas.feeder_flow_setpoint);
+    }
+  }, [equipmentState?.gas.main_flow_setpoint, equipmentState?.gas.feeder_flow_setpoint]);
+
   const fetchEquipmentState = async () => {
     try {
       const response = await fetch(`${API_CONFIG.COMMUNICATION_SERVICE}/equipment/state`);
@@ -207,29 +202,31 @@ export default function EquipmentControl() {
   // Control Functions
   const setMainGasFlow = async (value: number) => {
     try {
-      const response = await fetch(`${API_CONFIG.EQUIPMENT_SERVICE}/equipment/gas/main/flow`, {
+      const response = await fetch(`${API_CONFIG.COMMUNICATION_SERVICE}/equipment/gas/main/flow`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ flow_rate: value })
+        body: JSON.stringify({ flow_setpoint: value })
       });
       if (!response.ok) throw new Error('Failed to set main gas flow');
-      setMainFlowSetpoint(value);
+      // Let WebSocket update handle the state change
     } catch (err) {
       setError('Failed to set main gas flow rate');
+      console.error(err);
     }
   };
 
   const setFeederGasFlow = async (value: number) => {
     try {
-      const response = await fetch(`${API_CONFIG.EQUIPMENT_SERVICE}/equipment/gas/feeder/flow`, {
+      const response = await fetch(`${API_CONFIG.COMMUNICATION_SERVICE}/equipment/gas/feeder/flow`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ flow_rate: value })
+        body: JSON.stringify({ flow_setpoint: value })
       });
       if (!response.ok) throw new Error('Failed to set feeder gas flow');
-      setFeederFlowSetpoint(value);
+      // Let WebSocket update handle the state change
     } catch (err) {
       setError('Failed to set feeder gas flow rate');
+      console.error(err);
     }
   };
 
@@ -590,14 +587,14 @@ export default function EquipmentControl() {
                   Main Flow Rate
                 </Typography>
                 <Typography variant="body2" sx={{ color: 'text.secondary' }}>
-                  {equipmentState.gas.main_flow_actual?.toFixed(1) || '0.0'} SLPM
+                  {equipmentState.gas.main_flow_actual.toFixed(1)} SLPM
                 </Typography>
               </Box>
               <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
                 <Typography variant="body2">Set:</Typography>
                 <TextField
                   type="number"
-                  value={mainFlowInput}
+                  value={mainFlowInput.toFixed(1)}
                   onChange={(e) => setMainFlowInput(parseFloat(e.target.value))}
                   inputProps={{
                     min: 0,
@@ -657,7 +654,7 @@ export default function EquipmentControl() {
                   fontSize: '0.875rem'
                 }}
               >
-                CLOSE
+                {equipmentState.gas.main_valve_state ? "CLOSE" : "OPEN"}
               </Button>
             </Box>
           </Box>
@@ -669,14 +666,14 @@ export default function EquipmentControl() {
                   Feeder Flow Rate
                 </Typography>
                 <Typography variant="body2" sx={{ color: 'text.secondary' }}>
-                  {equipmentState.gas.feeder_flow_actual?.toFixed(1) || '0.0'} SLPM
+                  {equipmentState.gas.feeder_flow_actual.toFixed(1)} SLPM
                 </Typography>
               </Box>
               <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
                 <Typography variant="body2">Set:</Typography>
                 <TextField
                   type="number"
-                  value={feederFlowInput}
+                  value={feederFlowInput.toFixed(1)}
                   onChange={(e) => setFeederFlowInput(parseFloat(e.target.value))}
                   inputProps={{
                     min: 0,
@@ -736,7 +733,7 @@ export default function EquipmentControl() {
                   fontSize: '0.875rem'
                 }}
               >
-                CLOSE
+                {equipmentState.gas.feeder_valve_state ? "CLOSE" : "OPEN"}
               </Button>
             </Box>
           </Box>

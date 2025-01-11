@@ -10,8 +10,10 @@ class ProcessState(BaseModel):
 
 class GasState(BaseModel):
     """Gas system state model."""
-    main_flow_rate: float = Field(..., description="Main gas flow rate in SLPM")
-    feeder_flow_rate: float = Field(..., description="Feeder gas flow rate in SLPM")
+    main_flow_setpoint: float = Field(..., description="Main gas flow setpoint in SLPM")
+    main_flow_actual: float = Field(..., description="Main gas flow measured value in SLPM")
+    feeder_flow_setpoint: float = Field(..., description="Feeder gas flow setpoint in SLPM")
+    feeder_flow_actual: float = Field(..., description="Feeder gas flow measured value in SLPM")
     main_valve_state: bool = Field(..., description="True if main gas valve is open")
     feeder_valve_state: bool = Field(..., description="True if feeder gas valve is open")
 

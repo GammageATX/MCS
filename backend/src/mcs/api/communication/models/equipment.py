@@ -5,8 +5,8 @@ from pydantic import BaseModel, Field
 
 # Request Models
 class GasFlowRequest(BaseModel):
-    """Request model for setting gas flow rate."""
-    flow_rate: float = Field(..., description="Gas flow rate setpoint in SLPM")
+    """Request model for setting gas flow setpoint."""
+    flow_setpoint: float = Field(..., description="Gas flow setpoint in SLPM")
 
 
 class GasValveRequest(BaseModel):
