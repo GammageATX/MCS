@@ -21,18 +21,17 @@ tag_groups:
         description: Main gas flow setpoint
         mapped: true
         plc_tag: AOS32-0.1.2.1
-        range: [ 0.0, 100.0 ]
+        type: integer
         scaling: 12bit_dac
-        type: float
+        range: [ 0, 100 ]
         unit: SLPM
       measured:
         access: read
         description: Main gas flow measured
         mapped: true
         plc_tag: MainFlowRate
-        range: [ 0.0, 100.0 ]
-        scaling: 12bit_linear
         type: float
+        range: [ 0, 100 ]
         unit: SLPM
     feeder_flow:
       setpoint:

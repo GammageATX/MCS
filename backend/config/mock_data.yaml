@@ -4,10 +4,10 @@ version: "1.0.0"
 plc_tags:
   # Gas Control
   "AOS32-0.1.2.1": 2048 # Main gas flow setpoint (0-4095 = 0-100 SLPM)
-  "MainFlowRate": 49.8 # Main gas flow measured (0-100 SLPM)
+  "MainFlowRate": 50.0 # Main gas flow measured (0-100 SLPM)
   "MainFlowStable": true # Main gas flow stability indicator
   "AOS32-0.1.2.2": 2048 # Feeder gas flow setpoint (0-4095 = 0-10 SLPM)
-  "FeederFlowRate": 4.9 # Feeder gas flow measured (0-10 SLPM)
+  "FeederFlowRate": 5.0 # Feeder gas flow measured (0-10 SLPM)
   "MainSwitch": true # Main gas line valve
   "FeederSwitch": true # Feeder gas line valve
   "NozzleSelect": false # Active nozzle selection (false=1, true=2)

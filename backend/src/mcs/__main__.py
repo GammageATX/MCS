@@ -9,6 +9,7 @@ import aiohttp
 from loguru import logger
 from typing import Dict, List, Tuple, Any
 from datetime import datetime
+import signal  # noqa
 
 
 def create_app_from_path(app_path: str) -> Any:
@@ -115,7 +116,7 @@ class ServerManager:
             self.tasks[name] = task
             
             # Wait for startup
-            await asyncio.sleep(2)  # Give server time to start
+            await asyncio.sleep(0.5)  # Reduced wait time for server startup
             return True
             
         except Exception as e:
@@ -176,7 +177,7 @@ class ServerManager:
                 for dep_name, dep_port in dependencies:
                     logger.info(f"Checking {dep_name} dependency on port {dep_port}")
                     # TODO: Implement dependency health check
-                    await asyncio.sleep(1)  # Give dependency time to start
+                    await asyncio.sleep(0.2)  # Reduced dependency check wait
 
             # Start server
             logger.info(f"Starting {name} service on port {port}")
@@ -184,7 +185,7 @@ class ServerManager:
                 return False
 
             # Wait for startup to complete
-            await asyncio.sleep(2)  # Give service time to initialize
+            await asyncio.sleep(0.5)  # Reduced service initialization wait
             return True
 
         except Exception as e:
@@ -193,25 +194,54 @@ class ServerManager:
 
     async def stop_server(self, name: str):
         """Stop a server by name."""
-        if name in self.servers:
-            server = self.servers[name]
-            server.should_exit = True
-            if name in self.tasks:
-                task = self.tasks[name]
-                try:
-                    await asyncio.wait_for(task, timeout=5.0)
-                except asyncio.TimeoutError:
-                    logger.warning(f"Timeout waiting for {name} server to stop")
-                del self.tasks[name]
-            del self.servers[name]
+        try:
+            if name in self.servers:
+                server = self.servers[name]
+                server.should_exit = True
+                
+                # Cancel and wait for task if it exists
+                if name in self.tasks:
+                    task = self.tasks[name]
+                    try:
+                        await asyncio.wait_for(task, timeout=5.0)
+                    except asyncio.TimeoutError:
+                        logger.warning(f"Timeout waiting for {name} server to stop")
+                    except Exception as e:
+                        logger.error(f"Error stopping {name} server: {e}")
+                    finally:
+                        # Ensure task is removed even if there was an error
+                        if name in self.tasks:
+                            del self.tasks[name]
+                
+                # Remove server after task cleanup
+                if name in self.servers:
+                    del self.servers[name]
+                    
+                logger.debug(f"Stopped {name} server")
+        except Exception as e:
+            logger.error(f"Error during {name} server shutdown: {e}")
 
     async def stop_all(self):
         """Stop all running servers."""
-        stop_tasks = []
-        for name in list(self.servers.keys()):
-            stop_tasks.append(self.stop_server(name))
-        if stop_tasks:
-            await asyncio.gather(*stop_tasks)
+        try:
+            # Create stop tasks for all running servers
+            stop_tasks = []
+            for name in list(self.servers.keys()):
+                stop_tasks.append(self.stop_server(name))
+            
+            # Wait for all stops to complete
+            if stop_tasks:
+                await asyncio.gather(*stop_tasks, return_exceptions=True)
+                
+            # Final cleanup
+            self.servers.clear()
+            self.tasks.clear()
+            self._shutdown.set()
+            
+        except Exception as e:
+            logger.error(f"Error during server shutdown: {e}")
+            # Ensure shutdown is set even on error
+            self._shutdown.set()
 
     async def wait_for_servers(self):
         """Wait for all servers to complete."""
@@ -230,12 +260,40 @@ class ServerManager:
             await self.wait_for_servers()
         except asyncio.CancelledError:
             logger.info("Received shutdown signal")
+        except Exception as e:
+            logger.error(f"Error during server execution: {e}")
         finally:
-            await self.stop_all()
+            # Ensure clean shutdown
+            try:
+                await self.stop_all()
+            except Exception as e:
+                logger.error(f"Error during final shutdown: {e}")
 
 
 async def main():
     """Run all MCS services."""
+    # Store tasks/manager for cleanup
+    monitor_task = None
+    manager = None
+    
+    async def shutdown(sig=None):
+        """Clean shutdown of all services"""
+        nonlocal monitor_task, manager
+        if sig:
+            logger.info(f"Received shutdown signal {sig}")
+        
+        # Cancel health monitoring
+        if monitor_task:
+            monitor_task.cancel()
+            try:
+                await monitor_task
+            except asyncio.CancelledError:
+                pass
+        
+        # Stop all services
+        if manager:
+            await manager.stop_all()
+
     try:
         setup_logging()
         logger.info("Starting MCS services...")
@@ -310,7 +368,7 @@ async def main():
         # Start periodic health monitoring
         async def monitor_health():
             while True:
-                await asyncio.sleep(30)  # Check every 30 seconds
+                await asyncio.sleep(10)  # More frequent health checks
                 logger.debug("Performing periodic health check...")
                 for app, name, port in service_instances:
                     try:
@@ -319,22 +377,33 @@ async def main():
                     except Exception as e:
                         logger.warning(f"Health check failed for {name}: {e}")
 
+        # Setup signal handlers - Windows compatible approach
+        if os.name == 'posix':  # Unix systems
+            for sig in (signal.SIGTERM, signal.SIGINT):
+                loop = asyncio.get_running_loop()
+                loop.add_signal_handler(sig, lambda s=sig: asyncio.create_task(shutdown(s)))
+        else:  # Windows
+            def handle_signal(signum, frame):
+                loop = asyncio.get_running_loop()
+                loop.create_task(shutdown(signal.Signals(signum)))
+            signal.signal(signal.SIGINT, handle_signal)
+            signal.signal(signal.SIGTERM, handle_signal)
+
         # Start health monitoring in background
         monitor_task = asyncio.create_task(monitor_health())
         
         try:
             # Wait for servers or shutdown
             await manager.run_until_shutdown()
+        except asyncio.CancelledError:
+            logger.info("Shutdown requested")
         finally:
-            # Cancel health monitoring
-            monitor_task.cancel()
-            try:
-                await monitor_task
-            except asyncio.CancelledError:
-                pass
+            await shutdown()
 
     except Exception:
         logger.exception("Failed to start MCS services")
+        if manager:
+            await manager.stop_all()
         sys.exit(1)
 
 
@@ -342,5 +411,7 @@ if __name__ == "__main__":
     try:
         asyncio.run(main())
     except KeyboardInterrupt:
-        logger.info("Received shutdown signal")
-        sys.exit(0)
+        # This should rarely be hit now that we have proper signal handling
+        logger.info("Received keyboard interrupt")
+    finally:
+        logger.info("MCS shutdown complete")

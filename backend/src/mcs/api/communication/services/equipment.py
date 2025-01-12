@@ -370,29 +370,26 @@ class EquipmentService:
     async def get_gas_state(self) -> GasState:
         """Get gas system state."""
         try:
-            if not self.is_running:
-                raise create_error(
-                    status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                    message=f"{self.service_name} service not running"
-                )
+            # Get raw DAC values and convert to SLPM
+            main_setpoint_dac = await self._tag_cache.get_tag("AOS32-0.1.2.1")
+            main_setpoint_slpm = (main_setpoint_dac / 4095.0) * 100.0  # Convert 0-4095 to 0-100 SLPM
+            
+            # Get actual flow rates directly (these are already in SLPM)
+            main_flow_actual = await self._tag_cache.get_tag("MainFlowRate")
+            feeder_flow_actual = await self._tag_cache.get_tag("FeederFlowRate")
+            
+            # Get feeder setpoint and convert
+            feeder_setpoint_dac = await self._tag_cache.get_tag("AOS32-0.1.2.2")
+            feeder_setpoint_slpm = (feeder_setpoint_dac / 4095.0) * 10.0  # Convert 0-4095 to 0-10 SLPM
 
-            # Get gas state from individual tags
-            try:
-                gas_state = GasState(
-                    main_flow_setpoint=await self._tag_cache.get_tag("gas_control.main_flow.setpoint"),
-                    main_flow_actual=await self._tag_cache.get_tag("gas_control.main_flow.measured"),
-                    feeder_flow_setpoint=await self._tag_cache.get_tag("gas_control.feeder_flow.setpoint"),
-                    feeder_flow_actual=await self._tag_cache.get_tag("gas_control.feeder_flow.measured"),
-                    main_valve_state=await self._tag_cache.get_tag("gas_control.main_valve.open"),
-                    feeder_valve_state=await self._tag_cache.get_tag("gas_control.feeder_valve.open")
-                )
-                return gas_state
-            except Exception as e:
-                logger.error(f"Failed to get gas state: {str(e)}")
-                raise create_error(
-                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                    message="Failed to get gas state"
-                )
+            return GasState(
+                main_flow_setpoint=main_setpoint_slpm,
+                main_flow_actual=main_flow_actual,
+                feeder_flow_setpoint=feeder_setpoint_slpm,
+                feeder_flow_actual=feeder_flow_actual,
+                main_valve_state=await self._tag_cache.get_tag("MainSwitch"),
+                feeder_valve_state=await self._tag_cache.get_tag("FeederSwitch")
+            )
 
         except Exception as e:
             error_msg = "Failed to get gas state"
@@ -445,8 +442,13 @@ class EquipmentService:
                     message=f"{self.service_name} service not running"
                 )
 
-            await self._tag_cache.set_tag("gas_control.main_flow.setpoint", flow_setpoint)
-            logger.info(f"Set main gas flow setpoint to {flow_setpoint} SLPM")
+            # Scale SLPM value to 12-bit DAC value (0-4095)
+            dac_value = int((flow_setpoint / 100.0) * 4095)  # Convert 0-100 SLPM to 0-4095
+            dac_value = max(0, min(4095, dac_value))  # Clamp to valid range
+
+            # Write scaled value to PLC using the correct PLC tag
+            await self._tag_cache.set_tag("AOS32-0.1.2.1", dac_value)  # Direct PLC tag access
+            logger.info(f"Set main gas flow setpoint to {flow_setpoint} SLPM (DAC: {dac_value})")
             await self._notify_state_changed()
 
         except Exception as e:

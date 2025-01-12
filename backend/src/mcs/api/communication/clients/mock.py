@@ -80,18 +80,32 @@ class MockPLCClient:
         return value
 
     async def write_tag(self, tag: str, value: Any) -> None:
-        """Write mock tag value.
-        
-        Args:
-            tag: Tag name to write
-            value: Value to write
-        """
+        """Write mock tag value."""
         if not self._connected:
             raise ConnectionError("Mock client not connected")
             
+        # Validate tag exists
+        if tag not in self._plc_tags:
+            logger.warning(f"Tag not found in mock data: {tag}")
+            raise KeyError(f"Tag not found: {tag}")
+            
         # Update mock value
+        old_value = self._plc_tags[tag]
         self._plc_tags[tag] = value
-        logger.debug(f"Wrote mock tag {tag} = {value}")
+        
+        # Handle special cases for linked values
+        if tag == "AOS32-0.1.2.1":  # Main gas flow setpoint (DAC value)
+            # Update MainFlowRate to match setpoint
+            flow_slpm = (value / 4095.0) * 100.0  # Convert DAC to SLPM
+            self._plc_tags["MainFlowRate"] = flow_slpm
+            logger.debug(f"Updated MainFlowRate to {flow_slpm:.1f} SLPM based on setpoint DAC {value}")
+        elif tag == "AOS32-0.1.2.2":  # Feeder gas flow setpoint (DAC value)
+            # Update FeederFlowRate to match setpoint
+            flow_slpm = (value / 4095.0) * 10.0  # Convert DAC to SLPM
+            self._plc_tags["FeederFlowRate"] = flow_slpm
+            logger.debug(f"Updated FeederFlowRate to {flow_slpm:.1f} SLPM based on setpoint DAC {value}")
+        
+        logger.debug(f"Wrote mock tag {tag} = {value} (was {old_value})")
 
     def is_connected(self) -> bool:
         """Check if mock client is connected.
@@ -141,21 +155,55 @@ class MockPLCClient:
             while self._running:
                 # Simulate tag value changes
                 for tag in self._plc_tags:
-                    if "Pressure" in tag:
-                        # Simulate pressure fluctuations with random walk
+                    if tag == "MainGasPressure":
+                        # Main gas pressure fluctuates around 80 PSI
                         current = self._plc_tags[tag]
-                        delta = random.uniform(-0.05, 0.05)
-                        self._plc_tags[tag] = max(0.0, min(10.0, current + delta))
+                        delta = random.uniform(-0.5, 0.5)
+                        self._plc_tags[tag] = max(70.0, min(90.0, current + delta))
+                        
+                    elif tag == "RegulatorPressure":
+                        # Regulator pressure fluctuates around 60 PSI
+                        current = self._plc_tags[tag]
+                        delta = random.uniform(-0.3, 0.3)
+                        self._plc_tags[tag] = max(55.0, min(65.0, current + delta))
+                        
+                    elif tag == "NozzlePressure":
+                        # Nozzle pressure fluctuates around 55 PSI
+                        current = self._plc_tags[tag]
+                        delta = random.uniform(-0.2, 0.2)
+                        self._plc_tags[tag] = max(50.0, min(60.0, current + delta))
+                        
+                    elif tag == "FeederPressure":
+                        # Feeder pressure fluctuates around 500 torr
+                        current = self._plc_tags[tag]
+                        delta = random.uniform(-5.0, 5.0)
+                        self._plc_tags[tag] = max(450.0, min(550.0, current + delta))
+                        
+                    elif tag == "ChamberPressure":
+                        # Chamber pressure fluctuates around 2.5 torr
+                        current = self._plc_tags[tag]
+                        delta = random.uniform(-0.1, 0.1)
+                        self._plc_tags[tag] = max(1.0, min(5.0, current + delta))
+                        
+                    elif tag == "AOS32-0.1.2.1":  # Main gas flow setpoint
+                        # This is a 12-bit value (0-4095) representing 0-100 SLPM
+                        continue  # Don't simulate changes to setpoint
+                        
                     elif tag == "MainFlowRate":
-                        # Simulate main flow fluctuations around setpoint
-                        setpoint = self._plc_tags.get("AOS32-0.1.2.1", 0.0) / 4095 * 100  # Convert to SLPM
-                        noise = random.uniform(-0.9, 0.9)  # ±0.9 SLPM
-                        self._plc_tags[tag] = max(0.0, setpoint + noise)
+                        # Main flow fluctuates around setpoint
+                        setpoint = self._plc_tags.get("AOS32-0.1.2.1", 2048) / 4095 * 100  # Convert to SLPM
+                        noise = random.uniform(-0.5, 0.5)  # ±0.5 SLPM
+                        self._plc_tags[tag] = max(0.0, min(100.0, setpoint + noise))
+                        
+                    elif tag == "AOS32-0.1.2.2":  # Feeder gas flow setpoint
+                        # This is a 12-bit value (0-4095) representing 0-10 SLPM
+                        continue  # Don't simulate changes to setpoint
+                        
                     elif tag == "FeederFlowRate":
-                        # Simulate feeder flow fluctuations around setpoint
-                        setpoint = self._plc_tags.get("AOS32-0.1.2.2", 0.0) / 4095 * 10  # Convert to SLPM
-                        noise = random.uniform(-0.6, 0.6)  # ±0.6 SLPM
-                        self._plc_tags[tag] = max(0.0, setpoint + noise)
+                        # Feeder flow fluctuates around setpoint
+                        setpoint = self._plc_tags.get("AOS32-0.1.2.2", 2048) / 4095 * 10  # Convert to SLPM
+                        noise = random.uniform(-0.2, 0.2)  # ±0.2 SLPM
+                        self._plc_tags[tag] = max(0.0, min(10.0, setpoint + noise))
                         
                 await asyncio.sleep(0.1)  # Update every 100ms
                 

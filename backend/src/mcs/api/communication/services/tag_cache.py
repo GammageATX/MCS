@@ -324,58 +324,34 @@ class TagCacheService:
         logger.debug(f"Retrieved value for tag {tag}: {value}")
         return value
 
-    async def set_tag(self, tag: str, value: Any) -> None:
-        """Set tag value."""
+    async def set_tag(self, internal_tag: str, value: Any) -> None:
+        """Set tag value.
+        
+        Args:
+            internal_tag: Internal tag name
+            value: Value to set
+        """
         if not self.is_running:
             raise create_error(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
                 message=f"{self.service_name} service not running"
             )
 
-        # Get tag mapping info
-        tag_info = self._tag_mapping.get_tag_info(tag)
-        if not tag_info:
-            raise create_error(
-                status_code=status.HTTP_404_NOT_FOUND,
-                message=f"Tag not found: {tag}"
-            )
-
-        # Check if tag is mapped to PLC or SSH
-        is_plc_tag = "plc_tag" in tag_info
-        is_ssh_tag = tag.startswith("ssh.")
-
         try:
-            old_value = self._cache.get(tag)
-            if is_plc_tag:
-                # Write to PLC
-                plc_tag = tag_info["plc_tag"]
-                await self._plc_client.write_tag(plc_tag, value)
-                self._cache[tag] = value
-                self._cache[plc_tag] = value  # Also cache the raw PLC tag value
-                logger.debug(f"Set PLC tag {plc_tag} = {value}")
-            elif is_ssh_tag and self._ssh_client:
-                # Write to SSH
-                ssh_tag = tag.replace("ssh.", "")  # Remove ssh. prefix
-                await self._ssh_client.write_tag(ssh_tag, value)
-                self._cache[tag] = value
-                logger.debug(f"Set SSH tag {ssh_tag} = {value}")
-            else:
-                # Internal tag - just update cache
-                self._cache[tag] = value
-                logger.debug(f"Set internal tag {tag} = {value}")
+            # Get PLC tag mapping
+            plc_tag = self._tag_mapping.get_plc_tag(internal_tag)
+            if not plc_tag:
+                raise ValueError(f"No PLC tag mapping for {internal_tag}")
 
-            # If value changed, notify subscribers and callbacks
-            if old_value != value:
-                # Notify tag subscribers
-                self._notify_tag_subscribers(tag, value)
-                
-                # Check if this is a state tag and notify state callbacks
-                if tag_info.get("state_type"):
-                    self._notify_state_callbacks(tag_info["state_type"], value)
+            # Write to PLC first
+            await self._plc_client.write_tag(plc_tag, value)
+            
+            # Cache will be updated on next poll
+            logger.debug(f"Set {internal_tag} ({plc_tag}) = {value}")
 
         except Exception as e:
-            error_msg = f"Failed to set tag {tag} = {value}"
-            logger.error(f"{error_msg}: {str(e)}")
+            error_msg = f"Failed to set tag {internal_tag}: {str(e)}"
+            logger.error(error_msg)
             raise create_error(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 message=error_msg
