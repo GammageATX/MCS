@@ -5,6 +5,6 @@ export const API_CONFIG = {
   EQUIPMENT_SERVICE: 'http://localhost:8002',
   PROCESS_SERVICE: 'http://localhost:8003',
   DATA_COLLECTION_SERVICE: 'http://localhost:8004',
-  MONITOR_SERVICE: 'http://localhost:8005',
+  MONITOR_SERVICE: 'http://localhost:8000',
   WEBSOCKET_URL: 'ws://localhost:8002/ws'
 }; 

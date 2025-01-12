@@ -3,7 +3,6 @@
 from typing import Dict, Literal
 from fastapi import APIRouter, Request, WebSocket, WebSocketDisconnect, status, Path, Depends
 from loguru import logger
-import asyncio
 
 from mcs.utils.errors import create_error
 from mcs.api.communication.services.equipment import EquipmentService
@@ -266,47 +265,53 @@ async def websocket_equipment_state(websocket: WebSocket):
             await websocket.close(code=status.WS_1013_TRY_AGAIN_LATER)
             return
 
+        # Accept connection
         await websocket.accept()
         logger.info("Equipment WebSocket client connected")
 
-        # Create queue for state updates
-        queue = asyncio.Queue()
-        
-        # Subscribe to equipment state updates
-        def state_changed(state: EquipmentState):
-            asyncio.create_task(queue.put(state))
-        
+        # Send initial state
+        try:
+            initial_state = await service.equipment.get_equipment_state()
+            await websocket.send_json(initial_state.dict())
+        except Exception as e:
+            logger.error(f"Failed to send initial equipment state: {e}")
+            await websocket.close()
+            return
+
+        # Subscribe to state changes
+        async def state_changed(state: EquipmentState):
+            try:
+                if websocket.application_state == WebSocketDisconnect:
+                    await websocket.send_json(state.dict())
+            except WebSocketDisconnect:
+                pass
+            except Exception as e:
+                logger.error(f"Failed to send equipment state update: {e}")
+
         # Register callback
         service.equipment.on_state_changed(state_changed)
 
+        # Keep connection alive
+        while True:
+            try:
+                data = await websocket.receive_text()
+                if data == "ping":
+                    await websocket.send_text("pong")
+            except WebSocketDisconnect:
+                logger.info("Equipment WebSocket client disconnected")
+                break
+            except Exception as e:
+                logger.error(f"Error in equipment WebSocket connection: {e}")
+                break
+
+    finally:
+        # Always clean up
         try:
-            # Send initial state
-            initial_state = await service.equipment.get_equipment_state()
-            await websocket.send_json(initial_state.dict())
-
-            # Wait for state updates
-            while True:
-                try:
-                    # Wait for state update
-                    state = await queue.get()
-                    
-                    # Send update
-                    await websocket.send_json(state.dict())
-
-                except WebSocketDisconnect:
-                    logger.info("Equipment WebSocket client disconnected")
-                    break
-                except Exception as e:
-                    logger.error(f"Equipment WebSocket error: {str(e)}")
-                    break
-
-        finally:
-            # Unregister callback when connection closes
-            service.equipment.remove_state_changed_callback(state_changed)
-
-    except Exception as e:
-        logger.error(f"Failed to handle equipment WebSocket connection: {str(e)}")
-        await websocket.close(code=status.WS_1011_INTERNAL_ERROR)
+            service.equipment.remove_state_callback(state_changed)
+            if websocket.application_state == WebSocketDisconnect:
+                await websocket.close()
+        except Exception:
+            pass
 
 
 @router.put("/vacuum/vent/open")

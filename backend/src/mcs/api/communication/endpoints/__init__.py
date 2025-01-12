@@ -100,7 +100,7 @@ async def websocket_state(websocket: WebSocket):
 
         finally:
             # Unregister callbacks when connection closes
-            service.equipment.remove_state_changed_callback(equipment_state_changed)
+            service.equipment.remove_state_callback(equipment_state_changed)
             service.motion.remove_state_changed_callback(motion_state_changed)
 
     except Exception as e:

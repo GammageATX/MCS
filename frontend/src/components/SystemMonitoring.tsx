@@ -36,28 +36,47 @@ export default function SystemMonitoring() {
   const [services, setServices] = useState<ServicesHealth | null>(null);
   const [lastUpdated, setLastUpdated] = useState<Date>(new Date());
   const [error, setError] = useState<string | null>(null);
+  const [isPolling, setIsPolling] = useState<boolean>(false);
 
   const fetchHealth = async () => {
     try {
-      const response = await fetch(`${API_CONFIG.MONITOR_SERVICE}/monitoring/services/status`);
+      const response = await fetch(`${API_CONFIG.UI_SERVICE}/monitoring/services/status`);
       if (!response.ok) {
-        throw new Error(`Failed to fetch health status: ${response.status}`);
+        throw new Error(`Service error: ${response.status}`);
       }
       const data = await response.json();
       setServices(data);
       setLastUpdated(new Date());
       setError(null);
     } catch (err) {
-      console.error('Failed to fetch health status:', err);
-      setError('Failed to fetch service health status');
+      console.error('Health check failed:', err);
+      setError(err instanceof Error ? err.message : 'Failed to check service health');
     }
   };
 
+  // Load data when component mounts
   useEffect(() => {
     fetchHealth();
-    const interval = setInterval(fetchHealth, 5000); // Poll every 5 seconds
-    return () => clearInterval(interval);
-  }, []);
+  }, []); // Empty dependency array = run once on mount
+
+  // Handle polling based on WebSocket connection
+  useEffect(() => {
+    let pollInterval: ReturnType<typeof setInterval> | null = null;
+    
+    if (!connected) {
+      setIsPolling(true);
+      pollInterval = setInterval(fetchHealth, 15000);
+    } else {
+      setIsPolling(false);
+    }
+
+    return () => {
+      if (pollInterval) {
+        clearInterval(pollInterval);
+        setIsPolling(false);
+      }
+    };
+  }, [connected]);
 
   const formatUptime = (uptime: number) => {
     const hours = Math.floor(uptime / 3600);
@@ -235,13 +254,13 @@ export default function SystemMonitoring() {
 
       {error && (
         <Alert severity="error" sx={{ mb: 3 }}>
-          {error}
+          Error fetching service status: {error}
         </Alert>
       )}
 
       {!connected && (
         <Alert severity="warning" sx={{ mb: 3 }}>
-          WebSocket disconnected - Using polling fallback
+          WebSocket disconnected - {isPolling ? 'Using polling fallback (15s)' : 'Polling disabled'}
         </Alert>
       )}
 

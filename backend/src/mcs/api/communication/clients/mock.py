@@ -89,23 +89,40 @@ class MockPLCClient:
             logger.warning(f"Tag not found in mock data: {tag}")
             raise KeyError(f"Tag not found: {tag}")
             
-        # Update mock value
+        # Convert value based on tag type
+        plc_value = value
+        if tag == "MainSwitch":  # Gas valve
+            plc_value = bool(value)  # Ensure boolean
+        elif tag == "AOS32-0.1.2.1":  # Main flow DAC
+            plc_value = int((float(value) / 100.0) * 4095)  # Convert SLPM to DAC
+        elif tag == "AOS32-0.1.2.2":  # Feeder flow DAC
+            plc_value = int((float(value) / 10.0) * 4095)  # Convert SLPM to DAC
+            
+        # Update mock value in memory
         old_value = self._plc_tags[tag]
-        self._plc_tags[tag] = value
+        self._plc_tags[tag] = plc_value
+        
+        # Update mock_data.yaml file
+        try:
+            mock_data_path = Path("backend/config/mock_data.yaml")
+            self._mock_data["plc_tags"][tag] = plc_value
+            
+            with open(mock_data_path, 'w') as f:
+                yaml.safe_dump(self._mock_data, f, default_flow_style=False)
+                
+            logger.debug(f"Updated mock data file for tag {tag}: {old_value} -> {plc_value}")
+        except Exception as e:
+            logger.error(f"Failed to persist mock tag change to file: {e}")
         
         # Handle special cases for linked values
         if tag == "AOS32-0.1.2.1":  # Main gas flow setpoint (DAC value)
-            # Update MainFlowRate to match setpoint
-            flow_slpm = (value / 4095.0) * 100.0  # Convert DAC to SLPM
+            flow_slpm = (value / 4095.0) * 100.0
             self._plc_tags["MainFlowRate"] = flow_slpm
             logger.debug(f"Updated MainFlowRate to {flow_slpm:.1f} SLPM based on setpoint DAC {value}")
         elif tag == "AOS32-0.1.2.2":  # Feeder gas flow setpoint (DAC value)
-            # Update FeederFlowRate to match setpoint
-            flow_slpm = (value / 4095.0) * 10.0  # Convert DAC to SLPM
+            flow_slpm = (value / 4095.0) * 10.0
             self._plc_tags["FeederFlowRate"] = flow_slpm
             logger.debug(f"Updated FeederFlowRate to {flow_slpm:.1f} SLPM based on setpoint DAC {value}")
-        
-        logger.debug(f"Wrote mock tag {tag} = {value} (was {old_value})")
 
     def is_connected(self) -> bool:
         """Check if mock client is connected.
@@ -161,49 +178,23 @@ class MockPLCClient:
                         delta = random.uniform(-0.5, 0.5)
                         self._plc_tags[tag] = max(70.0, min(90.0, current + delta))
                         
-                    elif tag == "RegulatorPressure":
-                        # Regulator pressure fluctuates around 60 PSI
-                        current = self._plc_tags[tag]
-                        delta = random.uniform(-0.3, 0.3)
-                        self._plc_tags[tag] = max(55.0, min(65.0, current + delta))
-                        
-                    elif tag == "NozzlePressure":
-                        # Nozzle pressure fluctuates around 55 PSI
-                        current = self._plc_tags[tag]
-                        delta = random.uniform(-0.2, 0.2)
-                        self._plc_tags[tag] = max(50.0, min(60.0, current + delta))
-                        
-                    elif tag == "FeederPressure":
-                        # Feeder pressure fluctuates around 500 torr
-                        current = self._plc_tags[tag]
-                        delta = random.uniform(-5.0, 5.0)
-                        self._plc_tags[tag] = max(450.0, min(550.0, current + delta))
-                        
-                    elif tag == "ChamberPressure":
-                        # Chamber pressure fluctuates around 2.5 torr
-                        current = self._plc_tags[tag]
-                        delta = random.uniform(-0.1, 0.1)
-                        self._plc_tags[tag] = max(1.0, min(5.0, current + delta))
-                        
-                    elif tag == "AOS32-0.1.2.1":  # Main gas flow setpoint
-                        # This is a 12-bit value (0-4095) representing 0-100 SLPM
-                        continue  # Don't simulate changes to setpoint
-                        
                     elif tag == "MainFlowRate":
                         # Main flow fluctuates around setpoint
-                        setpoint = self._plc_tags.get("AOS32-0.1.2.1", 2048) / 4095 * 100  # Convert to SLPM
+                        setpoint = self._plc_tags.get("AOS32-0.1.2.1", 2048)
+                        flow_slpm = (setpoint / 4095.0) * 100.0  # Convert DAC to SLPM
                         noise = random.uniform(-0.5, 0.5)  # ±0.5 SLPM
-                        self._plc_tags[tag] = max(0.0, min(100.0, setpoint + noise))
-                        
-                    elif tag == "AOS32-0.1.2.2":  # Feeder gas flow setpoint
-                        # This is a 12-bit value (0-4095) representing 0-10 SLPM
-                        continue  # Don't simulate changes to setpoint
+                        self._plc_tags[tag] = max(0.0, min(100.0, flow_slpm + noise))
                         
                     elif tag == "FeederFlowRate":
                         # Feeder flow fluctuates around setpoint
-                        setpoint = self._plc_tags.get("AOS32-0.1.2.2", 2048) / 4095 * 10  # Convert to SLPM
+                        setpoint = self._plc_tags.get("AOS32-0.1.2.2", 2048)
+                        flow_slpm = (setpoint / 4095.0) * 10.0  # Convert DAC to SLPM
                         noise = random.uniform(-0.2, 0.2)  # ±0.2 SLPM
-                        self._plc_tags[tag] = max(0.0, min(10.0, setpoint + noise))
+                        self._plc_tags[tag] = max(0.0, min(10.0, flow_slpm + noise))
+                        
+                    # Skip simulating changes to DAC setpoint tags
+                    elif tag in ["AOS32-0.1.2.1", "AOS32-0.1.2.2"]:
+                        continue
                         
                 await asyncio.sleep(0.1)  # Update every 100ms
                 
