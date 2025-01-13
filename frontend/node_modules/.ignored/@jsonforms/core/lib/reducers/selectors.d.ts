@@ -1,0 +1,15 @@
+import type Ajv from 'ajv';
+import type { JsonFormsState } from '../store';
+import type { JsonSchema, UISchemaElement } from '../models';
+import { JsonFormsDefaultDataRegistryEntry } from './default-data';
+import type { JsonFormsRendererRegistryEntry } from './renderers';
+import type { JsonFormsCellRendererRegistryEntry } from './cells';
+import type { JsonFormsUISchemaRegistryEntry } from './uischemas';
+export declare const getData: (state: JsonFormsState) => any;
+export declare const getSchema: (state: JsonFormsState) => JsonSchema;
+export declare const getUiSchema: (state: JsonFormsState) => UISchemaElement;
+export declare const getAjv: (state: JsonFormsState) => Ajv;
+export declare const getDefaultData: (state: JsonFormsState) => JsonFormsDefaultDataRegistryEntry[];
+export declare const getRenderers: (state: JsonFormsState) => JsonFormsRendererRegistryEntry[];
+export declare const getCells: (state: JsonFormsState) => JsonFormsCellRendererRegistryEntry[];
+export declare const getUISchemas: (state: JsonFormsState) => JsonFormsUISchemaRegistryEntry[];

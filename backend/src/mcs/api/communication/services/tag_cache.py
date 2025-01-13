@@ -33,6 +33,10 @@ class TagCacheService:
         self._polling_task = None
         self._polling = None
         
+        # Track PLC vs SSH tags
+        self._plc_tags = []
+        self._ssh_tags = []
+        
         # State change callbacks
         self._state_callbacks: List[Callable[[str, Any], None]] = []
         
@@ -116,28 +120,47 @@ class TagCacheService:
             logger.info("Connecting PLC client")
             await self._plc_client.connect()
             
-            # Get all mapped PLC tags
-            plc_tags = []
+            # Connect SSH client if available
+            if self._ssh_client:
+                logger.info("Connecting SSH client")
+                await self._ssh_client.connect()
+            
+            # Categorize tags as PLC or SSH
             internal_to_plc = {}  # Track mapping for error reporting
             plc_to_internal = {}  # Track all internal tags for each PLC tag
+            internal_to_ssh = {}  # Track mapping for SSH tags
+            ssh_to_internal = {}  # Track all internal tags for each SSH tag
+            
             for internal_tag, tag_info in self._tag_mapping._tag_map.items():
                 if tag_info.get("mapped", False) and tag_info.get("plc_tag"):
                     plc_tag = tag_info["plc_tag"]
-                    plc_tags.append(plc_tag)
-                    internal_to_plc[plc_tag] = internal_tag
-                    if plc_tag not in plc_to_internal:
-                        plc_to_internal[plc_tag] = []
-                    plc_to_internal[plc_tag].append(internal_tag)
-                    logger.debug(f"Mapped internal tag {internal_tag} -> PLC tag {plc_tag}")
+                    
+                    # Check if it's a P-variable (SSH) or PLC tag
+                    if plc_tag.startswith("P"):
+                        if not self._ssh_client:
+                            logger.warning(f"SSH tag {plc_tag} found but no SSH client available")
+                            continue
+                            
+                        self._ssh_tags.append(plc_tag)
+                        internal_to_ssh[plc_tag] = internal_tag
+                        if plc_tag not in ssh_to_internal:
+                            ssh_to_internal[plc_tag] = []
+                        ssh_to_internal[plc_tag].append(internal_tag)
+                        logger.debug(f"Mapped internal tag {internal_tag} -> SSH tag {plc_tag}")
+                    else:
+                        self._plc_tags.append(plc_tag)
+                        internal_to_plc[plc_tag] = internal_tag
+                        if plc_tag not in plc_to_internal:
+                            plc_to_internal[plc_tag] = []
+                        plc_to_internal[plc_tag].append(internal_tag)
+                        logger.debug(f"Mapped internal tag {internal_tag} -> PLC tag {plc_tag}")
             
-            logger.info(f"Found {len(plc_tags)} mapped PLC tags")
-            logger.debug(f"PLC tags: {plc_tags}")
-            logger.debug(f"Internal mappings: {internal_to_plc}")
+            logger.info(f"Found {len(self._plc_tags)} PLC tags and {len(self._ssh_tags)} SSH tags")
             
-            # Get initial values
-            if plc_tags:
+            # Get initial PLC values
+            if self._plc_tags:
                 try:
-                    values = await self._plc_client.get(plc_tags)
+                    values = await self._plc_client.get(self._plc_tags)
                     logger.debug(f"Retrieved {len(values)} initial PLC values: {values}")
                     
                     # Store both PLC and internal tag values
@@ -150,19 +173,31 @@ class TagCacheService:
                             self._cache[internal_tag] = scaled_value
                             logger.debug(f"Initialized {internal_tag} = {scaled_value} (PLC: {plc_tag} = {value})")
                         
-                    # Log any missing tags
-                    missing_tags = set(plc_tags) - set(values.keys())
-                    if missing_tags:
-                        missing_internal = [internal_to_plc[t] for t in missing_tags]
-                        logger.warning(f"Missing PLC tags: {missing_tags}")
-                        logger.warning(f"Corresponding internal tags: {missing_internal}")
-                        
                 except Exception as e:
                     logger.error(f"Failed to get initial PLC values: {e}")
                     raise
             
+            # Get initial SSH values
+            if self._ssh_tags and self._ssh_client:
+                try:
+                    values = await self._ssh_client.get(self._ssh_tags)
+                    logger.debug(f"Retrieved {len(values)} initial SSH values: {values}")
+                    
+                    # Store both SSH and internal tag values
+                    for ssh_tag, value in values.items():
+                        # Store raw SSH tag value
+                        self._cache[ssh_tag] = value
+                        # Store scaled internal tag values
+                        for internal_tag in ssh_to_internal[ssh_tag]:
+                            scaled_value = self._tag_mapping.scale_value(internal_tag, value)
+                            self._cache[internal_tag] = scaled_value
+                            logger.debug(f"Initialized {internal_tag} = {scaled_value} (SSH: {ssh_tag} = {value})")
+                        
+                except Exception as e:
+                    logger.error(f"Failed to get initial SSH values: {e}")
+                    raise
+            
             logger.info(f"{self.service_name} service initialized with {len(self._cache)} cached values")
-            logger.debug(f"Cache contents: {self._cache}")
             
         except Exception as e:
             error_msg = f"Failed to initialize {self.service_name} service: {str(e)}"
@@ -338,22 +373,27 @@ class TagCacheService:
             )
 
         try:
-            # Get PLC tag mapping
+            # Get mapped tag
             plc_tag = self._tag_mapping.get_plc_tag(internal_tag)
             if not plc_tag:
-                raise ValueError(f"No PLC tag mapping for {internal_tag}")
+                raise ValueError(f"No mapped tag for {internal_tag}")
 
-            # Write to PLC first
-            await self._plc_client.write_tag(plc_tag, value)
+            # Route to appropriate client
+            if plc_tag.startswith("P"):
+                if not self._ssh_client:
+                    raise RuntimeError("SSH client not available")
+                await self._ssh_client.write_tag(plc_tag, value)
+            else:
+                await self._plc_client.write_tag(plc_tag, value)
             
             # Cache will be updated on next poll
             logger.debug(f"Set {internal_tag} ({plc_tag}) = {value}")
-
+            
         except Exception as e:
             error_msg = f"Failed to set tag {internal_tag}: {str(e)}"
             logger.error(error_msg)
             raise create_error(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
                 message=error_msg
             )
 
@@ -367,80 +407,49 @@ class TagCacheService:
         return self._cache.copy()
 
     async def _poll_tags(self) -> None:
-        """Poll PLC tags periodically."""
-        consecutive_errors = 0
-        while True:
-            try:
-                # Get all mapped PLC tags
-                plc_tags = []
-                internal_to_plc = {}  # Track mapping for error reporting
-                plc_to_internal = {}  # Track all internal tags for each PLC tag
-                for internal_tag, tag_info in self._tag_mapping._tag_map.items():
-                    if tag_info.get("mapped", False) and tag_info.get("plc_tag"):
-                        plc_tag = tag_info["plc_tag"]
-                        plc_tags.append(plc_tag)
-                        internal_to_plc[plc_tag] = internal_tag
-                        if plc_tag not in plc_to_internal:
-                            plc_to_internal[plc_tag] = []
-                        plc_to_internal[plc_tag].append(internal_tag)
-                        # Only log mapping once
-                        if internal_tag not in self._logged_tag_mappings:
-                            logger.debug(f"Mapped internal tag {internal_tag} -> PLC tag {plc_tag}")
-                            self._logged_tag_mappings.add(internal_tag)
-
-                # Get current values
-                if plc_tags:
-                    values = await self._plc_client.get(plc_tags)
-                    changed_values = {}
-                    
-                    # Process each value
-                    for plc_tag, value in values.items():
-                        # Check if PLC value changed
-                        if plc_tag not in self._cache or self._cache[plc_tag] != value:
-                            # Store raw PLC tag value
-                            self._cache[plc_tag] = value
-                            
-                            # Scale and store internal tag values
-                            for internal_tag in plc_to_internal[plc_tag]:
-                                scaled_value = self._tag_mapping.scale_value(internal_tag, value)
-                                old_value = self._cache.get(internal_tag)
-                                self._cache[internal_tag] = scaled_value
-                                
-                                # If internal value changed, add to changed values
-                                if old_value != scaled_value:
-                                    changed_values[internal_tag] = (scaled_value, plc_tag, value)
-                                    
-                                    # Notify tag subscribers
-                                    self._notify_tag_subscribers(internal_tag, scaled_value)
-                                
-                                # Check if this is a state tag and notify state callbacks
-                                tag_info = self._tag_mapping._tag_map.get(internal_tag, {})
-                                if tag_info.get("state_type"):
-                                    self._notify_state_callbacks(tag_info["state_type"], scaled_value)
-                    
-                    # Log all changes in one message
-                    if changed_values:
-                        changes_str = "\n".join(
-                            f"  {tag} = {val[0]} (PLC: {val[1]} = {val[2]})"
-                            for tag, val in changed_values.items()
-                        )
-                        logger.debug(f"Tag changes:\n{changes_str}")
-
-                # Reset error counter on success
-                consecutive_errors = 0
-                
-            except Exception as e:
-                consecutive_errors += 1
-                logger.error(f"Error polling tags: {str(e)}")
-                
-                # Exponential backoff on consecutive errors
-                delay = min(30, 2 ** consecutive_errors)
-                logger.warning(f"Backing off for {delay} seconds after {consecutive_errors} consecutive errors")
-                await asyncio.sleep(delay)
-                continue
+        """Background task to poll tag values."""
+        try:
+            interval = self._polling["interval"]
+            batch_size = self._polling["batch_size"]
             
-            # Wait for next poll interval
-            await asyncio.sleep(self._polling.get("interval", 1.0))
+            while True:
+                try:
+                    # Poll PLC tags
+                    if self._plc_tags:
+                        try:
+                            values = await self._plc_client.get(self._plc_tags)
+                            for tag, value in values.items():
+                                if tag in self._cache and self._cache[tag] != value:
+                                    self._cache[tag] = value
+                                    self._notify_tag_subscribers(tag, value)
+                        except Exception as e:
+                            logger.error(f"Failed to poll PLC tags: {e}")
+                    
+                    # Poll SSH tags
+                    if self._ssh_tags and self._ssh_client:
+                        try:
+                            values = await self._ssh_client.get(self._ssh_tags)
+                            for tag, value in values.items():
+                                if tag in self._cache and self._cache[tag] != value:
+                                    self._cache[tag] = value
+                                    self._notify_tag_subscribers(tag, value)
+                        except Exception as e:
+                            logger.error(f"Failed to poll SSH tags: {e}")
+                    
+                    await asyncio.sleep(interval)
+                    
+                except asyncio.CancelledError:
+                    raise
+                except Exception as e:
+                    logger.error(f"Error in tag polling: {e}")
+                    await asyncio.sleep(interval)
+                    
+        except asyncio.CancelledError:
+            logger.info("Tag polling stopped")
+            raise
+        except Exception as e:
+            logger.error(f"Tag polling failed: {e}")
+            raise
 
     def add_state_callback(self, callback: Callable[[str, Any], None]) -> None:
         """Add callback for state changes.

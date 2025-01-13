@@ -55,7 +55,6 @@ class CommunicationService:
         self._config = config
         self._version = config.get("version", "1.0.0")
         self._is_running = False
-        self._mode = config.get("mode", "mock")
         self._start_time = None
 
         # Initialize services to None
@@ -127,12 +126,14 @@ class CommunicationService:
             self._tag_mapping = TagMappingService(self._config)
             await self._tag_mapping.initialize()
 
-            # Initialize clients
-            mode = self._config.get("mode", "mock")
-            if mode == "mock":
+            # Initialize clients based on force_mock setting
+            force_mock = self._config.get("communication", {}).get("hardware", {}).get("network", {}).get("force_mock", True)
+            if force_mock:
+                logger.info("Using mock PLC client (force_mock=true)")
                 plc_client = MockPLCClient(self._config)
                 ssh_client = None
             else:
+                logger.info("Using real PLC client (force_mock=false)")
                 plc_client = PLCClient(self._config)
                 ssh_client = SSHClient(self._config)
 

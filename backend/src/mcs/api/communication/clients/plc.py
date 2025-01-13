@@ -1,6 +1,6 @@
 """PLC communication client."""
 
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 from loguru import logger
 from productivity import ProductivityPLC
 
@@ -110,3 +110,49 @@ class PLCClient:
             Connection status
         """
         return self._connected
+
+    async def get(self, tags: List[str]) -> Dict[str, Any]:
+        """Read multiple tag values.
+        
+        Args:
+            tags: List of tags to read
+            
+        Returns:
+            Dict mapping tag names to values
+            
+        Note:
+            Tags not found in PLC will be skipped with a warning
+        """
+        if not self._connected:
+            raise ConnectionError("PLC not connected")
+            
+        try:
+            # Get all values in one request for efficiency
+            values = await self._plc.get()
+            result = {}
+            missing_tags = []
+            
+            # Filter requested tags
+            for tag in tags:
+                if tag not in self._tags:
+                    missing_tags.append(tag)
+                    continue
+                    
+                if tag in values:
+                    result[tag] = values[tag]
+                else:
+                    missing_tags.append(tag)
+                
+            if missing_tags:
+                logger.warning(f"Tags not found in PLC: {missing_tags}")
+                logger.debug(f"Available PLC tags: {list(self._tags.keys())}")
+                
+            if not result:
+                logger.error("No valid tags found in request")
+                
+            logger.debug(f"Read {len(result)} PLC tags")
+            return result
+            
+        except Exception as e:
+            logger.error(f"Failed to read tags from PLC: {str(e)}")
+            raise

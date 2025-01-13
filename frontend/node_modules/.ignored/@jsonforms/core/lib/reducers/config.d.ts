@@ -1,0 +1,3 @@
+import { SetConfigAction } from '../actions';
+import type { Reducer } from '../util';
+export declare const configReducer: Reducer<any, SetConfigAction>;

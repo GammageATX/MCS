@@ -10,7 +10,7 @@ service:
 communication:
   hardware:
     network:
-      force_mock: true # Set to true only for testing without hardware
+      force_mock: false # Set to true only for testing without hardware
       plc:
         ip: "192.168.0.130"
         tag_file: "backend/resources/tags/MicroColdSpray_basic.csv"

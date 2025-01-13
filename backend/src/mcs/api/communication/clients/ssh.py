@@ -249,3 +249,20 @@ class SSHClient:
             Connection status
         """
         return self._connected
+
+    async def get(self, tags: List[str]) -> Dict[str, Any]:
+        """Read multiple tag values.
+        
+        Args:
+            tags: List of tags to read
+            
+        Returns:
+            Dict mapping tag names to values
+        """
+        result = {}
+        for tag in tags:
+            try:
+                result[tag] = await self.read_tag(tag)
+            except Exception as e:
+                logger.warning(f"Failed to read tag {tag}: {str(e)}")
+        return result

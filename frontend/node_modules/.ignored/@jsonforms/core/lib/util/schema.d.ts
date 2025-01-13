@@ -1,0 +1,6 @@
+import { JsonSchema } from '../models';
+export declare const getFirstPrimitiveProp: (schema: any) => string;
+/**
+ * Tests whether the schema has an enum based on oneOf.
+ */
+export declare const isOneOfEnumSchema: (schema: JsonSchema) => boolean;
