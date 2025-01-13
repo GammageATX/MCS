@@ -200,25 +200,28 @@ tag_groups:
     position:
       x:
         access: read
-        description: X axis position
+        description: X axis position (already in mm from PLC)
         mapped: true
         plc_tag: AMC.Ax1Position
         type: float
         unit: mm
+        range: [0.0, 200.0]
       y:
         access: read
-        description: Y axis position
+        description: Y axis position (already in mm from PLC)
         mapped: true
         plc_tag: AMC.Ax2Position
         type: float
         unit: mm
+        range: [0.0, 200.0]
       z:
         access: read
-        description: Z axis position
+        description: Z axis position (already in mm from PLC)
         mapped: true
         plc_tag: AMC.Ax3Position
         type: float
         unit: mm
+        range: [0.0, 40.0]
     status:
       x:
         access: read

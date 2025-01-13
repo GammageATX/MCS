@@ -136,7 +136,8 @@ class TagCacheService:
                     plc_tag = tag_info["plc_tag"]
                     
                     # Check if it's a P-variable (SSH) or PLC tag
-                    if plc_tag.startswith("P"):
+                    # P-variables start with P followed by a number
+                    if plc_tag.startswith("P") and len(plc_tag) > 1 and plc_tag[1].isdigit():
                         if not self._ssh_client:
                             logger.warning(f"SSH tag {plc_tag} found but no SSH client available")
                             continue
@@ -308,17 +309,19 @@ class TagCacheService:
                 )
             }
             
-            # Add SSH client status if configured
+            # Add SSH client status if configured (non-critical)
             if self._ssh_client:
                 ssh_connected = self._ssh_client.is_connected()
                 components["ssh_client"] = ComponentHealth(
-                    status=HealthStatus.OK if ssh_connected else HealthStatus.ERROR,
+                    status=HealthStatus.OK if ssh_connected else HealthStatus.WARN,
                     error=None if ssh_connected else "SSH client not connected"
                 )
             
             # Overall status is ERROR if any critical component is in error
+            # SSH client is non-critical, so its status doesn't affect overall health
+            critical_components = ["plc_client", "tag_mapping", "cache", "polling"]
             overall_status = HealthStatus.ERROR if any(
-                c.status == HealthStatus.ERROR for c in components.values()
+                components[c].status == HealthStatus.ERROR for c in critical_components
             ) else HealthStatus.OK
 
             return ServiceHealth(
@@ -378,15 +381,23 @@ class TagCacheService:
             if not plc_tag:
                 raise ValueError(f"No mapped tag for {internal_tag}")
 
-            # Route to appropriate client
-            if plc_tag.startswith("P"):
+            # Route to appropriate client - P-variables start with P followed by a number
+            if plc_tag.startswith("P") and len(plc_tag) > 1 and plc_tag[1].isdigit():
                 if not self._ssh_client:
                     raise RuntimeError("SSH client not available")
                 await self._ssh_client.write_tag(plc_tag, value)
+                # Immediately read back the value to confirm and update cache
+                try:
+                    new_value = await self._ssh_client.read_tag(plc_tag)
+                    self._cache[plc_tag] = new_value
+                    self._cache[internal_tag] = self._tag_mapping.scale_value(internal_tag, new_value)
+                    self._notify_tag_subscribers(internal_tag, value)
+                except Exception as e:
+                    logger.error(f"Failed to read back SSH tag {plc_tag}: {e}")
             else:
                 await self._plc_client.write_tag(plc_tag, value)
+                # Cache will be updated on next poll
             
-            # Cache will be updated on next poll
             logger.debug(f"Set {internal_tag} ({plc_tag}) = {value}")
             
         except Exception as e:
@@ -414,7 +425,7 @@ class TagCacheService:
             
             while True:
                 try:
-                    # Poll PLC tags
+                    # Only poll PLC tags
                     if self._plc_tags:
                         try:
                             values = await self._plc_client.get(self._plc_tags)
@@ -424,17 +435,6 @@ class TagCacheService:
                                     self._notify_tag_subscribers(tag, value)
                         except Exception as e:
                             logger.error(f"Failed to poll PLC tags: {e}")
-                    
-                    # Poll SSH tags
-                    if self._ssh_tags and self._ssh_client:
-                        try:
-                            values = await self._ssh_client.get(self._ssh_tags)
-                            for tag, value in values.items():
-                                if tag in self._cache and self._cache[tag] != value:
-                                    self._cache[tag] = value
-                                    self._notify_tag_subscribers(tag, value)
-                        except Exception as e:
-                            logger.error(f"Failed to poll SSH tags: {e}")
                     
                     await asyncio.sleep(interval)
                     

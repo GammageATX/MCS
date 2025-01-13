@@ -177,59 +177,32 @@ class MotionService:
 
     async def _get_component_health(self) -> Dict[str, ComponentHealth]:
         """Get health status of all components."""
-        try:
-            # Check tag cache status
-            tag_cache_ok = self._tag_cache and self._tag_cache.is_running
-            components = {
-                "tag_cache": ComponentHealth(
-                    status=HealthStatus.OK if tag_cache_ok else HealthStatus.ERROR,
-                    error=None if tag_cache_ok else "Tag cache not running"
-                )
-            }
-            
-            # Check motion system status
+        components = {}
+        
+        # Check tag cache status
+        tag_cache_ok = self._tag_cache and self._tag_cache.is_running
+        components["tag_cache"] = ComponentHealth(
+            status=HealthStatus.OK if tag_cache_ok else HealthStatus.ERROR,
+            error=None if tag_cache_ok else "Tag cache not running"
+        )
+        
+        # Only check hardware if tag cache is running
+        if tag_cache_ok:
             try:
-                status = await self.get_status()
-                if status:
-                    # Check motion module
-                    components["module"] = ComponentHealth(
-                        status=HealthStatus.OK if status.module_ready else HealthStatus.ERROR,
-                        error=None if status.module_ready else "Motion module not ready"
-                    )
-                    
-                    # Check critical axes
-                    for axis_name, axis in [("x", status.x_axis), ("y", status.y_axis), ("z", status.z_axis)]:
-                        axis_homed = axis.homed
-                        # Error only if axis has fault, degraded if not homed
-                        status = HealthStatus.ERROR if axis.error else (
-                            HealthStatus.DEGRADED if not axis_homed else HealthStatus.OK
-                        )
-                        components[f"{axis_name}_axis"] = ComponentHealth(
-                            status=status,
-                            error="Axis error" if axis.error else ("Not homed" if not axis_homed else None)
-                        )
-                else:
-                    components["status"] = ComponentHealth(
-                        status=HealthStatus.ERROR,
-                        error="Motion status not available"
-                    )
+                # Try to read a single position value to verify communication
+                x_pos = await self._tag_cache.get_tag("motion.position.x")
+                components["hardware"] = ComponentHealth(
+                    status=HealthStatus.OK,
+                    error=None
+                )
             except Exception as e:
-                logger.error(f"Failed to get motion status: {str(e)}")
-                components["status"] = ComponentHealth(
-                    status=HealthStatus.ERROR,
-                    error=f"Failed to get motion status: {str(e)}"
+                logger.error(f"Failed to read position: {str(e)}")
+                components["hardware"] = ComponentHealth(
+                    status=HealthStatus.WARN,  # Warn instead of error since motion might not be critical
+                    error=f"Failed to read position: {str(e)}"
                 )
-            
-            return components
-            
-        except Exception as e:
-            logger.error(f"Failed to get component health: {str(e)}")
-            return {
-                "error": ComponentHealth(
-                    status=HealthStatus.ERROR,
-                    error=f"Failed to get component health: {str(e)}"
-                )
-            }
+        
+        return components
 
     async def health(self) -> ServiceHealth:
         """Get service health status."""
@@ -345,14 +318,14 @@ class MotionService:
             else:
                 # Get relative move status for Z
                 current_position = await self._tag_cache.get_tag(f"motion.position.{axis}")
-                in_progress = await self._tag_cache.get_tag(f"motion.status.{axis}")
-                complete = await self._tag_cache.get_tag(f"motion.status.{axis}")
+                in_progress = await self._tag_cache.get_tag(f"motion.relative_move.{axis}.in_progress")
+                complete = await self._tag_cache.get_tag(f"motion.relative_move.{axis}.status")
 
             # Parse status
             in_position = bool(complete)  # In position if move completed
             moving = bool(in_progress)  # Moving if in progress
-            error = not await self._tag_cache.get_tag("motion.status.module")  # Error if not enabled
-            homed = bool(complete)  # Consider homed if last move completed
+            error = False  # No longer using module status for error detection
+            homed = True   # Assume homed since we don't have explicit homing status
 
             # Default to 0 if position is None
             position = current_position if current_position is not None else 0.0

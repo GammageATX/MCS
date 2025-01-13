@@ -210,8 +210,10 @@ class SSHClient:
             raise ValueError(f"No response reading tag '{tag}' from {self._host}")
             
         try:
-            # Response format is "P12=1"
-            value = response[0].split("=")[1].strip()
+            # Response format is ["P12", "P12=0", "\x06"]
+            # Find the line containing the value
+            value_line = next(line for line in response if "=" in line)
+            value = value_line.split("=")[1].strip()
             return int(value)  # Convert to int
             
         except Exception as e:
@@ -257,12 +259,17 @@ class SSHClient:
             tags: List of tags to read
             
         Returns:
-            Dict mapping tag names to values
+            Dictionary mapping tag names to values
         """
-        result = {}
+        if not self._connected:
+            raise ConnectionError("SSH not connected")
+            
+        results = {}
         for tag in tags:
             try:
-                result[tag] = await self.read_tag(tag)
+                value = await self.read_tag(tag)
+                results[tag] = value
             except Exception as e:
-                logger.warning(f"Failed to read tag {tag}: {str(e)}")
-        return result
+                logger.warning(f"Failed to read tag {tag}: {e}")
+                
+        return results
