@@ -189,11 +189,12 @@ class MotionService:
         # Only check hardware if tag cache is running
         if tag_cache_ok:
             try:
-                # Try to read a single position value to verify communication
-                x_pos = await self._tag_cache.get_tag("motion.position.x")
+                # Try to read position to verify communication
+                position = await self._tag_cache.get_tag("motion.position.x")
+                hardware_ok = position is not None
                 components["hardware"] = ComponentHealth(
-                    status=HealthStatus.OK,
-                    error=None
+                    status=HealthStatus.OK if hardware_ok else HealthStatus.WARN,
+                    error=None if hardware_ok else "Failed to read position"
                 )
             except Exception as e:
                 logger.error(f"Failed to read position: {str(e)}")

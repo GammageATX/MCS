@@ -428,11 +428,14 @@ class TagCacheService:
                     # Only poll PLC tags
                     if self._plc_tags:
                         try:
-                            values = await self._plc_client.get(self._plc_tags)
-                            for tag, value in values.items():
-                                if tag in self._cache and self._cache[tag] != value:
-                                    self._cache[tag] = value
-                                    self._notify_tag_subscribers(tag, value)
+                            # Split tags into batches
+                            for i in range(0, len(self._plc_tags), batch_size):
+                                batch = self._plc_tags[i:i + batch_size]
+                                values = await self._plc_client.get(batch)
+                                for tag, value in values.items():
+                                    if tag in self._cache and self._cache[tag] != value:
+                                        self._cache[tag] = value
+                                        self._notify_tag_subscribers(tag, value)
                         except Exception as e:
                             logger.error(f"Failed to poll PLC tags: {e}")
                     

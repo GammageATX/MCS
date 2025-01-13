@@ -79,9 +79,9 @@ class DataCollectionStorage:
             # Create connection pool
             self._pool = await asyncpg.create_pool(
                 dsn=self._dsn,
-                min_size=self._pool_config["min_size"],
-                max_size=self._pool_config["max_size"],
-                command_timeout=self._pool_config["command_timeout"]
+                min_size=int(self._pool_config["min_size"]),
+                max_size=int(self._pool_config["max_size"]),
+                command_timeout=float(self._pool_config["command_timeout"])
             )
 
             self._is_initialized = True

@@ -1,0 +1,9 @@
+{
+  "powder": {
+    "name": "Copper 750 nm Praxair",
+    "type": "Copper",
+    "size": "750 nm",
+    "manufacturer": "Praxair",
+    "lot": "CP123456"
+  }
+} 

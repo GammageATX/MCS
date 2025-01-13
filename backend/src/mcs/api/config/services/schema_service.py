@@ -85,7 +85,7 @@ class SchemaService:
     async def _load_schemas(self) -> None:
         """Load schemas from files."""
         for filename in os.listdir(self._schema_path):
-            if filename.endswith(('.json', '.yaml', '.yml')):
+            if filename.endswith('.json'):  # Only load JSON schema files
                 schema_name = os.path.splitext(filename)[0]
                 schema_path = os.path.join(self._schema_path, filename)
                 try:

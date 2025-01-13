@@ -4,12 +4,11 @@ This module implements the Process service for managing process execution and co
 """
 
 import os
-from typing import Dict
+from typing import Dict, Any
 from datetime import datetime
-
-import yaml
 from fastapi import status
 from loguru import logger
+import json
 
 from mcs.utils.errors import create_error
 from mcs.utils.health import (  # Noqa: F401
@@ -44,19 +43,22 @@ class ProcessService:
     5. shutdown: Clean shutdown of service
     """
 
-    def __init__(self, version: str = "1.0.0"):
-        """Initialize the Process service.
+    def __init__(self, config: Dict[str, Any]) -> None:
+        """Initialize process service.
         
         Args:
-            version: Service version string
+            config: Service configuration dictionary
         """
+        self._config = config
+        self._version = config.get("version", "1.0.0")
         self._service_name = "process"
-        self._version = version
-        self._is_running = False
         self._is_initialized = False
+        self._is_running = False
         self._is_prepared = False
-        self._start_time = None
+        self._components = {}
         
+        logger.info(f"{self.service_name} service initialized")
+
         # Default paths
         self.config_path = os.path.join("backend", "config")
         self.schema_path = os.path.join("backend", "schema")
@@ -72,8 +74,6 @@ class ProcessService:
         self._components = {}
         self._health = {}
         self._process_status = ProcessStatus.IDLE
-        
-        logger.info(f"{self.service_name} service initialized")
 
     @property
     def version(self) -> str:
@@ -114,12 +114,12 @@ class ProcessService:
                     message=f"{self.service_name} service already running"
                 )
 
-            # Initialize component services
-            self.action_service = ActionService(version=self.version)
-            self.parameter_service = ParameterService(version=self.version)
-            self.pattern_service = PatternService(version=self.version)
-            self.sequence_service = SequenceService(version=self.version)
-            self.schema_service = SchemaService(version=self.version)
+            # Initialize component services with their respective configs
+            self.action_service = ActionService(version=self.version)  # ActionService still uses version
+            self.parameter_service = ParameterService(config=self._config)  # Pass full config
+            self.pattern_service = PatternService(config=self._config)  # Pass full config
+            self.sequence_service = SequenceService(config=self._config)  # Pass full config
+            self.schema_service = SchemaService(version=self.version)  # SchemaService still uses version
             
             # Store components for health checks
             self._components = {
@@ -287,38 +287,21 @@ class ProcessService:
                 message=error_msg
             )
 
-    def _load_config(self) -> Dict:
-        """Load service configuration.
-        
-        Returns:
-            Dict containing service configuration
-            
-        Raises:
-            HTTPException: If config loading fails
-        """
+    async def _load_config(self) -> Dict[str, Any]:
+        """Load process configuration."""
         try:
-            config_file = os.path.join(self.config_path, "process.yaml")
-            
+            config_file = os.path.join(self.config_path, "process.json")
             if not os.path.exists(config_file):
-                logger.warning(f"Config file not found at {config_file}, using defaults")
-                return {
-                    "version": self.version,
-                    "service": {
-                        "name": "process",
-                        "host": "0.0.0.0",
-                        "port": 8004,
-                        "log_level": "INFO"
-                    }
-                }
-                
-            with open(config_file) as f:
-                return yaml.safe_load(f)
-                
+                raise FileNotFoundError(f"Process configuration file not found: {config_file}")
+
+            with open(config_file, "r") as f:
+                return json.load(f)
+
         except Exception as e:
-            error_msg = f"Failed to load configuration: {str(e)}"
+            error_msg = f"Failed to load process configuration: {str(e)}"
             logger.error(error_msg)
             raise create_error(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
                 message=error_msg
             )
 

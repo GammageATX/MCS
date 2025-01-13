@@ -6,9 +6,9 @@ This module implements the Pattern service for managing process patterns.
 import os
 from pathlib import Path
 from datetime import datetime
-from typing import List
+from typing import List, Dict, Any
 
-import yaml
+import json
 from fastapi import status
 from loguru import logger
 
@@ -23,10 +23,14 @@ from mcs.api.process.models.process_models import ProcessStatus, Pattern
 class PatternService:
     """Service for managing process patterns."""
 
-    def __init__(self, version: str = "1.0.0"):
-        """Initialize pattern service."""
+    def __init__(self, config: Dict[str, Any]):
+        """Initialize pattern service.
+        
+        Args:
+            config: Service configuration
+        """
         self._service_name = "pattern"
-        self._version = version
+        self._version = config.get("version", "1.0.0")
         self._is_running = False
         self._is_initialized = False
         self._start_time = None
@@ -247,28 +251,28 @@ class PatternService:
         """Load patterns from configuration."""
         try:
             # Load service config
-            config_path = os.path.join("backend", "config", "process.yaml")
+            config_path = os.path.join("backend", "config", "process.json")
             if os.path.exists(config_path):
                 with open(config_path, "r") as f:
-                    config = yaml.safe_load(f)
+                    config = json.load(f)
                     if "pattern" in config:
                         self._version = config["pattern"].get("version", self._version)
             
             # Load pattern files from data directory
             pattern_dir = Path("backend/data/patterns")
             if pattern_dir.exists():
-                for file_path in pattern_dir.glob("*.yaml"):
+                for file_path in pattern_dir.glob("*.json"):
                     try:
                         with open(file_path, "r") as f:
-                            pattern_data = yaml.safe_load(f)
+                            pattern_data = json.load(f)
                             pattern_id = file_path.stem
                             self._patterns[pattern_id] = pattern_data
                             logger.info(f"Loaded pattern file: {file_path.name}")
                     except Exception as e:
                         logger.error(f"Failed to load pattern file {file_path.name}: {str(e)}")
                         self._failed_patterns[file_path.stem] = str(e)
-                        
-            logger.info(f"Loaded {len(self._patterns)} patterns from configuration")
+            
+            logger.info(f"Loaded {len(self._patterns)} patterns")
             
         except Exception as e:
             error_msg = f"Failed to load patterns: {str(e)}"

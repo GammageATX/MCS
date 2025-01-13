@@ -1,0 +1,102 @@
+{
+  "version": "1.0.0",
+  "communication": {
+    "services": {
+      "tag_mapping": {
+        "version": "1.0.0",
+        "config_file": "backend/config/tags.json"
+      },
+      "tag_cache": {
+        "version": "1.0.0"
+      },
+      "motion": {
+        "version": "1.0.0"
+      },
+      "equipment": {
+        "version": "1.0.0"
+      },
+      "internal_state": {
+        "version": "1.0.0"
+      }
+    },
+    "hardware": {
+      "network": {
+        "force_mock": true,
+        "plc": {
+          "ip": "192.168.0.130",
+          "tag_file": "backend/resources/tags/MicroColdSpray_basic.csv"
+        },
+        "ssh": {
+          "host": "192.168.0.200",
+          "port": 22,
+          "username": "root",
+          "password": "deltatau"
+        }
+      }
+    },
+    "polling": {
+      "interval": 0.2,
+      "batch_size": 50
+    },
+    "system_defaults": {
+      "safety": {
+        "safe_z": 40.0
+      }
+    }
+  },
+  "service": {
+    "host": "0.0.0.0",
+    "port": 8002,
+    "log_level": "INFO"
+  },
+  "internal_states": {
+    "rules": {
+      "powder_feed_on": {
+        "type": "comparison",
+        "tag": "feeders.feeder{1|2}.running",
+        "operator": "equal",
+        "value": true,
+        "description": "Powder feed system is running"
+      },
+      "deagglomerator_on": {
+        "type": "comparison",
+        "tag": "deagglomerators.deagg{1|2}.duty_cycle",
+        "operator": "less_than",
+        "value": 35,
+        "description": "Deagglomerator is running"
+      },
+      "gas_flow_on": {
+        "type": "comparison",
+        "tag": "gas_control.main_flow.setpoint",
+        "operator": "greater_than",
+        "value": 0,
+        "description": "Gas flow is enabled"
+      },
+      "vacuum_ready": {
+        "type": "comparison",
+        "tag": "pressure.chamber",
+        "operator": "less_than",
+        "value": 100.0,
+        "description": "Chamber vacuum level ready"
+      },
+      "motion_ready": {
+        "type": "comparison",
+        "tag": "motion.status.module",
+        "operator": "equal",
+        "value": true,
+        "description": "Motion system ready"
+      },
+      "spray_ready": {
+        "type": "all",
+        "conditions": [
+          "powder_feed_on",
+          "deagglomerator_on",
+          "gas_flow_on",
+          "vacuum_ready",
+          "motion_ready"
+        ],
+        "description": "System ready for spray operation"
+      }
+    }
+  }
+} 

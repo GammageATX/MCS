@@ -1,17 +1,13 @@
-"""Parameter Service
-
-This module implements the Parameter service for managing process parameters.
-"""
+"""Parameter service implementation."""
 
 import os
-from pathlib import Path
+from typing import Dict, Any, List
 from datetime import datetime
-from typing import List
 import uuid
-
-import yaml
+from pathlib import Path
 from fastapi import status
 from loguru import logger
+import json
 
 from mcs.utils.errors import create_error
 from mcs.utils.health import (
@@ -24,26 +20,97 @@ from mcs.api.process.models.process_models import ProcessStatus, Parameter, Nozz
 class ParameterService:
     """Service for managing process parameters."""
 
-    def __init__(self, version: str = "1.0.0"):
-        """Initialize parameter service."""
+    def __init__(self, config: Dict[str, Any]):
+        """Initialize parameter service.
+        
+        Args:
+            config: Service configuration
+        """
         self._service_name = "parameter"
-        self._version = version
+        self._version = config.get("version", "1.0.0")  # Get version from top level
         self._is_running = False
         self._is_initialized = False
         self._start_time = None
-        
-        # Initialize components
-        self._parameters = {}  # Initialize as empty dict
-        self._failed_parameters = {}
-        self._parameter_status = ProcessStatus.IDLE
-        
-        # Initialize nozzles and powders
+        self._config = config
+
+        # Initialize data dictionaries
+        self._parameters = {}
         self._nozzles = {}
-        self._failed_nozzles = {}
         self._powders = {}
+        self._failed_parameters = {}
+        self._failed_nozzles = {}
         self._failed_powders = {}
-        
-        logger.info(f"{self.service_name} service initialized")
+        self._parameter_status = ProcessStatus.IDLE
+
+        # Initialize data directories
+        self._nozzle_dir = Path("backend/data/nozzles")
+        self._powder_dir = Path("backend/data/powders")
+        self._parameter_dir = Path("backend/data/parameters")
+
+        logger.info(f"{self._service_name} service initialized")
+
+    def _load_config(self) -> None:
+        """Load parameter configuration."""
+        try:
+            if not os.path.exists(self._parameter_dir):
+                self._parameter_dir.mkdir(parents=True, exist_ok=True)
+            if not os.path.exists(self._nozzle_dir):
+                self._nozzle_dir.mkdir(parents=True, exist_ok=True)
+            if not os.path.exists(self._powder_dir):
+                self._powder_dir.mkdir(parents=True, exist_ok=True)
+
+            # Load parameter files
+            for file_path in self._parameter_dir.glob("*.json"):
+                with open(file_path) as f:
+                    json.load(f)  # Validate JSON format
+
+            # Load nozzle files
+            for file_path in self._nozzle_dir.glob("*.json"):
+                with open(file_path) as f:
+                    json.load(f)  # Validate JSON format
+
+            # Load powder files
+            for file_path in self._powder_dir.glob("*.json"):
+                with open(file_path) as f:
+                    json.load(f)  # Validate JSON format
+
+        except Exception as e:
+            error_msg = f"Failed to load parameter configuration: {str(e)}"
+            logger.error(error_msg)
+            raise create_error(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                message=error_msg
+            )
+
+    async def save_nozzle(self, nozzle_id: str, nozzle_data: Dict[str, Any]) -> None:
+        """Save nozzle data."""
+        try:
+            nozzle_path = self._nozzle_dir / f"{nozzle_id}.json"
+            with open(nozzle_path, "w") as f:
+                json.dump(nozzle_data, f, indent=2)
+
+        except Exception as e:
+            error_msg = f"Failed to save nozzle data: {str(e)}"
+            logger.error(error_msg)
+            raise create_error(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                message=error_msg
+            )
+
+    async def save_powder(self, powder_id: str, powder_data: Dict[str, Any]) -> None:
+        """Save powder data."""
+        try:
+            powder_path = self._powder_dir / f"{powder_id}.json"
+            with open(powder_path, "w") as f:
+                json.dump(powder_data, f, indent=2)
+
+        except Exception as e:
+            error_msg = f"Failed to save powder data: {str(e)}"
+            logger.error(error_msg)
+            raise create_error(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                message=error_msg
+            )
 
     @property
     def version(self) -> str:
@@ -254,20 +321,20 @@ class ParameterService:
         """Load parameters from configuration."""
         try:
             # Load service config
-            config_path = os.path.join("backend", "config", "process.yaml")
+            config_path = os.path.join("backend", "config", "process.json")
             if os.path.exists(config_path):
                 with open(config_path, "r") as f:
-                    config = yaml.safe_load(f)
+                    config = json.load(f)
                     if "parameter" in config:
                         self._version = config["parameter"].get("version", self._version)
             
             # Load parameter files from data directory
             parameter_dir = Path("backend/data/parameters")
             if parameter_dir.exists():
-                for file_path in parameter_dir.glob("*.yaml"):
+                for file_path in parameter_dir.glob("*.json"):
                     try:
                         with open(file_path, "r") as f:
-                            parameter_data = yaml.safe_load(f)
+                            parameter_data = json.load(f)
                             parameter_id = file_path.stem
                             self._parameters[parameter_id] = parameter_data
                             logger.info(f"Loaded parameter file: {file_path.name}")
@@ -278,10 +345,10 @@ class ParameterService:
             # Load nozzle files
             nozzle_dir = Path("backend/data/nozzles")
             if nozzle_dir.exists():
-                for file_path in nozzle_dir.glob("*.yaml"):
+                for file_path in nozzle_dir.glob("*.json"):
                     try:
                         with open(file_path, "r") as f:
-                            nozzle_data = yaml.safe_load(f)
+                            nozzle_data = json.load(f)
                             nozzle_id = file_path.stem
                             self._nozzles[nozzle_id] = nozzle_data
                             logger.info(f"Loaded nozzle file: {file_path.name}")
@@ -292,10 +359,10 @@ class ParameterService:
             # Load powder files
             powder_dir = Path("backend/data/powders")
             if powder_dir.exists():
-                for file_path in powder_dir.glob("*.yaml"):
+                for file_path in powder_dir.glob("*.json"):
                     try:
                         with open(file_path, "r") as f:
-                            powder_data = yaml.safe_load(f)
+                            powder_data = json.load(f)
                             powder_id = file_path.stem
                             self._powders[powder_id] = powder_data
                             logger.info(f"Loaded powder file: {file_path.name}")
@@ -560,9 +627,9 @@ class ParameterService:
             nozzle_dir = Path("backend/data/nozzles")
             nozzle_dir.mkdir(parents=True, exist_ok=True)
             
-            nozzle_path = nozzle_dir / f"{nozzle_id}.yaml"
+            nozzle_path = nozzle_dir / f"{nozzle_id}.json"
             with open(nozzle_path, "w") as f:
-                yaml.safe_dump(nozzle_data, f)
+                json.dump(nozzle_data, f, indent=2)
             
             # Add to memory
             self._nozzles[nozzle_id] = nozzle_data
@@ -613,9 +680,9 @@ class ParameterService:
             }
             
             # Save to file
-            nozzle_path = Path(f"backend/data/nozzles/{nozzle_id}.yaml")
+            nozzle_path = Path(f"backend/data/nozzles/{nozzle_id}.json")
             with open(nozzle_path, "w") as f:
-                yaml.safe_dump(nozzle_data, f)
+                json.dump(nozzle_data, f, indent=2)
             
             # Update memory
             self._nozzles[nozzle_id] = nozzle_data
@@ -653,7 +720,7 @@ class ParameterService:
                 )
             
             # Delete file
-            nozzle_path = Path(f"backend/data/nozzles/{nozzle_id}.yaml")
+            nozzle_path = Path(f"backend/data/nozzles/{nozzle_id}.json")
             if nozzle_path.exists():
                 nozzle_path.unlink()
             
@@ -708,9 +775,9 @@ class ParameterService:
             powder_dir = Path("backend/data/powders")
             powder_dir.mkdir(parents=True, exist_ok=True)
             
-            powder_path = powder_dir / f"{powder_id}.yaml"
+            powder_path = powder_dir / f"{powder_id}.json"
             with open(powder_path, "w") as f:
-                yaml.safe_dump(powder_data, f)
+                json.dump(powder_data, f, indent=2)
             
             # Add to memory
             self._powders[powder_id] = powder_data
@@ -762,9 +829,9 @@ class ParameterService:
             }
             
             # Save to file
-            powder_path = Path(f"backend/data/powders/{powder_id}.yaml")
+            powder_path = Path(f"backend/data/powders/{powder_id}.json")
             with open(powder_path, "w") as f:
-                yaml.safe_dump(powder_data, f)
+                json.dump(powder_data, f, indent=2)
             
             # Update memory
             self._powders[powder_id] = powder_data
@@ -802,7 +869,7 @@ class ParameterService:
                 )
             
             # Delete file
-            powder_path = Path(f"backend/data/powders/{powder_id}.yaml")
+            powder_path = Path(f"backend/data/powders/{powder_id}.json")
             if powder_path.exists():
                 powder_path.unlink()
             

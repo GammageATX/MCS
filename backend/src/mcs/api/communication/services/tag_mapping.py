@@ -1,7 +1,7 @@
 """Tag mapping service implementation."""
 
 import os
-import yaml
+import json
 from typing import Dict, Any, Optional
 from datetime import datetime
 from fastapi import status
@@ -18,12 +18,12 @@ def load_config() -> Dict[str, Any]:
     Returns:
         Dict[str, Any]: Configuration dictionary
     """
-    config_path = os.path.join("backend", "config", "tags.yaml")
+    config_path = os.path.join("backend", "config", "tags.json")
     if not os.path.exists(config_path):
         raise FileNotFoundError(f"Config file not found: {config_path}")
         
     with open(config_path, "r") as f:
-        return yaml.safe_load(f)
+        return json.load(f)
 
 
 class TagMappingService:
@@ -67,13 +67,13 @@ class TagMappingService:
     def _load_config(self) -> None:
         """Load tag mapping configuration."""
         try:
-            # Load tag configuration from YAML file
-            config_path = os.path.join("backend", "config", "tags.yaml")
+            # Load tag configuration from JSON file
+            config_path = os.path.join("backend", "config", "tags.json")
             if not os.path.exists(config_path):
                 raise FileNotFoundError(f"Tag configuration file not found: {config_path}")
                 
             with open(config_path, "r") as f:
-                tag_config = yaml.safe_load(f)
+                tag_config = json.load(f)
             
             # Process tag mappings from hierarchical structure
             self._tag_map.clear()
@@ -209,7 +209,7 @@ class TagMappingService:
     async def _get_component_health(self) -> Dict[str, ComponentHealth]:
         """Get health status of all components."""
         try:
-            config_file = os.path.join("backend", "config", "tags.yaml")
+            config_file = os.path.join("backend", "config", "tags.json")
             config_exists = os.path.exists(config_file)
             mappings_loaded = len(self._tag_map) > 0
 

@@ -2,7 +2,6 @@
 
 import os
 import json
-import yaml
 from datetime import datetime
 from typing import Dict, Any
 from loguru import logger
@@ -301,9 +300,9 @@ class ConfigService:
     async def _load_config(self) -> None:
         """Load configuration."""
         try:
-            config_path = os.path.join("backend", "config", "config.yaml")
+            config_path = os.path.join("backend", "config", "config.json")
             with open(config_path, "r") as f:
-                self._config = yaml.safe_load(f)
+                self._config = json.load(f)
             self._version = self._config["version"]
             logger.info(f"Loaded config version {self._version}")
             self._failed_configs.pop("main", None)
@@ -319,7 +318,7 @@ class ConfigService:
                     },
                     "format": {
                         "version": "1.0.0",
-                        "enabled_formats": ["yaml", "json"]
+                        "enabled_formats": ["json"]
                     },
                     "schema": {
                         "version": "1.0.0",
@@ -489,15 +488,10 @@ class ConfigService:
             )
         
         try:
-            # Find file with supported format
-            for fmt in self._format._enabled_formats:
-                file_path = os.path.join(self._file._base_path, f"{name}.{fmt}")
-                if os.path.exists(file_path):
-                    with open(file_path, 'r') as f:
-                        if fmt == 'json':
-                            return json.loads(f.read())
-                        elif fmt == 'yaml':
-                            return yaml.safe_load(f)
+            file_path = os.path.join(self._file._base_path, f"{name}.json")
+            if os.path.exists(file_path):
+                with open(file_path, 'r') as f:
+                    return json.load(f)
             
             raise create_error(
                 status_code=status.HTTP_404_NOT_FOUND,
@@ -525,10 +519,10 @@ class ConfigService:
             files = os.listdir(self._schema._schema_path)
             schemas = []
             
-            # Filter for supported formats
+            # Filter for JSON files
             for file in files:
                 name, ext = os.path.splitext(file)
-                if ext[1:] in ['json', 'yaml']:
+                if ext == '.json':
                     schemas.append(name)
             
             return schemas
@@ -550,15 +544,10 @@ class ConfigService:
             )
         
         try:
-            # Find schema file with supported format
-            for fmt in ['json', 'yaml']:
-                file_path = os.path.join(self._schema._schema_path, f"{name}.{fmt}")
-                if os.path.exists(file_path):
-                    with open(file_path, 'r') as f:
-                        if fmt == 'json':
-                            return json.loads(f.read())
-                        elif fmt == 'yaml':
-                            return yaml.safe_load(f)
+            file_path = os.path.join(self._schema._schema_path, f"{name}.json")
+            if os.path.exists(file_path):
+                with open(file_path, 'r') as f:
+                    return json.load(f)
             
             raise create_error(
                 status_code=status.HTTP_404_NOT_FOUND,
@@ -610,7 +599,7 @@ class ConfigService:
                 message=error_msg
             )
 
-    async def update_config(self, name: str, data: Dict[str, Any], format: str = "yaml", preserve_format: bool = True) -> None:
+    async def update_config(self, name: str, data: Dict[str, Any], preserve_format: bool = True) -> None:
         """Update configuration by name."""
         if not self._file or not self._format:
             raise create_error(
@@ -618,26 +607,12 @@ class ConfigService:
                 message="File or format service not initialized"
             )
         
-        if format not in self._format._enabled_formats:
-            raise create_error(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                message=f"Unsupported format: {format}"
-            )
-        
         try:
             # Write config to file
-            file_path = os.path.join(self._file._base_path, f"{name}.{format}")
-            
-            if format == 'yaml':
-                # Use format service for YAML with preservation
-                content = await self._format.save_yaml(data, preserve_format=preserve_format)
-                with open(file_path, 'w') as f:
-                    f.write(content)
-            else:
-                # Use format service for JSON
-                content = await self._format.save_json(data, preserve_format=preserve_format)
-                with open(file_path, 'w') as f:
-                    f.write(content)
+            file_path = os.path.join(self._file._base_path, f"{name}.json")
+            content = await self._format.save_json(data, preserve_format=preserve_format)
+            with open(file_path, 'w') as f:
+                f.write(content)
             
         except Exception as e:
             error_msg = f"Failed to update config {name}: {str(e)}"

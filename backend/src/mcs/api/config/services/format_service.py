@@ -2,7 +2,6 @@
 
 from datetime import datetime
 from typing import Dict, Any, List
-import yaml
 import json
 from fastapi import status
 from loguru import logger
@@ -30,81 +29,6 @@ class FormatService:
         self._init_enabled_formats = enabled_formats
         
         logger.info(f"{self.service_name} service initialized")
-
-    async def save_yaml(self, data: Dict[str, Any], preserve_format: bool = False) -> str:
-        """Save data as YAML with numeric and string format preservation."""
-        try:
-            from ruamel.yaml import YAML, scalarstring
-            yaml = YAML()
-            yaml.default_flow_style = False
-            yaml.indent(mapping=2, sequence=2, offset=0)  # Use 2 spaces everywhere
-            yaml.preserve_quotes = True
-            yaml.allow_unicode = True
-            yaml.width = 4096  # Prevent line wrapping
-
-            def preserve_format(d):
-                if isinstance(d, dict):
-                    return {k: preserve_format(v) for k, v in d.items()}
-                elif isinstance(d, list):
-                    return [preserve_format(v) for v in d]
-                elif isinstance(d, bool):
-                    return d
-                elif isinstance(d, (int, float)):
-                    # Keep original string representation for numbers
-                    orig_str = str(d)
-                    if isinstance(d, float):
-                        # Force decimal point for all floats
-                        if orig_str.endswith('.0'):
-                            # Keep original .0 format
-                            return float(orig_str)
-                        # Keep original precision
-                        return d
-                    elif '.0' in orig_str:
-                        # Keep .0 if it was in the original
-                        return float(orig_str)
-                    return d
-                elif isinstance(d, str):
-                    # Don't quote strings that are actually numbers
-                    try:
-                        num = float(d)
-                        # If it was a string with .0, keep it as float
-                        if '.0' in d:
-                            return float(d)
-                        # Otherwise convert to int if it's a whole number
-                        if num.is_integer() and not d.endswith('.0'):
-                            return int(num)
-                        return num
-                    except ValueError:
-                        # Preserve quotes on actual strings
-                        return scalarstring.DoubleQuotedScalarString(d)
-                return d
-
-            # Process data to preserve formats
-            processed_data = preserve_format(data)
-            
-            # Convert to string
-            import io
-            string_stream = io.StringIO()
-            yaml.dump(processed_data, string_stream)
-            return string_stream.getvalue()
-            
-        except Exception as e:
-            logger.error(f"Failed to save YAML: {e}")
-            raise create_error(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                message=f"Failed to save YAML: {str(e)}"
-            )
-
-    async def load_yaml(self, content: str) -> Dict[str, Any]:
-        """Load YAML content."""
-        try:
-            return yaml.safe_load(content)
-        except Exception as e:
-            logger.error(f"Failed to load YAML: {e}")
-            raise create_error(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                message=f"Failed to load YAML: {str(e)}"
-            )
 
     async def save_json(self, data: Dict[str, Any], preserve_format: bool = False) -> str:
         """Save data as JSON with optional format preservation."""
@@ -287,7 +211,7 @@ class FormatService:
                 error="Critical component failure" if overall_status == HealthStatus.ERROR else None,
                 components=components
             )
-            
+
         except Exception as e:
             error_msg = f"Health check failed: {str(e)}"
             logger.error(error_msg)

@@ -21,7 +21,7 @@ class MessageResponse(BaseResponse):
 class ConfigRequest(BaseModel):
     """Configuration request model."""
     data: Dict[str, Any] = Field(..., description="Configuration data")
-    format: str = Field("yaml", description="Configuration format (yaml or json)")
+    format: str = Field("json", description="Configuration format (json)")
     preserve_format: bool = Field(True, description="Whether to preserve formatting and comments")
 
 

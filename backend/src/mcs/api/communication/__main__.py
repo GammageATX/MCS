@@ -2,7 +2,7 @@
 
 import os
 import sys
-import yaml
+import json
 import uvicorn
 from loguru import logger
 
@@ -53,7 +53,7 @@ def setup_logging():
 def load_config():
     """Load service configuration."""
     try:
-        config_path = os.path.join("backend", "config", "communication.yaml")
+        config_path = os.path.join("backend", "config", "communication.json")
         if not os.path.exists(config_path):
             logger.warning(f"Config file not found at {config_path}, using defaults")
             return {
@@ -61,12 +61,12 @@ def load_config():
                     "version": "1.0.0",
                     "host": "0.0.0.0",
                     "port": 8002,
-                    "history_retention_days": 30
+                    "log_level": "INFO"
                 }
             }
 
         with open(config_path, 'r') as f:
-            return yaml.safe_load(f)
+            return json.load(f)
 
     except Exception as e:
         logger.error(f"Failed to load config: {e}")

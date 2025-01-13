@@ -1,0 +1,337 @@
+{
+  "version": "1.0.0",
+  "service": {
+    "name": "process",
+    "host": "0.0.0.0",
+    "port": 8003,
+    "log_level": "INFO"
+  },
+  "components": {
+    "action": {
+      "version": "1.0.0",
+      "action_groups": {
+        "apply_parameters": {
+          "description": "Apply parameter set to system",
+          "requires": [
+            {
+              "parameter_file": "string"
+            }
+          ],
+          "steps": [
+            {
+              "action": "hardware_sets.nozzle_select",
+              "from": "{parameter_file}.nozzle}"
+            },
+            {
+              "action": "valves.main_gas_valve",
+              "value": true
+            },
+            {
+              "action": "valves.feeder_gas_valve",
+              "value": true
+            },
+            {
+              "action": "gas.set_main_flow",
+              "from": "{parameter_file}.main_flow"
+            },
+            {
+              "validation": "gas_flow_stable"
+            },
+            {
+              "action": "gas.set_feeder_flow",
+              "from": "{parameter_file}.feeder_flow"
+            },
+            {
+              "validation": "gas_flow_stable"
+            },
+            {
+              "action": "hardware_sets.deagglomerator_control",
+              "from": "{parameter_file}.deagglomerator"
+            },
+            {
+              "action": "hardware_sets.feeder_control",
+              "from": "{parameter_file}.feeder"
+            },
+            {
+              "time_delay": "powder_stabilize"
+            }
+          ]
+        },
+        "change_parameters": {
+          "description": "Change process parameters",
+          "requires": [
+            {
+              "parameter_file": "string"
+            }
+          ],
+          "steps": [
+            {
+              "action": "gas.set_main_flow",
+              "from": "{parameter_file}.main_flow"
+            },
+            {
+              "validation": "gas_flow_stable"
+            },
+            {
+              "action": "gas.set_feeder_flow",
+              "from": "{parameter_file}.feeder_flow"
+            },
+            {
+              "validation": "gas_flow_stable"
+            },
+            {
+              "action": "hardware_sets.deagglomerator_control",
+              "from": "{parameter_file}.deagglomerator"
+            },
+            {
+              "action": "hardware_sets.feeder_control",
+              "from": "{parameter_file}.feeder"
+            },
+            {
+              "time_delay": "powder_stabilize"
+            }
+          ]
+        },
+        "execute_pattern": {
+          "description": "Execute pattern with proper positioning and shutter control",
+          "parameters": {
+            "passes": {
+              "default": 1,
+              "description": "Number of pattern passes",
+              "min": 1,
+              "type": "integer"
+            }
+          },
+          "requires": [
+            {
+              "parameter_file": "string"
+            },
+            {
+              "pattern_file": "string"
+            }
+          ],
+          "steps": [
+            {
+              "action_group": "move_to_trough"
+            },
+            {
+              "action": "shutter.control_shutter",
+              "parameters": {
+                "value": true
+              }
+            },
+            {
+              "action": "motion.move_xy",
+              "from": "{pattern_file}.origin"
+            },
+            {
+              "action": "shutter.control_shutter",
+              "parameters": {
+                "value": false
+              }
+            },
+            {
+              "repeat": {
+                "count": "{parameters.passes}",
+                "steps": [
+                  {
+                    "action": "motion.move_xy",
+                    "from": "{pattern_file}.moves"
+                  }
+                ]
+              }
+            },
+            {
+              "action": "shutter.control_shutter",
+              "parameters": {
+                "value": true
+              }
+            },
+            {
+              "action_group": "move_to_trough"
+            }
+          ]
+        },
+        "move_to_trough": {
+          "description": "Move to trough position",
+          "steps": [
+            {
+              "action": "motion.move_z",
+              "parameters": {
+                "z": "{safety.safe_z}"
+              }
+            },
+            {
+              "validation": "motion_complete"
+            },
+            {
+              "action": "motion.move_xy",
+              "parameters": {
+                "x": "{hardware.trough.x}",
+                "y": "{hardware.trough.y}"
+              }
+            },
+            {
+              "validation": "motion_complete"
+            },
+            {
+              "action": "motion.move_z",
+              "parameters": {
+                "z": "{hardware.trough.z}"
+              }
+            },
+            {
+              "validation": "motion_complete"
+            }
+          ]
+        },
+        "ready_system": {
+          "description": "Prepare system for operation",
+          "steps": [
+            {
+              "action": "valves.vent_valve",
+              "value": false
+            },
+            {
+              "action": "motion.move_xy",
+              "parameters": {
+                "x": 0,
+                "y": 0
+              }
+            },
+            {
+              "action": "motion.move_z",
+              "parameters": {
+                "z": 0
+              }
+            },
+            {
+              "validation": "motion_complete"
+            },
+            {
+              "action": "valves.gate_valve",
+              "parameters": {
+                "open": false,
+                "partial": true
+              }
+            },
+            {
+              "parameters": {
+                "pressure": 200,
+                "timeout": 60.0
+              },
+              "validation": "chamber_vacuum"
+            },
+            {
+              "action": "valves.gate_valve",
+              "parameters": {
+                "open": true,
+                "partial": false
+              }
+            },
+            {
+              "parameters": {
+                "pressure": 1.0,
+                "timeout": 120.0
+              },
+              "validation": "chamber_vacuum"
+            }
+          ]
+        },
+        "shutdown_process": {
+          "description": "Shutdown system safely",
+          "steps": [
+            {
+              "action": "hardware_sets.feeder_control",
+              "parameters": {
+                "frequency": 0
+              }
+            },
+            {
+              "action": "hardware_sets.deagglomerator_control",
+              "parameters": {
+                "duty_cycle": 35
+              }
+            },
+            {
+              "action": "gas.set_feeder_flow",
+              "parameters": {
+                "flow": 0.0
+              }
+            },
+            {
+              "action": "gas.set_main_flow",
+              "parameters": {
+                "flow": 0.0
+              }
+            },
+            {
+              "validation": "gas_flow_stable"
+            },
+            {
+              "action": "valves.feeder_gas_valve",
+              "value": false
+            },
+            {
+              "action": "valves.main_gas_valve",
+              "value": false
+            },
+            {
+              "action": "motion.move_xy",
+              "parameters": {
+                "x": 0,
+                "y": 0
+              }
+            },
+            {
+              "action": "motion.move_z",
+              "parameters": {
+                "z": 0
+              }
+            },
+            {
+              "validation": "motion_complete"
+            },
+            {
+              "action": "valves.gate_valve",
+              "parameters": {
+                "open": false,
+                "partial": false
+              }
+            },
+            {
+              "action": "valves.vent_valve",
+              "value": true
+            }
+          ]
+        },
+        "stop_feeder": {
+          "description": "Stop powder feed system",
+          "steps": [
+            {
+              "action": "hardware_sets.feeder_control",
+              "parameters": {
+                "frequency": 0
+              }
+            },
+            {
+              "action": "hardware_sets.deagglomerator_control",
+              "parameters": {
+                "duty_cycle": 35
+              }
+            },
+            {
+              "action": "gas.set_feeder_flow",
+              "parameters": {
+                "flow": 0.0
+              }
+            },
+            {
+              "validation": "gas_flow_stable"
+            }
+          ]
+        }
+      }
+    }
+  }
+} 

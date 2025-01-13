@@ -5,7 +5,7 @@ from datetime import datetime
 from pathlib import Path
 from fastapi import status
 from loguru import logger
-import yaml
+import json
 
 from mcs.utils.errors import create_error
 from mcs.utils.health import ServiceHealth, ComponentHealth, HealthStatus, create_error_health
@@ -32,12 +32,12 @@ def load_config() -> Dict[str, Any]:
     Raises:
         FileNotFoundError: If config file not found
     """
-    config_path = Path("backend/config/communication.yaml")
+    config_path = Path("backend/config/communication.json")
     if not config_path.exists():
         raise FileNotFoundError(f"Config file not found: {config_path}")
 
     with open(config_path) as f:
-        config = yaml.safe_load(f)
+        config = json.load(f)
 
     return config
 

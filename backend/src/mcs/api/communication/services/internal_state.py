@@ -417,6 +417,18 @@ class InternalStateService:
                         values.append(tag_value == compare_value)
                 
                 new_value = all(values)
+
+            elif rule["type"] == "all":
+                # All rule type checks if all specified tags are True
+                values = []
+                for tag in rule["tags"]:
+                    tag_value = await self._get_tag_value(tag)
+                    if tag_value is None:
+                        logger.warning(f"No value for tag: {tag}, setting state {state} to False")
+                        self._internal_states[state] = False
+                        return
+                    values.append(bool(tag_value))
+                new_value = all(values)
                 
             else:
                 logger.warning(f"Unknown rule type: {rule['type']}, setting state {state} to False")

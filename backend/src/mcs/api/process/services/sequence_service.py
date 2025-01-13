@@ -6,8 +6,9 @@ This module implements the Sequence service for managing process sequences.
 import os
 from pathlib import Path
 from datetime import datetime
+from typing import Dict, Any
 
-import yaml
+import json
 from fastapi import status
 from loguru import logger
 
@@ -23,10 +24,14 @@ from mcs.api.process.models.process_models import ProcessStatus
 class SequenceService:
     """Service for managing process sequences."""
 
-    def __init__(self, version: str = "1.0.0"):
-        """Initialize sequence service."""
+    def __init__(self, config: Dict[str, Any]):
+        """Initialize sequence service.
+        
+        Args:
+            config: Service configuration
+        """
         self._service_name = "sequence"
-        self._version = version
+        self._version = config.get("version", "1.0.0")  # Get version from top level
         self._is_running = False
         self._is_initialized = False
         self._start_time = None
@@ -288,39 +293,29 @@ class SequenceService:
     async def _load_sequences(self) -> None:
         """Load sequences from configuration."""
         try:
-            logger.info("Loading sequences...")
-            
             # Load service config
-            config_path = os.path.join("backend", "config", "process.yaml")
+            config_path = os.path.join("backend", "config", "process.json")
             if os.path.exists(config_path):
-                logger.info(f"Loading config from {config_path}")
                 with open(config_path, "r") as f:
-                    config = yaml.safe_load(f)
+                    config = json.load(f)
                     if "sequence" in config:
                         self._version = config["sequence"].get("version", self._version)
-                        logger.info(f"Updated version to {self._version}")
             
             # Load sequence files from data directory
             sequence_dir = Path("backend/data/sequences")
             if sequence_dir.exists():
-                logger.info(f"Loading sequences from {sequence_dir}")
-                for file_path in sequence_dir.glob("*.yaml"):
+                for file_path in sequence_dir.glob("*.json"):
                     try:
                         with open(file_path, "r") as f:
-                            sequence_data = yaml.safe_load(f)
-                            # Unwrap the sequence key and get inner data
-                            if "sequence" in sequence_data:
-                                sequence_data = sequence_data["sequence"]
-                                sequence_id = file_path.stem
-                                self._sequences[sequence_id] = sequence_data
-                                logger.info(f"Loaded sequence file: {file_path.name}")
+                            sequence_data = json.load(f)
+                            sequence_id = file_path.stem
+                            self._sequences[sequence_id] = sequence_data
+                            logger.info(f"Loaded sequence file: {file_path.name}")
                     except Exception as e:
                         logger.error(f"Failed to load sequence file {file_path.name}: {str(e)}")
                         self._failed_sequences[file_path.stem] = str(e)
-            else:
-                logger.warning(f"Sequence directory not found: {sequence_dir}")
-                        
-            logger.info(f"Loaded {len(self._sequences)} sequences from configuration")
+            
+            logger.info(f"Loaded {len(self._sequences)} sequences")
             
         except Exception as e:
             error_msg = f"Failed to load sequences: {str(e)}"

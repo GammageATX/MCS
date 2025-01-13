@@ -1,7 +1,7 @@
 """Mock client that simulates PLC behavior."""
 
 import asyncio
-import yaml
+import json
 from typing import Any, Dict, List
 from pathlib import Path
 from loguru import logger
@@ -17,17 +17,17 @@ class MockPLCClient:
         self._config = config
         
         # Load mock data
-        mock_data_path = Path("backend/config/mock_data.yaml")
+        mock_data_path = Path("backend/config/mock_data.json")
         if not mock_data_path.exists():
             logger.warning(f"Mock data file not found: {mock_data_path}")
-            self._mock_data = {"plc_tags": {}}
+            self._mock_data = {"mock_data": {}}
         else:
             with open(mock_data_path) as f:
-                self._mock_data = yaml.safe_load(f)
+                self._mock_data = json.load(f)
             logger.info(f"Loaded mock data from {mock_data_path}")
             
-        # Initialize mock tag values from mock_data.yaml
-        self._plc_tags = self._mock_data.get("plc_tags", {}).copy()  # Make a copy
+        # Initialize mock tag values from mock_data.json
+        self._plc_tags = self._mock_data.get("mock_data", {}).copy()  # Make a copy
         logger.info(f"Mock client initialized with {len(self._plc_tags)} tags")
         logger.debug(f"Available mock tags: {list(self._plc_tags.keys())}")
 
@@ -102,18 +102,18 @@ class MockPLCClient:
         old_value = self._plc_tags[tag]
         self._plc_tags[tag] = plc_value
         
-        # Update mock_data.yaml file
+        # Update mock_data.json file
         try:
-            mock_data_path = Path("backend/config/mock_data.yaml")
-            self._mock_data["plc_tags"][tag] = plc_value
+            mock_data_path = Path("backend/config/mock_data.json")
+            self._mock_data["mock_data"][tag] = plc_value
             
             with open(mock_data_path, 'w') as f:
-                yaml.safe_dump(self._mock_data, f, default_flow_style=False)
+                json.dump(self._mock_data, f, indent=2)
                 
             logger.debug(f"Updated mock data file for tag {tag}: {old_value} -> {plc_value}")
         except Exception as e:
             logger.error(f"Failed to persist mock tag change to file: {e}")
-        
+
         # Handle special cases for linked values
         if tag == "AOS32-0.1.2.1":  # Main gas flow setpoint (DAC value)
             flow_slpm = (value / 4095.0) * 100.0
@@ -123,48 +123,6 @@ class MockPLCClient:
             flow_slpm = (value / 4095.0) * 10.0
             self._plc_tags["FeederFlowRate"] = flow_slpm
             logger.debug(f"Updated FeederFlowRate to {flow_slpm:.1f} SLPM based on setpoint DAC {value}")
-
-    def is_connected(self) -> bool:
-        """Check if mock client is connected.
-        
-        Returns:
-            Connection status
-        """
-        return self._connected
-
-    async def get(self, tags: List[str]) -> Dict[str, Any]:
-        """Read multiple mock tag values.
-        
-        Args:
-            tags: List of tags to read
-            
-        Returns:
-            Dict mapping tag names to values
-            
-        Note:
-            Tags not found in mock data will be skipped with a warning
-        """
-        if not self._connected:
-            raise ConnectionError("Mock client not connected")
-            
-        # Return mock values for all requested tags
-        values = {}
-        missing_tags = []
-        for tag in tags:
-            if tag not in self._plc_tags:
-                missing_tags.append(tag)
-                continue
-            values[tag] = self._plc_tags[tag]
-            
-        if missing_tags:
-            logger.warning(f"Tags not found in mock data: {missing_tags}")
-            logger.debug(f"Available mock tags: {list(self._plc_tags.keys())}")
-            
-        if not values:
-            logger.error("No valid tags found in request")
-            
-        logger.debug(f"Read {len(values)} mock tags")
-        return values
 
     async def _simulate_updates(self) -> None:
         """Background task to simulate tag value updates."""
@@ -197,10 +155,56 @@ class MockPLCClient:
                         continue
                         
                 await asyncio.sleep(0.1)  # Update every 100ms
-                
+
         except asyncio.CancelledError:
             logger.debug("Mock update simulation stopped")
             raise
         except Exception as e:
             logger.error(f"Error in mock update simulation: {str(e)}")
             raise
+
+    async def get(self, tags: List[str]) -> Dict[str, Any]:
+        """Get multiple tag values at once.
+        
+        Args:
+            tags: List of tag names to read
+            
+        Returns:
+            Dictionary mapping tag names to their values
+            
+        Raises:
+            ConnectionError: If client not connected
+            KeyError: If tag not found and cannot be mapped
+        """
+        if not self._connected:
+            raise ConnectionError("Mock client not connected")
+            
+        results = {}
+        for tag in tags:
+            # First try direct tag lookup
+            if tag in self._plc_tags:
+                results[tag] = self._plc_tags[tag]
+                continue
+                
+            # Tag not found - check if it matches known PLC tag patterns
+            if tag.startswith(("AMC.", "XYMove.", "XAxis.", "YAxis.", "ZAxis.")):
+                logger.warning(f"Missing PLC tag {tag}, will add to mock data")
+                self._plc_tags[tag] = 0.0 if "Position" in tag else False
+                self._mock_data["mock_data"][tag] = self._plc_tags[tag]
+                results[tag] = self._plc_tags[tag]
+            else:
+                # Unknown tag - raise error
+                logger.error(f"Unknown tag {tag} requested")
+                raise KeyError(f"Tag not found and cannot be mapped: {tag}")
+                
+        # Save any new tags to mock data file
+        if any(tag not in self._mock_data["mock_data"] for tag in self._plc_tags):
+            try:
+                mock_data_path = Path("backend/config/mock_data.json")
+                with open(mock_data_path, 'w') as f:
+                    json.dump(self._mock_data, f, indent=2)
+                logger.info("Updated mock data file with new tags")
+            except Exception as e:
+                logger.error(f"Failed to persist mock data changes: {e}")
+                
+        return results

@@ -1,10 +1,11 @@
-"""Configuration service startup script."""
+"""Main entry point for configuration service."""
 
 import os
 import sys
-import yaml
+import json
 import uvicorn
 from loguru import logger
+
 from mcs.utils.errors import create_error
 
 
@@ -51,7 +52,7 @@ def setup_logging():
 def load_config():
     """Load service configuration."""
     try:
-        config_path = os.path.join("backend", "config", "config.yaml")
+        config_path = os.path.join("backend", "config", "config.json")
         if not os.path.exists(config_path):
             logger.warning(f"Config file not found at {config_path}, using defaults")
             return {
@@ -64,7 +65,7 @@ def load_config():
             }
 
         with open(config_path, 'r') as f:
-            return yaml.safe_load(f)
+            return json.load(f)
 
     except Exception as e:
         logger.error(f"Failed to load config: {e}")
@@ -75,25 +76,26 @@ def load_config():
 
 
 def main():
-    """Run configuration service."""
+    """Run configuration service in development mode."""
     try:
         # Setup logging
         setup_logging()
-        logger.info("Starting configuration service...")
+        logger.info("Starting configuration service in development mode...")
         
         # Load config
         config = load_config()
+        service_config = config.get("service", {})
         
         # Get config from environment or use defaults
-        host = os.getenv("CONFIG_HOST", config["service"].get("host", "0.0.0.0"))
-        port = int(os.getenv("CONFIG_PORT", config["service"].get("port", 8001)))
+        host = os.getenv("CONFIG_HOST", service_config.get("host", "0.0.0.0"))
+        port = int(os.getenv("CONFIG_PORT", service_config.get("port", 8001)))
         
         # Log startup configuration
         logger.info(f"Host: {host}")
         logger.info(f"Port: {port}")
         logger.info("Mode: development (reload enabled)")
         
-        # Run service with standardized configuration
+        # Run service with development configuration
         uvicorn.run(
             "mcs.api.config.config_app:create_config_service",
             host=host,

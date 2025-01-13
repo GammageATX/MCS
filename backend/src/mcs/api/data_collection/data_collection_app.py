@@ -1,7 +1,7 @@
 """Data collection API application."""
 
 import os
-import yaml
+import json
 from typing import Dict, Any
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request, status
@@ -23,7 +23,7 @@ def load_config() -> Dict[str, Any]:
         Dict[str, Any]: Configuration dictionary
     """
     try:
-        config_path = os.path.join("backend", "config", "data_collection.yaml")
+        config_path = os.path.join("backend", "config", "data_collection.json")
         if not os.path.exists(config_path):
             logger.warning(f"Config file not found at {config_path}, using defaults")
             return {
@@ -45,14 +45,15 @@ def load_config() -> Dict[str, Any]:
                         "database": "mcs_db",
                         "pool": {
                             "min_size": 2,
-                            "max_size": 10
+                            "max_size": 10,
+                            "command_timeout": 60.0
                         }
                     }
                 }
             }
 
         with open(config_path, "r") as f:
-            return yaml.safe_load(f)
+            return json.load(f)
             
     except Exception as e:
         logger.error(f"Failed to load config: {e}")

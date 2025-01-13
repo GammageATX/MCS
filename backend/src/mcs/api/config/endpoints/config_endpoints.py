@@ -69,7 +69,7 @@ async def get_config(name: str, request: Request) -> ConfigResponse:
         config_data = await request.app.state.config_service.get_config(name)
         return ConfigResponse(
             name=name,
-            format="yaml",  # Default format
+            format="json",  # Default format is now JSON
             data=config_data
         )
         

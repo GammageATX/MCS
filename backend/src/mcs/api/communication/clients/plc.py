@@ -12,7 +12,7 @@ class PLCClient:
         """Initialize PLC client.
         
         Args:
-            config: Client configuration from communication.yaml
+            config: Client configuration from communication.json
         """
         self._config = config
         self._connected = False

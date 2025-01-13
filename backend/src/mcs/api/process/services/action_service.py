@@ -5,8 +5,7 @@ This module implements the Action service for managing process actions.
 
 import os
 from datetime import datetime
-
-import yaml
+import json
 from fastapi import status
 from loguru import logger
 
@@ -70,10 +69,10 @@ class ActionService:
                 )
             
             # Load config
-            config_path = os.path.join("backend", "config", "process.yaml")
+            config_path = os.path.join("backend", "config", "process.json")
             if os.path.exists(config_path):
                 with open(config_path, "r") as f:
-                    config = yaml.safe_load(f)
+                    config = json.load(f)
                     if "action" in config:
                         self._version = config["action"].get("version", self._version)
             
