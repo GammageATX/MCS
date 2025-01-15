@@ -20,11 +20,11 @@ setup(
         "fastapi>=0.95.0",
         "uvicorn>=0.22.0",
         "pydantic>=2.0.0",
-        "PyQt6>=6.4.0",
         "pyyaml>=6.0.1",
+        "ruamel.yaml>=0.17.21",
         "paramiko>=3.4.0",
         "loguru>=0.7.0",
-        "productivity>=0.11.1",
+        "productivity>=0.12.0",
         "asyncssh>=2.13.2",
         "websockets>=12.0",
         "httpx>=0.24.0",
@@ -34,6 +34,8 @@ setup(
         "typing_extensions>=4.0.0",
         "jsonschema>=4.17.3",
         "psutil>=5.9.0",
+        "redis>=5.0.0",
+        "psycopg2-binary>=2.9.9",
     ],
     extras_require={
         "dev": [
