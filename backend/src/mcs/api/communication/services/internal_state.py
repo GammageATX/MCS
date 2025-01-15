@@ -287,6 +287,11 @@ class InternalStateService:
         Returns:
             Tag value or None if not found
         """
+        # First check if this is an internal state
+        if tag_pattern in self._internal_states:
+            logger.debug(f"Found internal state value for {tag_pattern} = {self._internal_states[tag_pattern]}")
+            return self._internal_states[tag_pattern]
+            
         # Handle {1|2} pattern
         if "{1|2}" in tag_pattern:
             # Try both variants
@@ -444,9 +449,34 @@ class InternalStateService:
             logger.error(f"Failed to evaluate state {state}: {e}, setting to False")
             self._internal_states[state] = False
 
+    def _is_base_state(self, state: str) -> bool:
+        """Check if a state only depends on PLC tags (not other states)."""
+        rule = self._state_rules[state]
+        if rule["type"] == "comparison":
+            return rule["tag"] not in self._state_rules
+        elif rule["type"] == "multi_condition":
+            return all(c["tag"] not in self._state_rules for c in rule["conditions"])
+        elif rule["type"] == "all":
+            return all(tag not in self._state_rules for tag in rule["tags"])
+        return True  # Unknown rule types are treated as base states
+
     async def _evaluate_all_states(self) -> None:
-        """Evaluate all internal states."""
-        for state in self._state_rules:
+        """Evaluate all internal states in dependency order."""
+        # First evaluate states that only depend on PLC tags
+        base_states = [
+            state for state in self._state_rules
+            if self._is_base_state(state)
+        ]
+        logger.debug(f"Evaluating base states: {base_states}")
+        
+        for state in base_states:
+            await self._evaluate_state(state)
+            
+        # Then evaluate states that depend on other states
+        dependent_states = [state for state in self._state_rules if state not in base_states]
+        logger.debug(f"Evaluating dependent states: {dependent_states}")
+        
+        for state in dependent_states:
             await self._evaluate_state(state)
 
     async def get_state(self, state: str) -> Optional[bool]:

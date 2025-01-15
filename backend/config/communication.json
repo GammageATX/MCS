@@ -83,12 +83,12 @@
         "type": "comparison",
         "tag": "motion.status.module",
         "operator": "equal",
-        "value": true,
+        "value": 0,
         "description": "Motion system ready"
       },
       "spray_ready": {
         "type": "all",
-        "conditions": [
+        "tags": [
           "powder_feed_on",
           "deagglomerator_on",
           "gas_flow_on",

@@ -131,7 +131,8 @@ class CommunicationService:
             if force_mock:
                 logger.info("Using mock PLC client (force_mock=true)")
                 plc_client = MockPLCClient(self._config)
-                ssh_client = None
+                # Use the same mock client for SSH tags
+                ssh_client = plc_client
             else:
                 logger.info("Using real PLC client (force_mock=false)")
                 plc_client = PLCClient(self._config)
