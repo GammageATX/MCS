@@ -36,6 +36,8 @@ setup(
         "psutil>=5.9.0",
         "redis>=5.0.0",
         "psycopg2-binary>=2.9.9",
+        "aiohttp>=3.9.0",
+        "asyncpg>=0.29.0",
     ],
     extras_require={
         "dev": [
