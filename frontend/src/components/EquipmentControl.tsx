@@ -234,7 +234,7 @@ export default function EquipmentControl() {
     if (!equipmentState) return;
     const newState = !equipmentState.gas.main_valve_state;
     try {
-      const response = await fetch(`${API_CONFIG.EQUIPMENT_SERVICE}/equipment/gas/main/valve`, {
+      const response = await fetch(`${API_CONFIG.COMMUNICATION_SERVICE}/equipment/gas/main/valve`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ open: newState })
@@ -254,7 +254,7 @@ export default function EquipmentControl() {
     if (!equipmentState) return;
     const newState = !equipmentState.gas.feeder_valve_state;
     try {
-      const response = await fetch(`${API_CONFIG.EQUIPMENT_SERVICE}/equipment/gas/feeder/valve`, {
+      const response = await fetch(`${API_CONFIG.COMMUNICATION_SERVICE}/equipment/gas/feeder/valve`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ open: newState })
@@ -274,7 +274,7 @@ export default function EquipmentControl() {
     if (!equipmentState) return;
     const newState = !equipmentState.vacuum.gate_valve_state;
     try {
-      const response = await fetch(`${API_CONFIG.EQUIPMENT_SERVICE}/equipment/vacuum/gate`, {
+      const response = await fetch(`${API_CONFIG.COMMUNICATION_SERVICE}/equipment/vacuum/gate_valve`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ open: newState })
@@ -295,7 +295,7 @@ export default function EquipmentControl() {
     const newState = !equipmentState.vacuum.vent_valve_state;
     const endpoint = newState ? 'open' : 'close';
     try {
-      const response = await fetch(`${API_CONFIG.EQUIPMENT_SERVICE}/equipment/vacuum/vent/${endpoint}`, {
+      const response = await fetch(`${API_CONFIG.COMMUNICATION_SERVICE}/equipment/vacuum/vent_valve`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' }
       });
@@ -315,7 +315,7 @@ export default function EquipmentControl() {
     const newState = !equipmentState.vacuum.mechanical_pump_state;
     const endpoint = newState ? 'start' : 'stop';
     try {
-      const response = await fetch(`${API_CONFIG.EQUIPMENT_SERVICE}/equipment/vacuum/mech/${endpoint}`, {
+      const response = await fetch(`${API_CONFIG.COMMUNICATION_SERVICE}/equipment/vacuum/mechanical_pump`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' }
       });
@@ -335,7 +335,7 @@ export default function EquipmentControl() {
     const newState = !equipmentState.vacuum.booster_pump_state;
     const endpoint = newState ? 'start' : 'stop';
     try {
-      const response = await fetch(`${API_CONFIG.EQUIPMENT_SERVICE}/equipment/vacuum/booster/${endpoint}`, {
+      const response = await fetch(`${API_CONFIG.COMMUNICATION_SERVICE}/equipment/vacuum/booster_pump`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' }
       });
@@ -352,7 +352,7 @@ export default function EquipmentControl() {
 
   const setFeederFrequency = async (value: number) => {
     try {
-      const response = await fetch(`${API_CONFIG.EQUIPMENT_SERVICE}/equipment/feeder/${equipmentState?.feeder.id || 1}/frequency`, {
+      const response = await fetch(`${API_CONFIG.COMMUNICATION_SERVICE}/equipment/feeder/frequency`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ frequency: value })
@@ -374,7 +374,7 @@ export default function EquipmentControl() {
     if (!equipmentState) return;
     const newState = !equipmentState.feeder.running;
     try {
-      const response = await fetch(`${API_CONFIG.EQUIPMENT_SERVICE}/equipment/feeder/${equipmentState?.feeder.id || 1}/state`, {
+      const response = await fetch(`${API_CONFIG.COMMUNICATION_SERVICE}/equipment/feeder/state`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ value: newState })
@@ -393,7 +393,7 @@ export default function EquipmentControl() {
   const setDeagglomeratorDutyCycle = async (value: number) => {
     try {
       const response = await fetch(
-        `${API_CONFIG.EQUIPMENT_SERVICE}/equipment/deagg/${equipmentState?.deagglomerator.id}/duty_cycle`,
+        `${API_CONFIG.COMMUNICATION_SERVICE}/equipment/deagglomerator/duty_cycle`,
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -419,7 +419,7 @@ export default function EquipmentControl() {
   const setDeagglomeratorFrequency = async (value: number) => {
     try {
       const response = await fetch(
-        `${API_CONFIG.EQUIPMENT_SERVICE}/equipment/deagg/${equipmentState?.deagglomerator.id}/frequency`,
+        `${API_CONFIG.COMMUNICATION_SERVICE}/equipment/deagglomerator/frequency`,
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -448,7 +448,7 @@ export default function EquipmentControl() {
 
   const selectNozzle = async (nozzleId: number) => {
     try {
-      const response = await fetch(`${API_CONFIG.EQUIPMENT_SERVICE}/equipment/nozzle/select`, {
+      const response = await fetch(`${API_CONFIG.COMMUNICATION_SERVICE}/equipment/nozzle/select`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ nozzle_id: nozzleId })
@@ -471,7 +471,7 @@ export default function EquipmentControl() {
     const newState = !equipmentState.nozzle.shutter_state;
     const endpoint = newState ? 'open' : 'close';
     try {
-      const response = await fetch(`${API_CONFIG.EQUIPMENT_SERVICE}/equipment/nozzle/shutter/${endpoint}`, {
+      const response = await fetch(`${API_CONFIG.COMMUNICATION_SERVICE}/equipment/nozzle/shutter`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' }
       });
@@ -499,7 +499,7 @@ export default function EquipmentControl() {
 
     try {
       const response = await fetch(
-        `${API_CONFIG.EQUIPMENT_SERVICE}/equipment/vacuum/${endpoint}/${action}`,
+        `${API_CONFIG.COMMUNICATION_SERVICE}/equipment/vacuum/${endpoint}/${action}`,
         { method: 'PUT' }
       );
       if (!response.ok) throw new Error(`Failed to ${action} ${type} pump`);

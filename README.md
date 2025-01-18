@@ -80,7 +80,7 @@ mcs/
 
 ## Development
 
-1. Start the backend services:
+1. Start the services individually:
 
     ```bash
     cd backend
@@ -88,8 +88,23 @@ mcs/
     .\.venv\Scripts\activate  # Windows
     source .venv/bin/activate # Linux
 
-    # Start the backend
-    uvicorn src.main:app --reload --port 8000
+    # Start Config Service
+    python -m mcs.api.config
+
+    # Start Process Service
+    python -m mcs.api.process
+
+    # Start Communication Service
+    python -m mcs.api.communication
+
+    # Start Data Collection Service
+    python -m mcs.api.data_collection
+    ```
+
+   Or use Docker Compose to start all services:
+
+    ```bash
+    docker-compose up --build
     ```
 
 2. Start the frontend development server:
@@ -101,8 +116,10 @@ mcs/
 
 3. Access the application:
    - Frontend: <http://localhost:5173>
-   - Backend API: <http://localhost:8000>
-   - API Documentation: <http://localhost:8000/docs>
+   - Config Service: <http://localhost:8001>
+   - Process Service: <http://localhost:8002>
+   - Communication Service: <http://localhost:8003>
+   - Data Collection Service: <http://localhost:8004>
 
 ## Testing
 
@@ -139,3 +156,17 @@ Please refer to the contributing guidelines in the `docs` directory.
 ## License
 
 [Add your license information here]
+
+## Service Endpoints
+
+- Config Service: <http://localhost:8001>
+- Process Service: <http://localhost:8002>
+- Communication Service: <http://localhost:8003>
+- Data Collection Service: <http://localhost:8004>
+
+## API Documentation
+
+- Config API: <http://localhost:8001/docs>
+- Process API: <http://localhost:8002/docs>
+- Communication API: <http://localhost:8003/docs>
+- Data Collection API: <http://localhost:8004/docs>

@@ -117,7 +117,7 @@ def create_data_collection_service() -> FastAPI:
         title="Data Collection API",
         description="API for collecting spray data",
         version=config["version"],
-        docs_url="/docs",
+        docs_url="/",
         redoc_url="/redoc",
         openapi_url="/openapi.json",
         lifespan=lifespan

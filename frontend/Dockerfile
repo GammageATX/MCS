@@ -1,5 +1,5 @@
 # Build stage
-FROM node:18-slim as build
+FROM node:18-slim AS build
 
 # Install pnpm
 RUN npm install -g pnpm

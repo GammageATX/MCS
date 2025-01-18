@@ -95,7 +95,9 @@ def create_process_service() -> FastAPI:
         title="Process Service",
         description="Service for managing process execution and control",
         version=config["version"],
-        lifespan=lifespan
+        lifespan=lifespan,
+        docs_url="/",  # Serve Swagger UI at root
+        redoc_url="/redoc"
     )
     
     # Add CORS middleware

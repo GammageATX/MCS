@@ -51,17 +51,15 @@ RUN pip install -e .
 # Keep working directory as /app
 WORKDIR /app
 
-# Expose ports for services:
-# 8000: Main API
-# 8001: Communication
-# 8002: Process
-# 8003: Data Collection
-# 8004: Config
-EXPOSE 8000-8004
+# Port Mapping:
+# 8001: Config Service
+# 8002: Process Service
+# 8003: Communication Service
+# 8004: Data Collection Service
+EXPOSE 8001-8004
 
-# Health check
-HEALTHCHECK --interval=10s --timeout=5s --start-period=30s --retries=5 \
-    CMD curl -f http://localhost:8000/health || exit 1
+HEALTHCHECK --interval=30s --timeout=30s --start-period=5s --retries=3 \
+CMD curl -f http://localhost:8001/health || exit 1
 
 # Command to run the application
 CMD ["python", "-m", "backend.src.mcs"] 

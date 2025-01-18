@@ -1,40 +1,118 @@
 version: '3.8'
 
 services:
-  backend:
+  config:
     build:
       context: .
       dockerfile: backend/Dockerfile
     working_dir: /app
+    command: python -m mcs.api.config.__main__
     volumes:
       - ./backend/config:/app/backend/config
       - ./backend/data:/app/backend/data
       - ./backend/logs:/app/backend/logs
     ports:
-      - "8000-8004:8000-8004"
+      - "8001:8001"
     environment:
-      - PYTHONPATH=/app/backend/src
+      - PYTHONPATH=/app
+      - LOG_LEVEL=INFO
     healthcheck:
-      test: ["CMD-SHELL", "curl -f http://localhost:8000/health || exit 1"]
+      test: ["CMD-SHELL", "curl -f http://localhost:8001/health || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 5
-      start_period: 30s
+
+  process:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    working_dir: /app
+    command: python -m mcs.api.process.__main__
+    volumes:
+      - ./backend/config:/app/backend/config
+      - ./backend/data:/app/backend/data
+      - ./backend/logs:/app/backend/logs
+    ports:
+      - "8003:8003"
+    environment:
+      - PYTHONPATH=/app
+      - LOG_LEVEL=INFO
     depends_on:
-      - redis
-      - postgres
+      redis:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8003/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  communication:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    working_dir: /app
+    command: python -m mcs.api.communication.__main__
+    volumes:
+      - ./backend/config:/app/backend/config
+      - ./backend/data:/app/backend/data
+      - ./backend/logs:/app/backend/logs
+    ports:
+      - "8002:8002"
+    environment:
+      - PYTHONPATH=/app
+      - LOG_LEVEL=INFO
+      - WEBSOCKET_PING_INTERVAL=30
+      - WEBSOCKET_PING_TIMEOUT=10
+      - WEBSOCKET_MAX_KEEPALIVE=300
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8002/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  data_collection:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    working_dir: /app
+    command: python -m mcs.api.data_collection.__main__
+    volumes:
+      - ./backend/config:/app/backend/config
+      - ./backend/data:/app/backend/data
+      - ./backend/logs:/app/backend/logs
+    ports:
+      - "8004:8004"
+    environment:
+      - PYTHONPATH=/app
+      - LOG_LEVEL=INFO
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8004/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
   frontend:
     build:
       context: .
       dockerfile: frontend/Dockerfile
     ports:
-      - "3000:80"
+      - "5173:80"
     environment:
       - NODE_ENV=development
-      - VITE_API_URL=http://localhost:8000
     depends_on:
-      - backend
+      config:
+        condition: service_healthy
+      process:
+        condition: service_healthy
+      communication:
+        condition: service_healthy
+      data_collection:
+        condition: service_healthy
 
   redis:
     image: redis:7.2-alpine
@@ -42,6 +120,12 @@ services:
       - "6379:6379"
     volumes:
       - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
 
   postgres:
     image: postgres:16-alpine
@@ -53,6 +137,13 @@ services:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+      - ./backend/migrations:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
 
 volumes:
   redis_data:

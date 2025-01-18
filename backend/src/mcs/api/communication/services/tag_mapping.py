@@ -90,45 +90,40 @@ class TagMappingService:
                 message=error_msg
             )
             
-    def _process_tag_group(self, group_prefix: str, group_data: Dict[str, Any]) -> None:
-        """Process a group of tags recursively."""
-        logger.debug(f"Processing tag group {group_prefix} with data: {group_data}")
+    def _process_tag_group(self, group_name: str, group_data: Dict[str, Any]) -> None:
+        """Process a tag group and add mappings."""
+        logger.info(f"Processing tag group {group_name}")
         
+        # Process each tag in the group
         for tag_name, tag_data in group_data.items():
-            # Skip if data is None
-            if tag_data is None:
-                logger.warning(f"Skipping None tag data for {tag_name} in {group_prefix}")
+            # Check if this is a subgroup
+            if isinstance(tag_data, dict) and not tag_data.get("mapped", False):
+                logger.info(f"Found subgroup {tag_name} in {group_name}")
+                subgroup_name = f"{group_name}.{tag_name}"
+                self._process_tag_group(subgroup_name, tag_data)
                 continue
+                
+            # Process individual tag
+            tag_path = f"{group_name}.{tag_name}"
+            logger.debug(f"Processing tag {tag_path} with data: {tag_data}")
             
-            # If tag_data is a dict but doesn't have a type field, it's a subgroup
-            if isinstance(tag_data, dict):
-                if "type" not in tag_data:
-                    logger.debug(f"Found subgroup {tag_name} in {group_prefix}")
-                    self._process_tag_group(f"{group_prefix}.{tag_name}", tag_data)
-                else:
-                    # It's a tag definition
-                    full_tag_name = f"{group_prefix}.{tag_name}"
-                    logger.debug(f"Processing tag {full_tag_name} with data: {tag_data}")
-                    
-                    # Handle internal tags
-                    is_internal = tag_data.get("internal", False)
-                    mapped = tag_data.get("mapped", not is_internal)  # Internal tags are not mapped by default
-                    
-                    self._tag_map[full_tag_name] = {
-                        "type": tag_data.get("type", "unknown"),
-                        "access": tag_data.get("access", "read"),
-                        "mapped": mapped,
-                        "internal": is_internal,
-                        "plc_tag": tag_data.get("plc_tag") if mapped else None,
-                        "description": tag_data.get("description", ""),
-                        "scaling": tag_data.get("scaling"),
-                        "range": tag_data.get("range"),
-                        "unit": tag_data.get("unit"),
-                        "default": tag_data.get("default")  # Add default value support
-                    }
-                    logger.debug(f"Added tag mapping: {full_tag_name} -> {self._tag_map[full_tag_name]}")
-            else:
-                logger.warning(f"Unexpected tag data type for {tag_name} in {group_prefix}: {type(tag_data)}")
+            # Create tag mapping
+            mapping = {
+                "type": tag_data.get("type"),
+                "access": tag_data.get("access"),
+                "mapped": tag_data.get("mapped", False),
+                "internal": tag_data.get("internal", False),
+                "plc_tag": tag_data.get("plc_tag"),
+                "description": tag_data.get("description"),
+                "scaling": tag_data.get("scaling"),
+                "range": tag_data.get("range"),
+                "unit": tag_data.get("unit"),
+                "default": tag_data.get("default")
+            }
+            
+            # Add mapping
+            self._tag_map[tag_path] = mapping
+            logger.debug(f"Added tag mapping: {tag_path} -> {mapping}")
 
     async def initialize(self) -> None:
         """Initialize service."""

@@ -305,22 +305,18 @@ async def main():
 
         # Define service dependencies
         dependencies: Dict[str, List[Tuple[str, int]]] = {
-            "ui": [("config", 8001)],
-            "process": [("config", 8001)],
-            "data_collection": [("config", 8001)],
-            "communication": [("config", 8001)]
+            "process": [],  # Process service is independent
+            "communication": [],  # Communication service is independent
+            "config": [],  # Config service is independent
+            "data_collection": []  # Data collection service is independent
         }
 
         # Create all service apps with module paths for reloading
         services = [
-            # Core services first (no dependencies)
-            ("mcs.api.config.config_app:create_config_service", "Config", 8001, []),
-            # Services with dependencies
+            ("mcs.api.config.config_app:create_config_service", "Config", 8001, dependencies["config"]),
             ("mcs.api.communication.communication_app:create_communication_service", "Communication", 8002, dependencies["communication"]),
             ("mcs.api.process.process_app:create_process_service", "Process", 8003, dependencies["process"]),
-            ("mcs.api.data_collection.data_collection_app:create_data_collection_service", "Data Collection", 8004, dependencies["data_collection"]),
-            # UI last as it depends on other services
-            ("mcs.ui.router:create_ui_app", "UI", 8000, dependencies["ui"])
+            ("mcs.api.data_collection.data_collection_app:create_data_collection_service", "Data Collection", 8004, dependencies["data_collection"])
         ]
 
         # Create server manager with dev mode setting

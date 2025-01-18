@@ -110,7 +110,9 @@ def create_config_service() -> FastAPI:
         title="Config API",
         description="API for managing configurations",
         version=config["version"],
-        lifespan=lifespan
+        lifespan=lifespan,
+        docs_url="/",  # Serve Swagger UI at root
+        redoc_url="/redoc"
     )
     
     # Add CORS middleware

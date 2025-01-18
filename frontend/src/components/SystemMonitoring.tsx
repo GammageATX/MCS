@@ -40,7 +40,7 @@ export default function SystemMonitoring() {
 
   const fetchHealth = async () => {
     try {
-      const response = await fetch(`${API_CONFIG.UI_SERVICE}/monitoring/services/status`);
+      const response = await fetch(`${API_CONFIG.CONFIG_SERVICE}/monitoring/services/status`);
       if (!response.ok) {
         throw new Error(`Service error: ${response.status}`);
       }
