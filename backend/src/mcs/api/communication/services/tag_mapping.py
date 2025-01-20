@@ -96,34 +96,39 @@ class TagMappingService:
         
         # Process each tag in the group
         for tag_name, tag_data in group_data.items():
-            # Check if this is a subgroup
-            if isinstance(tag_data, dict) and not tag_data.get("mapped", False):
-                logger.info(f"Found subgroup {tag_name} in {group_name}")
-                subgroup_name = f"{group_name}.{tag_name}"
-                self._process_tag_group(subgroup_name, tag_data)
+            # Skip if tag_data is None
+            if tag_data is None:
                 continue
                 
-            # Process individual tag
-            tag_path = f"{group_name}.{tag_name}"
-            logger.debug(f"Processing tag {tag_path} with data: {tag_data}")
-            
-            # Create tag mapping
-            mapping = {
-                "type": tag_data.get("type"),
-                "access": tag_data.get("access"),
-                "mapped": tag_data.get("mapped", False),
-                "internal": tag_data.get("internal", False),
-                "plc_tag": tag_data.get("plc_tag"),
-                "description": tag_data.get("description"),
-                "scaling": tag_data.get("scaling"),
-                "range": tag_data.get("range"),
-                "unit": tag_data.get("unit"),
-                "default": tag_data.get("default")
-            }
-            
-            # Add mapping
-            self._tag_map[tag_path] = mapping
-            logger.debug(f"Added tag mapping: {tag_path} -> {mapping}")
+            # Check if this is a subgroup or leaf node
+            if isinstance(tag_data, dict):
+                # Skip if this is a mapped tag (leaf node)
+                if tag_data.get("mapped", False):
+                    tag_path = f"{group_name}.{tag_name}"
+                    logger.debug(f"Processing tag {tag_path} with data: {tag_data}")
+                    
+                    # Create tag mapping
+                    mapping = {
+                        "type": tag_data.get("type"),
+                        "access": tag_data.get("access"),
+                        "mapped": tag_data.get("mapped", False),
+                        "internal": tag_data.get("internal", False),
+                        "plc_tag": tag_data.get("plc_tag"),
+                        "description": tag_data.get("description"),
+                        "scaling": tag_data.get("scaling"),
+                        "range": tag_data.get("range"),
+                        "unit": tag_data.get("unit"),
+                        "default": tag_data.get("default")
+                    }
+                    
+                    # Add mapping
+                    self._tag_map[tag_path] = mapping
+                    logger.debug(f"Added tag mapping: {tag_path} -> {mapping}")
+                else:
+                    # This is a subgroup, recursively process it
+                    logger.debug(f"Found subgroup {tag_name} in {group_name}")
+                    subgroup_name = f"{group_name}.{tag_name}"
+                    self._process_tag_group(subgroup_name, tag_data)
 
     async def initialize(self) -> None:
         """Initialize service."""

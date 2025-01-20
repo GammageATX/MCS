@@ -104,6 +104,10 @@ services:
       - "5173:80"
     environment:
       - NODE_ENV=development
+      - VITE_CONFIG_API_URL=http://localhost:8001
+      - VITE_PROCESS_API_URL=http://localhost:8003
+      - VITE_COMMUNICATION_API_URL=http://localhost:8002
+      - VITE_DATA_COLLECTION_API_URL=http://localhost:8004
     depends_on:
       config:
         condition: service_healthy

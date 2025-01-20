@@ -60,7 +60,7 @@ def load_config():
                     "version": "1.0.0",
                     "host": "0.0.0.0",
                     "port": 8001,
-                    "log_level": "INFO"
+                    "log_level": "info"
                 }
             }
 
@@ -103,7 +103,7 @@ def main():
             reload=True,
             factory=True,
             reload_dirs=["backend/src"],
-            log_level="debug"
+            log_level="info"
         )
 
     except Exception as e:

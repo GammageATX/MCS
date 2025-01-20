@@ -502,21 +502,24 @@
         "description": "Approach height",
         "internal": true,
         "type": "float",
-        "unit": "mm"
+        "unit": "mm",
+        "default": 20.0
       },
       "safe_z": {
         "access": "read/write",
         "description": "Safe Z travel height",
         "internal": true,
         "type": "float",
-        "unit": "mm"
+        "unit": "mm",
+        "default": 30.0
       },
       "spray_z": {
         "access": "read/write",
         "description": "Spray height",
         "internal": true,
         "type": "float",
-        "unit": "mm"
+        "unit": "mm",
+        "default": 15.0
       }
     },
     "pressure": {

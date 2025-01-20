@@ -42,6 +42,9 @@ def setup_logging():
     if not os.path.exists(log_dir):
         os.makedirs(log_dir)
 
+    # Get log level from environment or default to INFO
+    log_level = os.environ.get("LOG_LEVEL", "INFO").upper()
+
     # Remove default handler
     logger.remove()
     
@@ -52,7 +55,7 @@ def setup_logging():
         "<cyan>{name}</cyan>:<cyan>{function}</cyan>:<cyan>{line}</cyan> - "
         "<level>{message}</level>"
     )
-    logger.add(sys.stderr, format=log_format, level="INFO", enqueue=True)
+    logger.add(sys.stderr, format=log_format, level=log_level, enqueue=True)
     
     # Add file handler with rotation
     file_format = (
@@ -66,7 +69,7 @@ def setup_logging():
         rotation="1 day",
         retention="30 days",
         format=file_format,
-        level="DEBUG",
+        level=log_level,
         enqueue=True,
         compression="zip"
     )
@@ -98,11 +101,14 @@ class ServerManager:
             bool: True if server started successfully
         """
         try:
+            # Get log level from environment or default to INFO
+            log_level = os.environ.get("LOG_LEVEL", "INFO").lower()
+            
             config = uvicorn.Config(
                 app=app,
                 host="0.0.0.0",
                 port=port,
-                log_level="info",
+                log_level=log_level,
                 reload=self.dev_mode,
                 reload_dirs=["backend/src/mcs"] if self.dev_mode else None,
                 factory=self.dev_mode,  # Enable factory mode for hot reload

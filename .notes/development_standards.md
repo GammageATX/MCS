@@ -538,7 +538,7 @@ def main():
             reload=True,
             factory=True,
             reload_dirs=["backend/src"],
-            log_level="debug"
+            log_log_level="info"
         )
 
     except Exception as e:
