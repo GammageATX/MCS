@@ -21,8 +21,7 @@ export function WebSocketProvider({ children }: { children: React.ReactNode }) {
 
   // Convert http(s) to ws(s)
   const getWebSocketUrl = () => {
-    const wsUrl = API_CONFIG.COMMUNICATION_SERVICE.replace(/^http/, 'ws');
-    return `${wsUrl}/equipment/ws/state`;
+    return `${API_CONFIG.WS_COMMUNICATION_SERVICE}/equipment/ws/state`;
   };
 
   const connectWebSocket = useCallback(() => {
@@ -36,21 +35,29 @@ export function WebSocketProvider({ children }: { children: React.ReactNode }) {
       });
 
       ws.addEventListener('message', (event) => {
-        setLastMessage(event);
+        try {
+          const data = JSON.parse(event.data);
+          setLastMessage(data);
+        } catch (error) {
+          console.error('Failed to parse WebSocket message:', error);
+        }
       });
 
-      ws.addEventListener('close', () => {
-        console.log('WebSocket Disconnected');
+      ws.addEventListener('close', (event) => {
+        console.log(`WebSocket Disconnected: ${event.code} ${event.reason}`);
         setConnected(false);
         
-        // Exponential backoff for reconnection
-        const timeout = Math.min(1000 * Math.pow(2, retryCount), 30000);
-        console.log(`Attempting to reconnect in ${timeout/1000} seconds...`);
-        
-        setTimeout(() => {
-          setRetryCount(prev => prev + 1);
-          connectWebSocket();
-        }, timeout);
+        // Don't reconnect if closed cleanly
+        if (event.code !== 1000) {
+          // Exponential backoff for reconnection
+          const timeout = Math.min(1000 * Math.pow(2, retryCount), 30000);
+          console.log(`Attempting to reconnect in ${timeout/1000} seconds...`);
+          
+          setTimeout(() => {
+            setRetryCount(prev => prev + 1);
+            connectWebSocket();
+          }, timeout);
+        }
       });
 
       ws.addEventListener('error', (error) => {

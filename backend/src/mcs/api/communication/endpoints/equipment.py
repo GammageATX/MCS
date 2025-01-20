@@ -281,8 +281,7 @@ async def websocket_equipment_state(websocket: WebSocket):
         # Subscribe to state changes
         async def state_changed(state: EquipmentState):
             try:
-                if websocket.application_state == WebSocketDisconnect:
-                    await websocket.send_json(state.dict())
+                await websocket.send_json(state.dict())
             except WebSocketDisconnect:
                 pass
             except Exception as e:
