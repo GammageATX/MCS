@@ -1,21 +1,18 @@
 """Sequence management endpoints."""
 
-from fastapi import APIRouter, Depends, WebSocket, WebSocketDisconnect, status, Request
+from fastapi import APIRouter, Depends, status, Request
 from loguru import logger
-import asyncio
 
 from mcs.utils.errors import create_error
 from mcs.api.process.process_service import ProcessService
-from mcs.api.process.models.process_models import (  # noqa: F401
+from mcs.api.process.models import (
     BaseResponse,
-    Sequence,
-    SequenceResponse,
     SequenceListResponse,
-    ProcessStatus,
+    SequenceResponse,
     StatusResponse
 )
 
-router = APIRouter(tags=["sequences"])
+router = APIRouter(prefix="/sequences", tags=["sequences"])
 
 
 def get_process_service(request: Request) -> ProcessService:
@@ -116,48 +113,6 @@ async def get_status(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             message=f"Failed to get sequence status: {str(e)}"
         )
-
-
-@router.websocket("/ws/{sequence_id}")
-async def sequence_status(
-    websocket: WebSocket,
-    sequence_id: str
-):
-    """WebSocket endpoint for sequence status updates."""
-    try:
-        service = websocket.app.state.service
-        if not service.is_running:
-            await websocket.close(code=status.WS_1013_TRY_AGAIN_LATER)
-            return
-
-        await websocket.accept()
-        logger.info(f"Sequence {sequence_id} WebSocket client connected")
-
-        # Create queue for status updates
-        status_queue = asyncio.Queue()
-        
-        # Subscribe to status updates
-        def status_changed(sequence_status: StatusResponse):
-            asyncio.create_task(status_queue.put(sequence_status))
-        
-        service.sequence_service.on_status_changed(sequence_id, status_changed)
-
-        try:
-            while True:
-                sequence_status = await status_queue.get()
-                await websocket.send_json({
-                    "type": "sequence_status",
-                    "data": sequence_status.dict()
-                })
-
-        except WebSocketDisconnect:
-            logger.info(f"Sequence {sequence_id} WebSocket client disconnected")
-        finally:
-            service.sequence_service.remove_status_changed_callback(sequence_id, status_changed)
-
-    except Exception as e:
-        logger.error(f"Sequence WebSocket error: {str(e)}")
-        await websocket.close(code=status.WS_1011_INTERNAL_ERROR)
 
 
 @router.get(

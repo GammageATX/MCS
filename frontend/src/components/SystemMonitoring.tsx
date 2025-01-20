@@ -1,7 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Grid, Paper, Typography, Chip, Box, Button, IconButton, Divider, Alert } from '@mui/material';
 import RefreshIcon from '@mui/icons-material/Refresh';
-import { useWebSocket } from '../context/WebSocketContext';
 import { API_CONFIG } from '../config/api';
 
 interface ComponentHealth {
@@ -23,8 +22,7 @@ interface ServiceHealth {
   };
 }
 
-interface ServicesHealth {
-  ui: ServiceHealth;
+interface SystemState {
   config: ServiceHealth;
   communication: ServiceHealth;
   process: ServiceHealth;
@@ -32,51 +30,37 @@ interface ServicesHealth {
 }
 
 export default function SystemMonitoring() {
-  const { connected } = useWebSocket();
-  const [services, setServices] = useState<ServicesHealth | null>(null);
-  const [lastUpdated, setLastUpdated] = useState<Date>(new Date());
+  const [systemState, setSystemState] = useState<SystemState | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [isPolling, setIsPolling] = useState<boolean>(false);
+  const [isPolling, setIsPolling] = useState(true);
 
-  const fetchHealth = async () => {
-    try {
-      const response = await fetch(`${API_CONFIG.CONFIG_SERVICE}/monitoring/services/status`);
-      if (!response.ok) {
-        throw new Error(`Service error: ${response.status}`);
-      }
-      const data = await response.json();
-      setServices(data);
-      setLastUpdated(new Date());
-      setError(null);
-    } catch (err) {
-      console.error('Health check failed:', err);
-      setError(err instanceof Error ? err.message : 'Failed to check service health');
-    }
-  };
-
-  // Load data when component mounts
   useEffect(() => {
-    fetchHealth();
-  }, []); // Empty dependency array = run once on mount
-
-  // Handle polling based on WebSocket connection
-  useEffect(() => {
-    let pollInterval: ReturnType<typeof setInterval> | null = null;
-    
-    if (!connected) {
-      setIsPolling(true);
-      pollInterval = setInterval(fetchHealth, 15000);
-    } else {
-      setIsPolling(false);
-    }
-
-    return () => {
-      if (pollInterval) {
-        clearInterval(pollInterval);
-        setIsPolling(false);
+    const pollSystemState = async () => {
+      try {
+        const response = await fetch(`${API_CONFIG.COMMUNICATION_SERVICE}/state`);
+        if (!response.ok) {
+          throw new Error('Failed to fetch system state');
+        }
+        const data = await response.json();
+        setSystemState(data);
+        setError(null);
+      } catch (err) {
+        console.error('Error fetching system state:', err);
+        setError('Failed to fetch system state');
       }
     };
-  }, [connected]);
+
+    // Initial fetch
+    pollSystemState();
+
+    // Set up polling interval
+    const interval = setInterval(pollSystemState, 1000);
+
+    return () => {
+      clearInterval(interval);
+      setIsPolling(false);
+    };
+  }, []);
 
   const formatUptime = (uptime: number) => {
     const hours = Math.floor(uptime / 3600);
@@ -235,11 +219,11 @@ export default function SystemMonitoring() {
             System Status
           </Typography>
           <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
-            Last updated: {lastUpdated.toLocaleTimeString()}
+            Last updated: {new Date().toLocaleTimeString()}
           </Typography>
         </Box>
         <IconButton 
-          onClick={fetchHealth}
+          onClick={() => {}}
           sx={{ 
             backgroundColor: '#1976d2',
             color: 'white',
@@ -254,29 +238,23 @@ export default function SystemMonitoring() {
 
       {error && (
         <Alert severity="error" sx={{ mb: 3 }}>
-          Error fetching service status: {error}
+          Error fetching system state: {error}
         </Alert>
       )}
 
-      {!connected && (
-        <Alert severity="warning" sx={{ mb: 3 }}>
-          WebSocket disconnected - {isPolling ? 'Using polling fallback (15s)' : 'Polling disabled'}
-        </Alert>
-      )}
-
-      {services && (
+      {systemState && (
         <>
           <ServiceGroup 
-            title="Frontend Services" 
-            services={[services.ui, services.config]} 
+            title="Configuration Services" 
+            services={[systemState.config]} 
           />
           <ServiceGroup 
             title="Core Services" 
-            services={[services.process, services.communication]} 
+            services={[systemState.process, systemState.communication]} 
           />
           <ServiceGroup 
             title="Data Services" 
-            services={[services.data_collection]} 
+            services={[systemState.data_collection]} 
           />
         </>
       )}

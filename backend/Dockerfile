@@ -1,8 +1,5 @@
-# Use Python 3.11 slim image as base
-FROM python:3.11-slim
-
-# Set working directory
-WORKDIR /app
+# Stage 1: Base Python image with common dependencies
+FROM python:3.11-slim AS base
 
 # Set environment variables
 ENV PYTHONUNBUFFERED=1 \
@@ -33,7 +30,22 @@ RUN mkdir -p /app/backend /app/shared \
     /app/backend/data/runs \
     && chown -R mcsuser:mcsuser /app
 
-# Copy shared package first
+# Switch to non-root user
+USER mcsuser
+
+# Set working directory
+WORKDIR /app
+
+# Copy requirements first to leverage Docker cache
+COPY --chown=mcsuser:mcsuser requirements.txt .
+
+# Install dependencies
+RUN pip install -r requirements.txt
+
+# Stage 2: Service-specific image
+FROM base AS service
+
+# Copy shared package
 COPY --chown=mcsuser:mcsuser shared /app/shared/
 
 # Copy backend files
@@ -42,19 +54,13 @@ COPY --chown=mcsuser:mcsuser backend /app/backend/
 # Copy setup files
 COPY --chown=mcsuser:mcsuser setup.py .
 
-# Switch to non-root user
-USER mcsuser
-
-# Install the package and dependencies
+# Install the package
 RUN pip install -e .
-
-# Keep working directory as /app
-WORKDIR /app
 
 # Port Mapping:
 # 8001: Config Service
-# 8002: Process Service
-# 8003: Communication Service
+# 8002: Communication Service
+# 8003: Process Service
 # 8004: Data Collection Service
 EXPOSE 8001-8004
 

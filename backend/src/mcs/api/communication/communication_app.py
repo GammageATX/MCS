@@ -82,8 +82,7 @@ def create_communication_service() -> FastAPI:
         allow_origins=["*"],  # In production, replace with specific origins
         allow_credentials=True,
         allow_methods=["*"],
-        allow_headers=["*"],
-        expose_headers=["*"]  # Add this to expose headers for WebSocket
+        allow_headers=["*"]
     )
 
     # Add error handlers

@@ -1,20 +1,41 @@
-"""Motion request models."""
+"""Motion control models."""
 
-from typing import Optional
+from typing import Dict, Any, Optional
 from pydantic import BaseModel, Field
 
 
+class Position(BaseModel):
+    """Position model."""
+    x: float = Field(0.0, description="X position in mm")
+    y: float = Field(0.0, description="Y position in mm")
+    z: float = Field(0.0, description="Z position in mm")
+
+
 class JogRequest(BaseModel):
-    """Jog motion request."""
-    axis: str = Field(..., description="Axis to jog (x, y, z)")
+    """Jog request model."""
+    axis: str = Field(..., description="Axis to jog (x, y, or z)")
     direction: int = Field(..., ge=-1, le=1, description="Jog direction (-1, 0, 1)")
-    velocity: float = Field(..., gt=0, description="Jog velocity in mm/s")
+    distance: float = Field(..., description="Jog distance in mm")
 
 
 class MoveRequest(BaseModel):
-    """Move request."""
-    x: Optional[float] = Field(None, description="X target position in mm")
-    y: Optional[float] = Field(None, description="Y target position in mm")
-    z: Optional[float] = Field(None, description="Z target position in mm")
+    """Move request model."""
+    x: float = Field(..., description="X position in mm")
+    y: float = Field(..., description="Y position in mm")
+    z: float = Field(..., description="Z position in mm")
     velocity: float = Field(..., gt=0, description="Move velocity in mm/s")
-    wait_complete: bool = Field(True, description="Wait for move to complete")
+
+
+class MotionStatus(BaseModel):
+    """Motion system status model."""
+    is_enabled: bool = Field(False, description="Whether motion system is enabled")
+    is_homed: bool = Field(False, description="Whether all axes are homed")
+    is_moving: bool = Field(False, description="Whether any axis is moving")
+    error: Optional[str] = Field(None, description="Current motion error if any")
+    status: Dict[str, Any] = Field(default_factory=dict, description="Additional status information")
+
+
+class MotionState(BaseModel):
+    """Motion state model."""
+    position: Position = Field(default_factory=Position, description="Current position")
+    status: MotionStatus = Field(default_factory=MotionStatus, description="Motion system status")

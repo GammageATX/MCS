@@ -5,6 +5,7 @@ services:
     build:
       context: .
       dockerfile: backend/Dockerfile
+      target: service
     working_dir: /app
     command: python -m mcs.api.config.__main__
     volumes:
@@ -26,6 +27,7 @@ services:
     build:
       context: .
       dockerfile: backend/Dockerfile
+      target: service
     working_dir: /app
     command: python -m mcs.api.process.__main__
     volumes:
@@ -52,6 +54,7 @@ services:
     build:
       context: .
       dockerfile: backend/Dockerfile
+      target: service
     working_dir: /app
     command: python -m mcs.api.communication.__main__
     volumes:
@@ -63,9 +66,8 @@ services:
     environment:
       - PYTHONPATH=/app
       - LOG_LEVEL=INFO
-      - WEBSOCKET_PING_INTERVAL=30
-      - WEBSOCKET_PING_TIMEOUT=10
-      - WEBSOCKET_MAX_KEEPALIVE=300
+      - MCS_LOG_LEVEL=INFO
+      - MCS_FILE_LOG_LEVEL=DEBUG
     healthcheck:
       test: ["CMD-SHELL", "curl -f http://localhost:8002/health || exit 1"]
       interval: 10s
@@ -76,6 +78,7 @@ services:
     build:
       context: .
       dockerfile: backend/Dockerfile
+      target: service
     working_dir: /app
     command: python -m mcs.api.data_collection.__main__
     volumes:

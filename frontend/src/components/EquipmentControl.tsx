@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   Box, 
   Grid, 
@@ -12,10 +12,13 @@ import {
   ListItem,
   ListItemText,
   Chip,
-  TextField
+  TextField,
+  FormControl,
+  InputLabel,
+  Select,
+  MenuItem
 } from '@mui/material';
 import { API_CONFIG } from '../config/api';
-import { useWebSocket } from '../context/WebSocketContext';
 
 // Types from API spec
 interface AxisStatus {
@@ -98,106 +101,34 @@ interface EquipmentState {
   process: ProcessState;
 }
 
-interface WebSocketMessage {
-  type: 'equipment_state' | 'internal_states';
-  state?: EquipmentState;
-  states?: Record<string, boolean>;
-}
-
 export default function EquipmentControl() {
   const [equipmentState, setEquipmentState] = useState<EquipmentState | null>(null);
-  const [internalStates, setInternalStates] = useState<Record<string, boolean>>({});
-  const [error, setError] = useState<string>('');
-  const [loading, setLoading] = useState(true);
-  const { connected, lastMessage } = useWebSocket();
-  const [mainFlowInput, setMainFlowInput] = useState<number>(0);
-  const [feederFlowInput, setFeederFlowInput] = useState<number>(0);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    // Initial data fetch
-    fetchEquipmentState();
-    fetchInternalStates();
-
-    // Set up polling interval for fallback
-    const pollInterval = setInterval(() => {
-      if (!connected) {
-        fetchEquipmentState();
-        fetchInternalStates();
-      }
-    }, 5000); // Poll every 5 seconds if WebSocket is down
-
-    return () => clearInterval(pollInterval);
-  }, [connected]);
-
-  // Update state when WebSocket message is received
-  useEffect(() => {
-    if (lastMessage) {
+    const pollEquipmentState = async () => {
       try {
-        const data = JSON.parse(lastMessage.data) as WebSocketMessage;
-        if (data.type === 'equipment_state' && data.state) {
-          // Ensure we preserve any existing state values not included in the update
-          setEquipmentState(prevState => {
-            if (!prevState || !data.state) return prevState;
-            return {
-              ...prevState,
-              ...data.state,
-              gas: {
-                ...prevState.gas,
-                ...data.state.gas
-              }
-            };
-          });
-        } else if (data.type === 'internal_states' && data.states) {
-          setInternalStates(data.states);
+        const response = await fetch(`${API_CONFIG.COMMUNICATION_SERVICE}/equipment/state`);
+        if (!response.ok) {
+          throw new Error('Failed to fetch equipment state');
         }
+        const data = await response.json();
+        setEquipmentState(data);
+        setError(null);
       } catch (err) {
-        console.error('Error processing WebSocket message:', err);
+        console.error('Error fetching equipment state:', err);
+        setError('Failed to fetch equipment state');
       }
-    }
-  }, [lastMessage]);
+    };
 
-  useEffect(() => {
-    if (equipmentState) {
-      setMainFlowInput(equipmentState.gas.main_flow_setpoint);
-      setFeederFlowInput(equipmentState.gas.feeder_flow_setpoint);
-    }
-  }, [equipmentState?.gas.main_flow_setpoint, equipmentState?.gas.feeder_flow_setpoint]);
+    // Initial fetch
+    pollEquipmentState();
 
-  const fetchEquipmentState = async () => {
-    try {
-      const response = await fetch(`${API_CONFIG.COMMUNICATION_SERVICE}/equipment/state`);
-      if (!response.ok) throw new Error(`Failed to fetch equipment state: ${response.status}`);
-      const data = await response.json() as EquipmentState;
-      setEquipmentState(prevState => {
-        if (!prevState) return data;
-        return {
-          ...prevState,
-          ...data,
-          gas: {
-            ...prevState.gas,
-            ...data.gas
-          }
-        };
-      });
-      setError('');
-    } catch (err) {
-      console.error('Failed to fetch equipment state:', err);
-      setError('Failed to load equipment state. The equipment service might be unavailable.');
-    } finally {
-      setLoading(false);
-    }
-  };
+    // Set up polling interval
+    const interval = setInterval(pollEquipmentState, 1000);
 
-  const fetchInternalStates = async () => {
-    try {
-      const response = await fetch(`${API_CONFIG.COMMUNICATION_SERVICE}/equipment/internal_states`);
-      if (!response.ok) throw new Error(`Failed to fetch internal states: ${response.status}`);
-      const data = await response.json();
-      setInternalStates(data);
-    } catch (err) {
-      console.error('Failed to fetch internal states:', err);
-    }
-  };
+    return () => clearInterval(interval);
+  }, []);
 
   // Control Functions
   const setMainGasFlow = async (value: number) => {
@@ -208,7 +139,7 @@ export default function EquipmentControl() {
         body: JSON.stringify({ flow_setpoint: value })
       });
       if (!response.ok) throw new Error('Failed to set main gas flow');
-      // Let WebSocket update handle the state change
+      // State will be updated by next poll
     } catch (err) {
       setError('Failed to set main gas flow rate');
       console.error(err);
@@ -223,7 +154,7 @@ export default function EquipmentControl() {
         body: JSON.stringify({ flow_setpoint: value })
       });
       if (!response.ok) throw new Error('Failed to set feeder gas flow');
-      // Let WebSocket update handle the state change
+      // State will be updated by next poll
     } catch (err) {
       setError('Failed to set feeder gas flow rate');
       console.error(err);
@@ -594,8 +525,8 @@ export default function EquipmentControl() {
                 <Typography variant="body2">Set:</Typography>
                 <TextField
                   type="number"
-                  value={mainFlowInput.toFixed(1)}
-                  onChange={(e) => setMainFlowInput(parseFloat(e.target.value))}
+                  value={equipmentState.gas.main_flow_setpoint.toFixed(1)}
+                  onChange={(e) => setMainGasFlow(parseFloat(e.target.value))}
                   inputProps={{
                     min: 0,
                     max: 100,
@@ -622,7 +553,7 @@ export default function EquipmentControl() {
                 <Typography variant="body2">SLPM</Typography>
                 <Button
                   variant="contained"
-                  onClick={() => setMainGasFlow(mainFlowInput)}
+                  onClick={() => setMainGasFlow(equipmentState.gas.main_flow_setpoint)}
                   size="small"
                   sx={{ 
                     width: '80px',
@@ -636,8 +567,8 @@ export default function EquipmentControl() {
             </Box>
             <Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
               <Slider
-                value={mainFlowInput}
-                onChange={(_, value) => setMainFlowInput(value as number)}
+                value={equipmentState.gas.main_flow_setpoint}
+                onChange={(_, value) => setMainGasFlow(value as number)}
                 min={0}
                 max={100}
                 step={0.1}
@@ -673,8 +604,8 @@ export default function EquipmentControl() {
                 <Typography variant="body2">Set:</Typography>
                 <TextField
                   type="number"
-                  value={feederFlowInput.toFixed(1)}
-                  onChange={(e) => setFeederFlowInput(parseFloat(e.target.value))}
+                  value={equipmentState.gas.feeder_flow_setpoint.toFixed(1)}
+                  onChange={(e) => setFeederGasFlow(parseFloat(e.target.value))}
                   inputProps={{
                     min: 0,
                     max: 10,
@@ -701,7 +632,7 @@ export default function EquipmentControl() {
                 <Typography variant="body2">SLPM</Typography>
                 <Button
                   variant="contained"
-                  onClick={() => setFeederGasFlow(feederFlowInput)}
+                  onClick={() => setFeederGasFlow(equipmentState.gas.feeder_flow_setpoint)}
                   size="small"
                   sx={{ 
                     width: '80px',
@@ -715,8 +646,8 @@ export default function EquipmentControl() {
             </Box>
             <Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
               <Slider
-                value={feederFlowInput}
-                onChange={(_, value) => setFeederFlowInput(value as number)}
+                value={equipmentState.gas.feeder_flow_setpoint}
+                onChange={(_, value) => setFeederGasFlow(value as number)}
                 min={0}
                 max={10}
                 step={0.1}
@@ -932,17 +863,7 @@ export default function EquipmentControl() {
         </Alert>
       )}
       
-      {!connected && (
-        <Alert severity="warning" sx={{ mb: 2 }}>
-          WebSocket disconnected - Using polling fallback
-        </Alert>
-      )}
-
-      {loading ? (
-        <Box sx={{ display: 'flex', justifyContent: 'center', p: 4 }}>
-          <CircularProgress />
-        </Box>
-      ) : (
+      {equipmentState ? (
         <>
           {renderProcessStatus()}
           {renderGasControls()}
@@ -951,6 +872,10 @@ export default function EquipmentControl() {
           {renderNozzleControls()}
           {renderDeagglomeratorControls()}
         </>
+      ) : (
+        <Box sx={{ display: 'flex', justifyContent: 'center', p: 4 }}>
+          <CircularProgress />
+        </Box>
       )}
     </Box>
   );
