@@ -1,164 +1,248 @@
-# MCS API Endpoints
+# MCS API Endpoints Documentation
 
-This document outlines the standardized API endpoint structure for the MicroColdSpray system.
+## Overview
 
-## Common Service Endpoints
+The MCS system consists of multiple services, each with its own API endpoints. All services follow RESTful principles and return JSON responses.
 
-All services implement these base endpoints:
+## Base URLs
 
-```http
-GET  /health      - Get service health status
-POST /start       - Start service
-POST /stop        - Stop service
-```
+- Process Service: `http://localhost:8003`
+- Communication Service: `http://localhost:8001`
+- Config Service: `http://localhost:8002`
+- Data Collection Service: `http://localhost:8004`
 
-## Process Service (Port 8003)
+## Common Response Formats
 
-```http
-# Process Control
-GET  /health                     - Get service health status
-POST /start                      - Start service
-POST /stop                       - Stop service
+All endpoints follow these response patterns:
 
-# Patterns
-GET    /patterns/                - List all patterns
-POST   /patterns/                - Create new pattern
-GET    /patterns/{pattern_id}    - Get pattern details
-PUT    /patterns/{pattern_id}    - Update pattern
-DELETE /patterns/{pattern_id}    - Delete pattern
+- Success responses include appropriate HTTP status codes (200, 201, etc.)
+- Error responses include:
+  - HTTP status code (4xx for client errors, 5xx for server errors)
+  - Error message in the response body
+  - Additional details when available
 
-# Parameters
-GET    /parameters/              - List all parameters
-POST   /parameters/              - Create parameter
-GET    /parameters/{param_id}    - Get parameter details
-PUT    /parameters/{param_id}    - Update parameter
-DELETE /parameters/{param_id}    - Delete parameter
+## Process Service Endpoints
 
-# Nozzles
-GET    /parameters/nozzles                - List all nozzles
-POST   /parameters/nozzles                - Create nozzle
-GET    /parameters/nozzles/{nozzle_id}    - Get nozzle details
-PUT    /parameters/nozzles/{nozzle_id}    - Update nozzle
-DELETE /parameters/nozzles/{nozzle_id}    - Delete nozzle
+### Health Check
+- `GET /health`
+  - Returns service health status
+  - Response: `ServiceHealth` object
 
-# Powders
-GET    /parameters/powders                - List all powders
-POST   /parameters/powders                - Create powder
-GET    /parameters/powders/{powder_id}    - Get powder details
-PUT    /parameters/powders/{powder_id}    - Update powder
-DELETE /parameters/powders/{powder_id}    - Delete powder
+### Parameters
+- `GET /parameters`
+  - List all available parameters
+  - Response: `ParameterListResponse` containing parameter IDs
 
-# Sequences
-GET    /sequences/                        - List all sequences
-GET    /sequences/{sequence_id}/status    - Get sequence status
-POST   /sequences/{sequence_id}/start     - Start sequence
-POST   /sequences/{sequence_id}/stop      - Stop sequence
-```
+- `POST /parameters`
+  - Create a new parameter set
+  - Body: `Parameter` object
+  - Response: Created parameter ID
 
-## Config Service (Port 8001)
+- `GET /parameters/{id}`
+  - Get parameter set by ID
+  - Response: `ParameterResponse` containing parameter details
 
-```http
-# Service Control
-GET  /health                      - Get service health status
-POST /start                       - Start service
-POST /stop                        - Stop service
+- `PUT /parameters/{id}`
+  - Update parameter set
+  - Body: `Parameter` object
+  - Response: Updated parameter ID
 
-# Configuration Management
-GET  /config/list                 - List all configs
-GET  /config/{name}               - Get config
-PUT  /config/{name}               - Update config
-POST /config/validate/{name}      - Validate config
+- `DELETE /parameters/{id}`
+  - Delete parameter set
+  - Response: Success message
 
-# Schema Management
-GET  /config/schema/list          - List all schemas
-GET  /config/schema/{name}        - Get schema
-PUT  /config/schema/{name}        - Update schema
-```
+### Nozzles
+- `GET /parameters/nozzles`
+  - List all available nozzles
+  - Response: `NozzleListResponse` containing nozzle IDs
 
-## Communication Service (Port 8002)
+- `POST /parameters/nozzles`
+  - Create a new nozzle configuration
+  - Body: `Nozzle` object
+  - Response: Created nozzle ID
 
-```http
-# Service Control
-GET  /health                                      - Get service health status
-POST /start                                       - Start service
-POST /stop                                        - Stop service
+- `GET /parameters/nozzles/{id}`
+  - Get nozzle configuration by ID
+  - Response: `NozzleResponse` containing nozzle details
 
-# Equipment State
-GET  /equipment/state                             - Get equipment state
-GET  /equipment/internal_states                   - Get all internal states
-GET  /equipment/internal_states/{state_name}      - Get specific internal state
-GET  /equipment/feeders/{feeder_id}              - Get feeder state
-GET  /equipment/deagglomerators/{deagg_id}       - Get deagglomerator state
+- `PUT /parameters/nozzles/{id}`
+  - Update nozzle configuration
+  - Body: `Nozzle` object
+  - Response: Updated nozzle ID
 
-# Gas Control
-POST /equipment/gas/main/flow                     - Set main flow
-POST /equipment/gas/feeder/flow                   - Set feeder flow
-PUT  /equipment/gas/main/valve                    - Set main gas valve
-PUT  /equipment/gas/feeder/valve                  - Set feeder gas valve
+- `DELETE /parameters/nozzles/{id}`
+  - Delete nozzle configuration
+  - Response: Success message
 
-# Powder Feeders
-POST /equipment/feeder/{feeder_id}/frequency      - Set feeder frequency
-PUT  /equipment/feeder/{feeder_id}/state         - Set feeder state
+### Powders
+- `GET /parameters/powders`
+  - List all available powders
+  - Response: `PowderListResponse` containing powder IDs
 
-# Deagglomerators
-POST /equipment/deagg/{deagg_id}/duty_cycle      - Set deagglomerator duty cycle
-POST /equipment/deagg/{deagg_id}/frequency       - Set deagglomerator frequency
+- `POST /parameters/powders`
+  - Create a new powder configuration
+  - Body: `Powder` object
+  - Response: Created powder ID
 
-# Vacuum System
-PUT  /equipment/vacuum/gate                       - Set gate valve
-PUT  /equipment/vacuum/mechanical_pump/state      - Set mechanical pump state
-PUT  /equipment/vacuum/booster_pump/state        - Set booster pump state
-PUT  /equipment/vacuum/vent/open                  - Open vent valve
-PUT  /equipment/vacuum/vent/close                 - Close vent valve
-PUT  /equipment/vacuum/mech/start                 - Start mechanical pump
-PUT  /equipment/vacuum/mech/stop                  - Stop mechanical pump
-PUT  /equipment/vacuum/booster/start             - Start booster pump
-PUT  /equipment/vacuum/booster/stop              - Stop booster pump
+- `GET /parameters/powders/{id}`
+  - Get powder configuration by ID
+  - Response: `PowderResponse` containing powder details
 
-# Nozzle System
-PUT  /equipment/nozzle/select                     - Select nozzle
-PUT  /equipment/nozzle/shutter                    - Set shutter state
-PUT  /equipment/nozzle/shutter/open               - Open shutter
-PUT  /equipment/nozzle/shutter/close              - Close shutter
+- `PUT /parameters/powders/{id}`
+  - Update powder configuration
+  - Body: `Powder` object
+  - Response: Updated powder ID
 
-# Motion Control
-GET  /motion/position                             - Get position
-GET  /motion/status                               - Get status
-GET  /motion/internal_states                      - Get motion internal states
-GET  /motion/internal_states/{state_name}         - Get motion internal state
-GET  /motion/state                                - Get state
-POST /motion/jog/{axis}                           - Jog axis
-POST /motion/move                                 - Move
-POST /motion/home/set                             - Set home
-POST /motion/home/move                            - Move to home
-```
+- `DELETE /parameters/powders/{id}`
+  - Delete powder configuration
+  - Response: Success message
 
-## Data Collection Service (Port 8004)
+### Patterns
+- `GET /patterns`
+  - List all available patterns
+  - Response: `PatternListResponse` containing pattern IDs
 
-```http
-# Service Control
-GET  /health                                      - Get service health status
-POST /start                                       - Start service
-POST /stop                                        - Stop service
+- `POST /patterns`
+  - Create a new pattern
+  - Body: `Pattern` object
+  - Response: Created pattern ID
 
-# Data Collection
-POST /data_collection/data/start/{sequence_id}    - Start collection
-POST /data_collection/data/stop                   - Stop collection
-POST /data_collection/data/record                 - Record event
-GET  /data_collection/data/{sequence_id}          - Get sequence events
-```
+- `GET /patterns/{id}`
+  - Get pattern by ID
+  - Response: `PatternResponse` containing pattern details
 
-## Design Principles
+- `PUT /patterns/{id}`
+  - Update pattern
+  - Body: `Pattern` object
+  - Response: Updated pattern ID
 
-1. Use nouns for resources, verbs for actions
-2. Use plural for collections (`/nozzles` vs `/nozzle`)
-3. Hierarchical resources use parent/child pattern (`/parameters/nozzles`)
-4. Consistent HTTP methods:
-   - GET for reading
-   - POST for actions/creating
-   - PUT for full updates
-   - DELETE for removal
-5. Clear separation between services
-6. Consistent naming across all endpoints
-7. Avoid underscores in URLs
-8. Actions are at the end of URLs (`/home/move` not `/move/home`)
+- `DELETE /patterns/{id}`
+  - Delete pattern
+  - Response: Success message
+
+### Sequences
+- `GET /sequences`
+  - List all available sequences
+  - Response: `SequenceListResponse` containing sequence IDs
+
+- `POST /sequences`
+  - Create a new sequence
+  - Body: `Sequence` object
+  - Response: Created sequence ID
+
+- `GET /sequences/{id}`
+  - Get sequence by ID
+  - Response: `SequenceResponse` containing sequence details
+
+- `PUT /sequences/{id}`
+  - Update sequence
+  - Body: `Sequence` object
+  - Response: Updated sequence ID
+
+- `DELETE /sequences/{id}`
+  - Delete sequence
+  - Response: Success message
+
+- `GET /sequences/{id}/status`
+  - Get sequence execution status
+  - Response: `SequenceStatusResponse`
+
+- `POST /sequences/{id}/start`
+  - Start sequence execution
+  - Response: Success message
+
+- `POST /sequences/{id}/stop`
+  - Stop sequence execution
+  - Response: Success message
+
+## Communication Service Endpoints
+
+### Health Check
+- `GET /health`
+  - Returns service health status
+  - Response: `ServiceHealth` object
+
+### Equipment Status
+- `GET /equipment/status`
+  - Get current equipment status
+  - Response: `EquipmentStatusResponse`
+
+### Motion Control
+- `POST /motion/home`
+  - Home all axes
+  - Response: Success message
+
+- `POST /motion/move`
+  - Move to position
+  - Body: `MotionRequest`
+  - Response: Success message
+
+### System Control
+- `POST /system/start`
+  - Start system
+  - Response: Success message
+
+- `POST /system/stop`
+  - Stop system
+  - Response: Success message
+
+- `POST /system/reset`
+  - Reset system
+  - Response: Success message
+
+## Config Service Endpoints
+
+### Health Check
+- `GET /health`
+  - Returns service health status
+  - Response: `ServiceHealth` object
+
+### Configuration
+- `GET /config`
+  - Get current configuration
+  - Response: `ConfigResponse`
+
+- `PUT /config`
+  - Update configuration
+  - Body: `Config` object
+  - Response: Updated configuration
+
+### Schemas
+- `GET /schemas`
+  - List available schemas
+  - Response: `SchemaListResponse`
+
+- `GET /schemas/{name}`
+  - Get schema by name
+  - Response: JSON Schema
+
+## Data Collection Service Endpoints
+
+### Health Check
+- `GET /health`
+  - Returns service health status
+  - Response: `ServiceHealth` object
+
+### Data Collection
+- `GET /data/status`
+  - Get data collection status
+  - Response: `DataCollectionStatusResponse`
+
+- `POST /data/start`
+  - Start data collection
+  - Response: Success message
+
+- `POST /data/stop`
+  - Stop data collection
+  - Response: Success message
+
+## Notes
+
+1. All endpoints require appropriate authentication headers
+2. Rate limiting may be applied to certain endpoints
+3. Bulk operations are not currently supported
+4. All timestamps are in ISO 8601 format
+5. All measurements use SI units
+6. File operations use JSON format
+7. Websocket endpoints are available for real-time updates
+8. Health check endpoints are available for all services

@@ -249,7 +249,7 @@ export default function FileManagement() {
 
   const fetchNozzles = async () => {
     try {
-      const response = await fetch(`${API_CONFIG.PROCESS_SERVICE}/nozzles/`);
+      const response = await fetch(`${API_CONFIG.PROCESS_SERVICE}/parameters/nozzles`);
       if (!response.ok) throw new Error('Failed to fetch nozzles');
       const data: NozzleListResponse = await response.json();
       setNozzles(data.nozzles);
@@ -260,7 +260,7 @@ export default function FileManagement() {
 
   const fetchPowders = async () => {
     try {
-      const response = await fetch(`${API_CONFIG.PROCESS_SERVICE}/powders/`);
+      const response = await fetch(`${API_CONFIG.PROCESS_SERVICE}/parameters/powders`);
       if (!response.ok) throw new Error('Failed to fetch powders');
       const data: PowderListResponse = await response.json();
       setPowders(data.powders);
@@ -318,10 +318,10 @@ export default function FileManagement() {
           endpoint = `${API_CONFIG.PROCESS_SERVICE}/parameters/`;
           break;
         case 'nozzle':
-          endpoint = `${API_CONFIG.PROCESS_SERVICE}/nozzles/`;
+          endpoint = `${API_CONFIG.PROCESS_SERVICE}/parameters/nozzles/`;
           break;
         case 'powder':
-          endpoint = `${API_CONFIG.PROCESS_SERVICE}/powders/`;
+          endpoint = `${API_CONFIG.PROCESS_SERVICE}/parameters/powders/`;
           break;
         case 'sequence':
           endpoint = `${API_CONFIG.PROCESS_SERVICE}/sequences/`;
@@ -364,7 +364,19 @@ export default function FileManagement() {
     
     setError(null);
     try {
-      const response = await fetch(`${API_CONFIG.PROCESS_SERVICE}/${importType}s/import`, {
+      let endpoint = '';
+      switch (importType) {
+        case 'nozzle':
+          endpoint = `${API_CONFIG.PROCESS_SERVICE}/parameters/nozzles/import`;
+          break;
+        case 'powder':
+          endpoint = `${API_CONFIG.PROCESS_SERVICE}/parameters/powders/import`;
+          break;
+        default:
+          endpoint = `${API_CONFIG.PROCESS_SERVICE}/${importType}s/import`;
+      }
+      
+      const response = await fetch(endpoint, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/x-yaml'
@@ -397,7 +409,19 @@ export default function FileManagement() {
 
   const handleExportYAML = async (type: string, id: string) => {
     try {
-      const response = await fetch(`${API_CONFIG.PROCESS_SERVICE}/${type}s/${id}/export`);
+      let endpoint = '';
+      switch (type) {
+        case 'nozzle':
+          endpoint = `${API_CONFIG.PROCESS_SERVICE}/parameters/nozzles/${id}/export`;
+          break;
+        case 'powder':
+          endpoint = `${API_CONFIG.PROCESS_SERVICE}/parameters/powders/${id}/export`;
+          break;
+        default:
+          endpoint = `${API_CONFIG.PROCESS_SERVICE}/${type}s/${id}/export`;
+      }
+      
+      const response = await fetch(endpoint);
       if (!response.ok) {
         throw new Error(`Failed to export ${type}`);
       }
@@ -421,7 +445,19 @@ export default function FileManagement() {
 
   const handleDelete = async (type: string, id: string) => {
     try {
-      const response = await fetch(`${API_CONFIG.PROCESS_SERVICE}/${type}s/${id}`, {
+      let endpoint = '';
+      switch (type) {
+        case 'nozzle':
+          endpoint = `${API_CONFIG.PROCESS_SERVICE}/parameters/nozzles/${id}`;
+          break;
+        case 'powder':
+          endpoint = `${API_CONFIG.PROCESS_SERVICE}/parameters/powders/${id}`;
+          break;
+        default:
+          endpoint = `${API_CONFIG.PROCESS_SERVICE}/${type}s/${id}`;
+      }
+      
+      const response = await fetch(endpoint, {
         method: 'DELETE'
       });
       
@@ -450,7 +486,19 @@ export default function FileManagement() {
     if (!fileAction || !selectedFile) return;
     
     try {
-      const response = await fetch(`${API_CONFIG.PROCESS_SERVICE}/${fileAction.fileType}s/${fileAction.fileId}`, {
+      let endpoint = '';
+      switch (fileAction.fileType) {
+        case 'nozzle':
+          endpoint = `${API_CONFIG.PROCESS_SERVICE}/parameters/nozzles/${fileAction.fileId}`;
+          break;
+        case 'powder':
+          endpoint = `${API_CONFIG.PROCESS_SERVICE}/parameters/powders/${fileAction.fileId}`;
+          break;
+        default:
+          endpoint = `${API_CONFIG.PROCESS_SERVICE}/${fileAction.fileType}s/${fileAction.fileId}`;
+      }
+      
+      const response = await fetch(endpoint, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json'
@@ -505,7 +553,7 @@ export default function FileManagement() {
 
   const loadNozzle = async (nozzleId: string) => {
     try {
-      const response = await fetch(`${API_CONFIG.PROCESS_SERVICE}/nozzles/${nozzleId}`);
+      const response = await fetch(`${API_CONFIG.PROCESS_SERVICE}/parameters/nozzles/${nozzleId}`);
       if (!response.ok) throw new Error('Failed to fetch nozzle');
       const data: NozzleResponse = await response.json();
       setSelectedNozzle(data.nozzle);
@@ -516,7 +564,7 @@ export default function FileManagement() {
 
   const loadPowder = async (powderId: string) => {
     try {
-      const response = await fetch(`${API_CONFIG.PROCESS_SERVICE}/powders/${powderId}`);
+      const response = await fetch(`${API_CONFIG.PROCESS_SERVICE}/parameters/powders/${powderId}`);
       if (!response.ok) throw new Error('Failed to fetch powder');
       const data: PowderResponse = await response.json();
       setSelectedPowder(data.powder);

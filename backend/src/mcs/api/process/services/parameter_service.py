@@ -16,7 +16,7 @@ from mcs.utils.health import (
     HealthStatus,
     ComponentHealth
 )
-from mcs.api.process.models.process_models import ProcessStatus, Parameter, Nozzle, Powder
+from mcs.api.process.models.process_models import ProcessStatus, Nozzle, Powder
 
 
 class ParameterService:
@@ -338,8 +338,15 @@ class ParameterService:
                 message=error_msg
             )
 
-    async def list_parameters(self) -> List[Parameter]:
-        """List available parameters."""
+    async def list_parameters(self) -> List[str]:
+        """List available parameters.
+        
+        Returns:
+            List[str]: List of parameter IDs
+            
+        Raises:
+            HTTPException: If service error
+        """
         try:
             if not self.is_running:
                 raise create_error(
@@ -347,24 +354,7 @@ class ParameterService:
                     message=f"{self.service_name} service not running"
                 )
 
-            parameters = []
-            for param_id, param_data in self._parameters.items():
-                if "process" in param_data:
-                    process_data = param_data["process"]
-                    parameter = Parameter(
-                        name=process_data.get("name", param_id),
-                        created=process_data.get("created", ""),
-                        author=process_data.get("author", ""),
-                        description=process_data.get("description", ""),
-                        nozzle=process_data.get("nozzle", ""),
-                        main_gas=float(process_data.get("main_gas", 0.0)),
-                        feeder_gas=float(process_data.get("feeder_gas", 0.0)),
-                        frequency=int(process_data.get("frequency", 0)),
-                        deagglomerator_speed=int(process_data.get("deagglomerator_speed", 0))
-                    )
-                    parameters.append(parameter)
-
-            return parameters
+            return list(self._parameters.keys())
 
         except Exception as e:
             error_msg = f"Failed to list parameters: {str(e)}"
@@ -408,8 +398,15 @@ class ParameterService:
                 message=f"Failed to get parameter: {str(e)}"
             )
 
-    async def list_nozzles(self) -> List[Nozzle]:
-        """List available nozzles."""
+    async def list_nozzles(self) -> List[str]:
+        """List available nozzles.
+        
+        Returns:
+            List[str]: List of nozzle IDs
+            
+        Raises:
+            HTTPException: If service error
+        """
         try:
             if not self.is_running:
                 raise create_error(
@@ -417,19 +414,7 @@ class ParameterService:
                     message=f"{self.service_name} service not running"
                 )
 
-            nozzles = []
-            for nozzle_id, nozzle_data in self._nozzles.items():
-                if "nozzle" in nozzle_data:
-                    nozzle_info = nozzle_data["nozzle"]
-                    nozzle = Nozzle(
-                        name=nozzle_info.get("name", nozzle_id),
-                        manufacturer=nozzle_info.get("manufacturer", ""),
-                        type=nozzle_info.get("type", ""),
-                        description=nozzle_info.get("description", "")
-                    )
-                    nozzles.append(nozzle)
-
-            return nozzles
+            return list(self._nozzles.keys())
 
         except Exception as e:
             error_msg = f"Failed to list nozzles: {str(e)}"
@@ -481,26 +466,19 @@ class ParameterService:
                 )
 
             nozzle_data = self._nozzles[nozzle_id]
-            if "nozzle" in nozzle_data:
-                nozzle_info = nozzle_data["nozzle"]
-                return Nozzle(
-                    name=nozzle_info.get("name", nozzle_id),
-                    manufacturer=nozzle_info.get("manufacturer", ""),
-                    type=nozzle_info.get("type", ""),
-                    description=nozzle_info.get("description", "")
+            if "nozzle" not in nozzle_data:
+                raise create_error(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    message=f"Invalid nozzle data format for {nozzle_id}"
                 )
-
-            raise create_error(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                message=f"Invalid nozzle data format for {nozzle_id}"
-            )
+            
+            return Nozzle(**nozzle_data["nozzle"])
 
         except Exception as e:
-            error_msg = f"Failed to get nozzle: {str(e)}"
-            logger.error(error_msg)
+            logger.error(f"Failed to get nozzle {nozzle_id}: {e}")
             raise create_error(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                message=error_msg
+                message=f"Failed to get nozzle: {str(e)}"
             )
 
     async def get_powder(self, powder_id: str) -> Powder:
@@ -519,27 +497,19 @@ class ParameterService:
                 )
 
             powder_data = self._powders[powder_id]
-            if "powder" in powder_data:
-                powder_info = powder_data["powder"]
-                return Powder(
-                    name=powder_info.get("name", powder_id),
-                    type=powder_info.get("type", ""),
-                    size=powder_info.get("size", ""),
-                    manufacturer=powder_info.get("manufacturer", ""),
-                    lot=powder_info.get("lot", "")
+            if "powder" not in powder_data:
+                raise create_error(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    message=f"Invalid powder data format for {powder_id}"
                 )
-
-            raise create_error(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                message=f"Invalid powder data format for {powder_id}"
-            )
+            
+            return Powder(**powder_data["powder"])
 
         except Exception as e:
-            error_msg = f"Failed to get powder: {str(e)}"
-            logger.error(error_msg)
+            logger.error(f"Failed to get powder {powder_id}: {e}")
             raise create_error(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                message=error_msg
+                message=f"Failed to get powder: {str(e)}"
             )
 
     async def create_nozzle(self, nozzle: Nozzle) -> str:
