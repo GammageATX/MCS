@@ -196,15 +196,15 @@ class ActionService:
         details = {
             "version": self._version,
             "uptime": self.uptime,
-            "status": status,
             "initialized": self.is_initialized,
             "prepared": self.is_prepared,
             "current_action": self._current_action,
             "action_status": self._action_status
         }
+        error = None if status == HealthStatus.OK else "Service not running"
         return ComponentHealth(
-            name=self.service_name,
             status=status,
+            error=error,
             details=details
         )
 

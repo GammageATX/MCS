@@ -229,7 +229,6 @@ class SequenceService:
         details = {
             "version": self._version,
             "uptime": self.uptime,
-            "status": status,
             "initialized": self.is_initialized,
             "prepared": self.is_prepared,
             "sequences_loaded": len(self._sequences),
@@ -237,9 +236,10 @@ class SequenceService:
             "active_sequence": self._active_sequence,
             "sequence_status": self._sequence_status
         }
+        error = None if status == HealthStatus.OK else "Service not running"
         return ComponentHealth(
-            name=self.service_name,
             status=status,
+            error=error,
             details=details
         )
 

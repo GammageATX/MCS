@@ -209,22 +209,22 @@ class SchemaService:
                 message=error_msg
             )
 
-    def health(self) -> ComponentHealth:
+    async def health(self) -> ComponentHealth:
         """Get service health."""
         status = HealthStatus.OK if self.is_running else HealthStatus.ERROR
         details = {
             "version": self._version,
             "uptime": self.uptime,
-            "status": status,
             "initialized": self.is_initialized,
             "prepared": self.is_prepared,
             "schemas_loaded": len(self._schemas),
             "failed_schemas": len(self._failed_schemas),
             "schema_status": self._schema_status
         }
+        error = None if status == HealthStatus.OK else "Service not running"
         return ComponentHealth(
-            name=self.service_name,
             status=status,
+            error=error,
             details=details
         )
 

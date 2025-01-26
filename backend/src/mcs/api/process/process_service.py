@@ -359,6 +359,13 @@ class ProcessService:
     async def health(self) -> ServiceHealth:
         """Get service health."""
         try:
+            if not self.is_running:
+                return create_error_health(
+                    service_name=self.service_name,
+                    version=self.version,
+                    error_msg=f"{self.service_name} service not running"
+                )
+
             # Get component health
             component_health = {}
             for name, component in self._components.items():
@@ -367,39 +374,30 @@ class ProcessService:
                 except Exception as e:
                     logger.error(f"Component health check failed - {name}: {str(e)}")
                     component_health[name] = ComponentHealth(
-                        name=name,
                         status=HealthStatus.ERROR,
-                        details={"error": str(e)}
+                        error=str(e)
                     )
 
             # Determine overall status
-            status = HealthStatus.OK if self.is_running else HealthStatus.ERROR
-            if status == HealthStatus.OK:
-                for health in component_health.values():
-                    if health.status != HealthStatus.OK:
-                        status = HealthStatus.ERROR
-                        break
-
-            # Build health details
-            details = {
-                "version": self._version,
-                "uptime": self.uptime,
-                "status": status,
-                "initialized": self.is_initialized,
-                "prepared": self.is_prepared,
-                "components": component_health
-            }
+            status = HealthStatus.OK
+            for health in component_health.values():
+                if health.status != HealthStatus.OK:
+                    status = HealthStatus.ERROR
+                    break
 
             return ServiceHealth(
-                name=self.service_name,
                 status=status,
-                details=details
+                service=self.service_name,
+                version=self.version,
+                is_running=self.is_running,
+                uptime=self.uptime,
+                components=component_health
             )
 
         except Exception as e:
-            error_msg = f"Failed to get service health: {str(e)}"
-            logger.error(error_msg)
-            raise create_error(
-                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                message=error_msg
+            logger.error(f"Health check failed: {str(e)}")
+            return create_error_health(
+                service_name=self.service_name,
+                version=self.version,
+                error_msg=str(e)
             )

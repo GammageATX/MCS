@@ -222,16 +222,16 @@ class PatternService:
         details = {
             "version": self._version,
             "uptime": self.uptime,
-            "status": status,
             "initialized": self.is_initialized,
             "prepared": self.is_prepared,
             "patterns_loaded": len(self._patterns),
             "failed_patterns": len(self._failed_patterns),
             "pattern_status": self._pattern_status
         }
+        error = None if status == HealthStatus.OK else "Service not running"
         return ComponentHealth(
-            name=self.service_name,
             status=status,
+            error=error,
             details=details
         )
 

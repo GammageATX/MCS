@@ -243,7 +243,6 @@ class ParameterService:
         details = {
             "version": self._version,
             "uptime": self.uptime,
-            "status": status,
             "initialized": self.is_initialized,
             "prepared": self.is_prepared,
             "parameters_loaded": len(self._parameters),
@@ -254,9 +253,10 @@ class ParameterService:
             "failed_powders": len(self._failed_powders),
             "parameter_status": self._parameter_status
         }
+        error = None if status == HealthStatus.OK else "Service not running"
         return ComponentHealth(
-            name=self.service_name,
             status=status,
+            error=error,
             details=details
         )
 
