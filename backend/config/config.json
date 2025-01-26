@@ -19,7 +19,7 @@
     },
     "schema": {
       "version": "1.0.0",
-      "schema_path": "backend/config/schemas"
+      "schema_path": "backend/schemas/config"
     }
   }
 } 

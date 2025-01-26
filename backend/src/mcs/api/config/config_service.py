@@ -17,7 +17,7 @@ import jsonschema
 
 # Default paths - relative to project root
 DEFAULT_CONFIG_PATH = os.path.join("backend", "config")
-DEFAULT_SCHEMA_PATH = os.path.join(DEFAULT_CONFIG_PATH, "schemas")
+DEFAULT_SCHEMA_PATH = os.path.join("backend", "schemas", "config")
 
 
 class ConfigService:
@@ -322,7 +322,7 @@ class ConfigService:
                     },
                     "schema": {
                         "version": "1.0.0",
-                        "schema_path": os.path.join("backend", "config", "schemas")
+                        "schema_path": os.path.join("backend", "schemas", "config")
                     }
                 }
             }
