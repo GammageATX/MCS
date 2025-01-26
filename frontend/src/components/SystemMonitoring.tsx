@@ -176,7 +176,7 @@ export default function SystemMonitoring() {
   );
 
   const renderServiceCard = (service: ServiceHealth) => (
-    <Grid item xs={12} sm={6} lg={4} key={service.name}>
+    <Grid item xs={12} sm={6} key={service.name}>
       <Paper 
         elevation={0}
         sx={{ 
@@ -240,17 +240,6 @@ export default function SystemMonitoring() {
     </Grid>
   );
 
-  const ServiceGroup = ({ title, services }: { title: string, services: ServiceHealth[] }) => (
-    <Box sx={{ mb: 3 }}>
-      <Typography variant="h6" sx={{ mb: 2, color: 'text.secondary', fontSize: '0.9rem', fontWeight: 500 }}>
-        {title}
-      </Typography>
-      <Grid container spacing={2}>
-        {services.map(service => renderServiceCard(service))}
-      </Grid>
-    </Box>
-  );
-
   return (
     <Box sx={{ p: 3, maxWidth: 1600, margin: '0 auto' }}>
       <Box sx={{ 
@@ -290,20 +279,14 @@ export default function SystemMonitoring() {
       )}
 
       {systemState && (
-        <>
-          <ServiceGroup 
-            title="Configuration Services" 
-            services={[systemState.config]} 
-          />
-          <ServiceGroup 
-            title="Core Services" 
-            services={[systemState.process, systemState.communication]} 
-          />
-          <ServiceGroup 
-            title="Data Services" 
-            services={[systemState.data_collection]} 
-          />
-        </>
+        <Grid container spacing={2}>
+          {[
+            systemState.config,
+            systemState.process,
+            systemState.communication,
+            systemState.data_collection
+          ].map(service => renderServiceCard(service))}
+        </Grid>
       )}
 
       <Typography 

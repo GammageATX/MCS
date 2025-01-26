@@ -1,4 +1,7 @@
 import React, { useEffect, useState } from 'react';
+import { JsonForms } from '@jsonforms/react';
+import { materialRenderers, materialCells } from '@jsonforms/material-renderers';
+import { JsonSchema, UISchemaElement, rankWith, isNumberControl, and, scopeEndsWith, isObjectControl } from '@jsonforms/core';
 import {
   Box,
   Grid,
@@ -14,15 +17,16 @@ import {
   DialogTitle,
   DialogContent,
   DialogActions,
-  TextField,
   IconButton,
   Tooltip,
+  ListItemSecondaryAction,
+  Stack,
   FormControl,
   InputLabel,
   Select,
   MenuItem,
-  Stack,
-  ListItemSecondaryAction
+  TextField,
+  SelectChangeEvent
 } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
 import EditIcon from '@mui/icons-material/Edit';
@@ -31,6 +35,19 @@ import VisibilityIcon from '@mui/icons-material/Visibility';
 import UploadIcon from '@mui/icons-material/Upload';
 import DownloadIcon from '@mui/icons-material/Download';
 import { API_CONFIG } from '../config/api';
+import {
+  patternSchema,
+  patternUiSchema,
+  parameterSchema,
+  parameterUiSchema,
+  nozzleSchema,
+  nozzleUiSchema,
+  powderSchema,
+  powderUiSchema,
+  sequenceSchema,
+  sequenceUiSchema
+} from '../schemas/process';
+import { configSchema, configUiSchema, schemaSchema, schemaUiSchema } from '../schemas/config';
 
 interface Pattern {
   id: string;
@@ -117,6 +134,29 @@ export default function FileManagement() {
   const [yamlContent, setYamlContent] = useState('');
   const [importType, setImportType] = useState<'pattern' | 'parameter' | 'nozzle' | 'powder' | 'sequence' | null>(null);
 
+  const getSchemaForType = (type: string): { schema: JsonSchema, uiSchema: UISchemaElement } => {
+    switch (type) {
+      case 'pattern':
+        return { schema: patternSchema, uiSchema: patternUiSchema as UISchemaElement };
+      case 'parameter':
+        return { schema: parameterSchema, uiSchema: parameterUiSchema as UISchemaElement };
+      case 'nozzle':
+        return { schema: nozzleSchema, uiSchema: nozzleUiSchema as UISchemaElement };
+      case 'powder':
+        return { schema: powderSchema, uiSchema: powderUiSchema as UISchemaElement };
+      case 'sequence':
+        return { schema: sequenceSchema, uiSchema: sequenceUiSchema as UISchemaElement };
+      default:
+        return { 
+          schema: {} as JsonSchema, 
+          uiSchema: {
+            type: 'VerticalLayout',
+            elements: []
+          } as UISchemaElement 
+        };
+    }
+  };
+
   // Fetch data functions
   const fetchPatterns = async () => {
     try {
@@ -202,52 +242,22 @@ export default function FileManagement() {
     setCreateError(null);
     try {
       let endpoint = '';
-      let payload = {};
       
       switch (createType) {
         case 'pattern':
           endpoint = `${API_CONFIG.PROCESS_SERVICE}/patterns/`;
-          payload = {
-            name: createData.name,
-            type: createData.type,
-            description: createData.description
-          };
           break;
-          
         case 'parameter':
           endpoint = `${API_CONFIG.PROCESS_SERVICE}/parameters/`;
-          payload = {
-            name: createData.name,
-            value: createData.value
-          };
           break;
-          
         case 'nozzle':
           endpoint = `${API_CONFIG.PROCESS_SERVICE}/parameters/nozzles`;
-          payload = {
-            name: createData.name,
-            type: createData.type
-          };
           break;
-          
         case 'powder':
           endpoint = `${API_CONFIG.PROCESS_SERVICE}/parameters/powders`;
-          payload = {
-            name: createData.name,
-            properties: {
-              material: createData.material,
-              size: createData.size,
-              manufacturer: createData.manufacturer
-            }
-          };
           break;
-          
         case 'sequence':
           endpoint = `${API_CONFIG.PROCESS_SERVICE}/sequences/`;
-          payload = {
-            name: createData.name,
-            steps: []
-          };
           break;
       }
       
@@ -256,7 +266,7 @@ export default function FileManagement() {
         headers: {
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify(payload)
+        body: JSON.stringify(createData)
       });
       
       if (!response.ok) {
@@ -406,6 +416,8 @@ export default function FileManagement() {
   const renderCreateDialog = () => {
     if (!createType) return null;
 
+    const { schema, uiSchema } = getSchemaForType(createType);
+
     const handleClose = () => {
       setCreateDialogOpen(false);
       setCreateType(null);
@@ -425,101 +437,23 @@ export default function FileManagement() {
             </Alert>
           )}
           
-          <Stack spacing={2} sx={{ mt: 2 }}>
-            <TextField
-              label="Name"
-              value={createData.name || ''}
-              onChange={(e) => setCreateData({ ...createData, name: e.target.value })}
-              fullWidth
-              required
+          <Box sx={{ mt: 2 }}>
+            <JsonForms
+              schema={schema}
+              uischema={uiSchema}
+              data={createData}
+              renderers={materialRenderers}
+              cells={materialCells}
+              onChange={({ data }) => setCreateData(data)}
             />
-            
-            {createType === 'pattern' && (
-              <>
-                <FormControl fullWidth>
-                  <InputLabel>Type</InputLabel>
-                  <Select
-                    value={createData.type || ''}
-                    onChange={(e) => setCreateData({ ...createData, type: e.target.value })}
-                    label="Type"
-                    required
-                  >
-                    <MenuItem value="linear">Linear</MenuItem>
-                    <MenuItem value="circular">Circular</MenuItem>
-                    <MenuItem value="spiral">Spiral</MenuItem>
-                    <MenuItem value="custom">Custom</MenuItem>
-                  </Select>
-                </FormControl>
-                <TextField
-                  label="Description"
-                  value={createData.description || ''}
-                  onChange={(e) => setCreateData({ ...createData, description: e.target.value })}
-                  fullWidth
-                  multiline
-                  rows={3}
-                />
-              </>
-            )}
-            
-            {createType === 'parameter' && (
-              <TextField
-                label="Value"
-                value={createData.value || ''}
-                onChange={(e) => setCreateData({ ...createData, value: e.target.value })}
-                fullWidth
-                required
-              />
-            )}
-            
-            {createType === 'nozzle' && (
-              <FormControl fullWidth>
-                <InputLabel>Type</InputLabel>
-                <Select
-                  value={createData.type || ''}
-                  onChange={(e) => setCreateData({ ...createData, type: e.target.value })}
-                  label="Type"
-                  required
-                >
-                  <MenuItem value="standard">Standard</MenuItem>
-                  <MenuItem value="high_flow">High Flow</MenuItem>
-                  <MenuItem value="low_flow">Low Flow</MenuItem>
-                </Select>
-              </FormControl>
-            )}
-            
-            {createType === 'powder' && (
-              <>
-                <TextField
-                  label="Material"
-                  value={createData.material || ''}
-                  onChange={(e) => setCreateData({ ...createData, material: e.target.value })}
-                  fullWidth
-                  required
-                />
-                <TextField
-                  label="Size"
-                  value={createData.size || ''}
-                  onChange={(e) => setCreateData({ ...createData, size: e.target.value })}
-                  fullWidth
-                  required
-                />
-                <TextField
-                  label="Manufacturer"
-                  value={createData.manufacturer || ''}
-                  onChange={(e) => setCreateData({ ...createData, manufacturer: e.target.value })}
-                  fullWidth
-                  required
-                />
-              </>
-            )}
-          </Stack>
+          </Box>
         </DialogContent>
         <DialogActions>
           <Button onClick={handleClose}>Cancel</Button>
           <Button 
             onClick={handleCreate}
             variant="contained"
-            disabled={!createData.name}
+            disabled={!createData}
           >
             Create
           </Button>
@@ -595,6 +529,34 @@ export default function FileManagement() {
               variant="contained"
             >
               Delete
+            </Button>
+          </DialogActions>
+        </Dialog>
+      );
+    }
+
+    if (fileAction.type === 'edit') {
+      const { schema, uiSchema } = getSchemaForType(fileAction.fileType);
+
+      return (
+        <Dialog open={true} onClose={handleClose} maxWidth="md" fullWidth>
+          <DialogTitle>Edit {fileAction.fileType}</DialogTitle>
+          <DialogContent>
+            <Box sx={{ mt: 2 }}>
+              <JsonForms
+                schema={schema}
+                uischema={uiSchema}
+                data={selectedFile}
+                renderers={materialRenderers}
+                cells={materialCells}
+                onChange={({ data }) => setSelectedFile(data)}
+              />
+            </Box>
+          </DialogContent>
+          <DialogActions>
+            <Button onClick={handleClose}>Cancel</Button>
+            <Button onClick={handleEdit} variant="contained">
+              Save Changes
             </Button>
           </DialogActions>
         </Dialog>

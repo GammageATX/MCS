@@ -3,9 +3,9 @@
 This module implements the Process service for managing process execution and control.
 """
 
-import os
-from typing import Dict, Any
 from datetime import datetime
+from pathlib import Path
+from typing import Dict, Any
 from fastapi import status
 from loguru import logger
 import json
@@ -43,25 +43,25 @@ class ProcessService:
     5. shutdown: Clean shutdown of service
     """
 
-    def __init__(self, config: Dict[str, Any]) -> None:
+    def __init__(self, version: str = "1.0.0") -> None:
         """Initialize process service.
         
         Args:
-            config: Service configuration dictionary
+            version: Service version
         """
-        self._config = config
-        self._version = config.get("version", "1.0.0")
+        self._version = version
         self._service_name = "process"
         self._is_initialized = False
         self._is_running = False
         self._is_prepared = False
-        self._components = {}
+        self._start_time = None
         
-        logger.info(f"{self.service_name} service initialized")
-
         # Default paths
-        self.config_path = os.path.join("backend", "config")
-        self.schema_path = os.path.join("backend", "schema")
+        self._paths = {
+            "config": Path("backend/config"),
+            "data": Path("backend/data"),
+            "schemas": Path("backend/schemas")
+        }
         
         # Component services
         self.action_service = None
@@ -74,6 +74,8 @@ class ProcessService:
         self._components = {}
         self._health = {}
         self._process_status = ProcessStatus.IDLE
+        
+        logger.info(f"{self.service_name} service initialized")
 
     @property
     def version(self) -> str:
@@ -114,27 +116,76 @@ class ProcessService:
                     message=f"{self.service_name} service already running"
                 )
 
-            # Initialize component services with their respective configs
-            self.action_service = ActionService(version=self.version)  # ActionService still uses version
-            self.parameter_service = ParameterService(config=self._config)  # Pass full config
-            self.pattern_service = PatternService(config=self._config)  # Pass full config
-            self.sequence_service = SequenceService(config=self._config)  # Pass full config
-            self.schema_service = SchemaService(version=self.version)  # SchemaService still uses version
-            
-            # Store components for health checks
-            self._components = {
-                "action": self.action_service,
-                "parameter": self.parameter_service,
-                "pattern": self.pattern_service,
-                "sequence": self.sequence_service,
-                "schema": self.schema_service
+            # Load config
+            config_path = self._paths["config"] / "process.json"
+            if not config_path.exists():
+                raise create_error(
+                    status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                    message=f"Config file not found: {config_path}"
+                )
+
+            with open(config_path) as f:
+                config = json.load(f)
+
+            # Update paths from config
+            if "paths" in config:
+                for key, path in config["paths"].items():
+                    if key in self._paths:
+                        self._paths[key] = Path(path)
+
+            # Initialize component services with config
+            component_classes = {
+                "action": ActionService,
+                "parameter": ParameterService,
+                "pattern": PatternService,
+                "sequence": SequenceService,
+                "schema": SchemaService
             }
             
-            # Initialize all components
-            for name, component in self._components.items():
+            # Initialize all components with config sections
+            for name, component_class in component_classes.items():
                 logger.info(f"Initializing {name} component...")
+                component_config = config.get("components", {}).get(name, {}).copy()  # Make a copy to avoid modifying original
+                component_config["version"] = self.version
+                
+                # Set paths based on component type
+                if name == "action":
+                    # Action service uses config directly - no paths needed
+                    component = component_class(config=component_config)
+                elif name == "parameter":
+                    # Parameter service needs access to parameters, nozzles, and powders
+                    component_config["paths"] = {
+                        "data": self._paths["data"],  # Root data path
+                        "parameters": self._paths["data"] / "parameters",
+                        "nozzles": self._paths["data"] / "nozzles",
+                        "powders": self._paths["data"] / "powders",
+                        "schemas": Path("backend/schemas/process")
+                    }
+                    component = component_class(config=component_config)
+                elif name == "schema":
+                    # Schema service only needs schema path
+                    component_config["paths"] = {
+                        "schemas": Path("backend/schemas/process")
+                    }
+                    component = component_class(config=component_config)
+                else:
+                    # Pattern and sequence services use their respective data folders
+                    component_config["paths"] = {
+                        "data": self._paths["data"] / f"{name}s",  # patterns or sequences
+                        "schemas": Path("backend/schemas/process")
+                    }
+                    component = component_class(config=component_config)
+                
+                self._components[name] = component
                 await component.initialize()
                 logger.info(f"Initialized {name} component")
+            
+            # Store component references
+            self.action_service = self._components["action"]
+            self.parameter_service = self._components["parameter"]
+            self.pattern_service = self._components["pattern"]
+            self.sequence_service = self._components["sequence"]
+            self.schema_service = self._components["schema"]
 
             self._is_initialized = True
             logger.info(f"{self.service_name} service initialized")
@@ -290,11 +341,11 @@ class ProcessService:
     async def _load_config(self) -> Dict[str, Any]:
         """Load process configuration."""
         try:
-            config_file = os.path.join(self.config_path, "process.json")
-            if not os.path.exists(config_file):
+            config_file = self._paths["config"] / "process.json"
+            if not config_file.exists():
                 raise FileNotFoundError(f"Process configuration file not found: {config_file}")
 
-            with open(config_file, "r") as f:
+            with open(config_file) as f:
                 return json.load(f)
 
         except Exception as e:

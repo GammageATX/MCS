@@ -1,0 +1,39 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Parameter",
+  "type": "object",
+  "properties": {
+    "id": {
+      "type": "string",
+      "title": "ID",
+      "description": "Unique parameter identifier"
+    },
+    "name": {
+      "type": "string",
+      "title": "Name",
+      "description": "Parameter name"
+    },
+    "value": {
+      "type": "number",
+      "title": "Value",
+      "description": "Parameter value"
+    },
+    "created": {
+      "type": "string",
+      "title": "Created",
+      "format": "date-time",
+      "description": "Creation timestamp"
+    },
+    "author": {
+      "type": "string",
+      "title": "Author",
+      "description": "Parameter author"
+    },
+    "description": {
+      "type": "string",
+      "title": "Description",
+      "description": "Parameter description"
+    }
+  },
+  "required": ["name", "value"]
+} 

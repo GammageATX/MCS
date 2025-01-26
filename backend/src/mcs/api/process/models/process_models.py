@@ -119,7 +119,7 @@ class PatternResponse(BaseModel):
 
 class PatternListResponse(BaseModel):
     """Pattern list response."""
-    patterns: List[Pattern]
+    patterns: List[str] = Field(description="List of pattern IDs")
 
 
 class ParameterResponse(BaseModel):

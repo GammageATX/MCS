@@ -1,6 +1,8 @@
-"""Parameter service implementation."""
+"""Parameter Service
 
-import os
+This module implements the Parameter service for managing process parameters.
+"""
+
 from typing import Dict, Any, List
 from datetime import datetime
 import uuid
@@ -20,20 +22,29 @@ from mcs.api.process.models.process_models import ProcessStatus, Parameter, Nozz
 class ParameterService:
     """Service for managing process parameters."""
 
-    def __init__(self, config: Dict[str, Any]):
+    def __init__(self, config: Dict[str, Any]) -> None:
         """Initialize parameter service.
         
         Args:
             config: Service configuration
         """
+        # Basic properties
         self._service_name = "parameter"
-        self._version = config.get("version", "1.0.0")  # Get version from top level
+        self._config = config
+        self._version = config.get("version", "1.0.0")
         self._is_running = False
         self._is_initialized = False
+        self._is_prepared = False
         self._start_time = None
-        self._config = config
-
-        # Initialize data dictionaries
+        
+        # Paths
+        self._data_path = None
+        self._schema_path = None
+        self._parameter_dir = None
+        self._nozzle_dir = None
+        self._powder_dir = None
+        
+        # State
         self._parameters = {}
         self._nozzles = {}
         self._powders = {}
@@ -41,76 +52,8 @@ class ParameterService:
         self._failed_nozzles = {}
         self._failed_powders = {}
         self._parameter_status = ProcessStatus.IDLE
-
-        # Initialize data directories
-        self._nozzle_dir = Path("backend/data/nozzles")
-        self._powder_dir = Path("backend/data/powders")
-        self._parameter_dir = Path("backend/data/parameters")
-
-        logger.info(f"{self._service_name} service initialized")
-
-    def _load_config(self) -> None:
-        """Load parameter configuration."""
-        try:
-            if not os.path.exists(self._parameter_dir):
-                self._parameter_dir.mkdir(parents=True, exist_ok=True)
-            if not os.path.exists(self._nozzle_dir):
-                self._nozzle_dir.mkdir(parents=True, exist_ok=True)
-            if not os.path.exists(self._powder_dir):
-                self._powder_dir.mkdir(parents=True, exist_ok=True)
-
-            # Load parameter files
-            for file_path in self._parameter_dir.glob("*.json"):
-                with open(file_path) as f:
-                    json.load(f)  # Validate JSON format
-
-            # Load nozzle files
-            for file_path in self._nozzle_dir.glob("*.json"):
-                with open(file_path) as f:
-                    json.load(f)  # Validate JSON format
-
-            # Load powder files
-            for file_path in self._powder_dir.glob("*.json"):
-                with open(file_path) as f:
-                    json.load(f)  # Validate JSON format
-
-        except Exception as e:
-            error_msg = f"Failed to load parameter configuration: {str(e)}"
-            logger.error(error_msg)
-            raise create_error(
-                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                message=error_msg
-            )
-
-    async def save_nozzle(self, nozzle_id: str, nozzle_data: Dict[str, Any]) -> None:
-        """Save nozzle data."""
-        try:
-            nozzle_path = self._nozzle_dir / f"{nozzle_id}.json"
-            with open(nozzle_path, "w") as f:
-                json.dump(nozzle_data, f, indent=2)
-
-        except Exception as e:
-            error_msg = f"Failed to save nozzle data: {str(e)}"
-            logger.error(error_msg)
-            raise create_error(
-                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                message=error_msg
-            )
-
-    async def save_powder(self, powder_id: str, powder_data: Dict[str, Any]) -> None:
-        """Save powder data."""
-        try:
-            powder_path = self._powder_dir / f"{powder_id}.json"
-            with open(powder_path, "w") as f:
-                json.dump(powder_data, f, indent=2)
-
-        except Exception as e:
-            error_msg = f"Failed to save powder data: {str(e)}"
-            logger.error(error_msg)
-            raise create_error(
-                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                message=error_msg
-            )
+        
+        logger.info(f"{self.service_name} service initialized")
 
     @property
     def version(self) -> str:
@@ -133,6 +76,11 @@ class ParameterService:
         return self._is_initialized
 
     @property
+    def is_prepared(self) -> bool:
+        """Get service preparation state."""
+        return self._is_prepared
+
+    @property
     def uptime(self) -> float:
         """Get service uptime in seconds."""
         return (datetime.now() - self._start_time).total_seconds() if self._start_time else 0.0
@@ -146,17 +94,61 @@ class ParameterService:
                     message=f"{self.service_name} service already running"
                 )
             
-            # Initialize parameters
-            self._parameters = {}
+            # Get paths from config
+            self._data_path = Path(self._config["paths"]["data"])
+            self._schema_path = Path(self._config["paths"]["schemas"])
             
-            # Load parameters from config
-            await self._load_parameters()
+            # Set component directories
+            self._parameter_dir = self._data_path / "parameters"
+            self._nozzle_dir = self._data_path / "nozzles"
+            self._powder_dir = self._data_path / "powders"
+            
+            # Validate paths
+            for path in [self._parameter_dir, self._nozzle_dir, self._powder_dir]:
+                if not path.exists():
+                    path.mkdir(parents=True, exist_ok=True)
+                    logger.info(f"Created directory: {path}")
             
             self._is_initialized = True
             logger.info(f"{self.service_name} service initialized")
             
         except Exception as e:
             error_msg = f"Failed to initialize {self.service_name} service: {str(e)}"
+            logger.error(error_msg)
+            raise create_error(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                message=error_msg
+            )
+
+    async def prepare(self) -> None:
+        """Prepare service for operation."""
+        try:
+            if not self.is_initialized:
+                raise create_error(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    message=f"{self.service_name} service not initialized"
+                )
+
+            if self.is_running:
+                raise create_error(
+                    status_code=status.HTTP_409_CONFLICT,
+                    message=f"{self.service_name} service already running"
+                )
+
+            # Initialize state
+            self._parameters = {}
+            self._nozzles = {}
+            self._powders = {}
+            self._failed_parameters = {}
+            self._failed_nozzles = {}
+            self._failed_powders = {}
+            self._parameter_status = ProcessStatus.IDLE
+
+            self._is_prepared = True
+            logger.info(f"{self.service_name} service prepared")
+
+        except Exception as e:
+            error_msg = f"Failed to prepare {self.service_name} service: {str(e)}"
             logger.error(error_msg)
             raise create_error(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
@@ -172,11 +164,16 @@ class ParameterService:
                     message=f"{self.service_name} service already running"
                 )
 
-            if not self.is_initialized:
+            if not self.is_prepared:
                 raise create_error(
                     status_code=status.HTTP_400_BAD_REQUEST,
-                    message=f"{self.service_name} service not initialized"
+                    message=f"{self.service_name} service not prepared"
                 )
+
+            # Load all data
+            await self._load_parameters()
+            await self._load_nozzles()
+            await self._load_powders()
 
             self._is_running = True
             self._start_time = datetime.now()
@@ -203,7 +200,6 @@ class ParameterService:
                     message=f"{self.service_name} service not running"
                 )
 
-            self._is_initialized = False
             self._is_running = False
             self._start_time = None
             self._parameter_status = ProcessStatus.IDLE
@@ -217,121 +213,59 @@ class ParameterService:
                 message=error_msg
             )
 
-    async def health(self) -> ComponentHealth:
-        """Get service health status."""
+    async def shutdown(self) -> None:
+        """Shutdown service and cleanup resources."""
         try:
-            if not self.is_running:
-                return ComponentHealth(
-                    status=HealthStatus.ERROR,
-                    error=f"{self.service_name} service not running"
-                )
-
-            # Check critical components
-            parameters_loaded = self._parameters is not None and len(self._parameters) > 0
-            parameter_dir = Path("backend/data/parameters")
-            dir_exists = parameter_dir.exists()
-            dir_writable = dir_exists and os.access(parameter_dir, os.W_OK)
-
-            # Map process status to health status
-            if self._parameter_status == ProcessStatus.ERROR:
-                return ComponentHealth(
-                    status=HealthStatus.ERROR,
-                    error="Parameter system in error state",
-                    details={
-                        "parameters": {
-                            "total": len(self._parameters or {}),
-                            "loaded": list(self._parameters.keys()) if self._parameters else [],
-                            "failed": list(self._failed_parameters.keys()),
-                            "recovery_attempts": len(self._failed_parameters)
-                        },
-                        "storage": {
-                            "path": str(parameter_dir),
-                            "exists": dir_exists,
-                            "writable": dir_writable
-                        }
-                    }
-                )
-            elif self._parameter_status == ProcessStatus.PAUSED:
-                return ComponentHealth(
-                    status=HealthStatus.DEGRADED,
-                    error="Parameter system paused",
-                    details={
-                        "parameters": {
-                            "total": len(self._parameters or {}),
-                            "loaded": list(self._parameters.keys()) if self._parameters else [],
-                            "failed": list(self._failed_parameters.keys()),
-                            "recovery_attempts": len(self._failed_parameters)
-                        },
-                        "storage": {
-                            "path": str(parameter_dir),
-                            "exists": dir_exists,
-                            "writable": dir_writable
-                        }
-                    }
-                )
-
-            # Check if any critical components are missing
-            if not (parameters_loaded and dir_exists and dir_writable):
-                return ComponentHealth(
-                    status=HealthStatus.DEGRADED,
-                    error="Parameter system partially operational",
-                    details={
-                        "parameters": {
-                            "total": len(self._parameters or {}),
-                            "loaded": list(self._parameters.keys()) if self._parameters else [],
-                            "failed": list(self._failed_parameters.keys()),
-                            "recovery_attempts": len(self._failed_parameters)
-                        },
-                        "storage": {
-                            "path": str(parameter_dir),
-                            "exists": dir_exists,
-                            "writable": dir_writable
-                        }
-                    }
-                )
-
-            return ComponentHealth(
-                status=HealthStatus.OK,
-                error=None,
-                details={
-                    "parameters": {
-                        "total": len(self._parameters or {}),
-                        "loaded": list(self._parameters.keys()) if self._parameters else [],
-                        "failed": list(self._failed_parameters.keys()),
-                        "recovery_attempts": len(self._failed_parameters)
-                    },
-                    "storage": {
-                        "path": str(parameter_dir),
-                        "exists": dir_exists,
-                        "writable": dir_writable
-                    },
-                    "uptime": self.uptime
-                }
-            )
-
+            if self.is_running:
+                await self.stop()
+                
+            self._is_initialized = False
+            self._is_prepared = False
+            self._parameters = {}
+            self._nozzles = {}
+            self._powders = {}
+            self._failed_parameters = {}
+            self._failed_nozzles = {}
+            self._failed_powders = {}
+            logger.info(f"{self.service_name} service shut down")
+            
         except Exception as e:
-            error_msg = f"Health check failed: {str(e)}"
+            error_msg = f"Error during {self.service_name} service shutdown: {str(e)}"
             logger.error(error_msg)
-            return ComponentHealth(
-                status=HealthStatus.ERROR,
-                error=error_msg
+            raise create_error(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                message=error_msg
             )
+
+    def health(self) -> ComponentHealth:
+        """Get service health."""
+        status = HealthStatus.HEALTHY if self.is_running else HealthStatus.UNHEALTHY
+        details = {
+            "version": self._version,
+            "uptime": self.uptime,
+            "status": status,
+            "initialized": self.is_initialized,
+            "prepared": self.is_prepared,
+            "parameters_loaded": len(self._parameters),
+            "nozzles_loaded": len(self._nozzles),
+            "powders_loaded": len(self._powders),
+            "failed_parameters": len(self._failed_parameters),
+            "failed_nozzles": len(self._failed_nozzles),
+            "failed_powders": len(self._failed_powders),
+            "parameter_status": self._parameter_status
+        }
+        return ComponentHealth(
+            name=self.service_name,
+            status=status,
+            details=details
+        )
 
     async def _load_parameters(self) -> None:
         """Load parameters from configuration."""
         try:
-            # Load service config
-            config_path = os.path.join("backend", "config", "process.json")
-            if os.path.exists(config_path):
-                with open(config_path, "r") as f:
-                    config = json.load(f)
-                    if "parameter" in config:
-                        self._version = config["parameter"].get("version", self._version)
-            
             # Load parameter files from data directory
-            parameter_dir = Path("backend/data/parameters")
-            if parameter_dir.exists():
-                for file_path in parameter_dir.glob("*.json"):
+            if self._parameter_dir.exists():
+                for file_path in self._parameter_dir.glob("*.json"):
                     try:
                         with open(file_path, "r") as f:
                             parameter_data = json.load(f)
@@ -342,10 +276,22 @@ class ParameterService:
                         logger.error(f"Failed to load parameter file {file_path.name}: {str(e)}")
                         self._failed_parameters[file_path.stem] = str(e)
             
-            # Load nozzle files
-            nozzle_dir = Path("backend/data/nozzles")
-            if nozzle_dir.exists():
-                for file_path in nozzle_dir.glob("*.json"):
+            logger.info(f"Loaded {len(self._parameters)} parameters")
+            
+        except Exception as e:
+            error_msg = f"Failed to load parameters: {str(e)}"
+            logger.error(error_msg)
+            raise create_error(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                message=error_msg
+            )
+
+    async def _load_nozzles(self) -> None:
+        """Load nozzles from configuration."""
+        try:
+            # Load nozzle files from data directory
+            if self._nozzle_dir.exists():
+                for file_path in self._nozzle_dir.glob("*.json"):
                     try:
                         with open(file_path, "r") as f:
                             nozzle_data = json.load(f)
@@ -356,10 +302,22 @@ class ParameterService:
                         logger.error(f"Failed to load nozzle file {file_path.name}: {str(e)}")
                         self._failed_nozzles[file_path.stem] = str(e)
             
-            # Load powder files
-            powder_dir = Path("backend/data/powders")
-            if powder_dir.exists():
-                for file_path in powder_dir.glob("*.json"):
+            logger.info(f"Loaded {len(self._nozzles)} nozzles")
+            
+        except Exception as e:
+            error_msg = f"Failed to load nozzles: {str(e)}"
+            logger.error(error_msg)
+            raise create_error(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                message=error_msg
+            )
+
+    async def _load_powders(self) -> None:
+        """Load powders from configuration."""
+        try:
+            # Load powder files from data directory
+            if self._powder_dir.exists():
+                for file_path in self._powder_dir.glob("*.json"):
                     try:
                         with open(file_path, "r") as f:
                             powder_data = json.load(f)
@@ -370,10 +328,10 @@ class ParameterService:
                         logger.error(f"Failed to load powder file {file_path.name}: {str(e)}")
                         self._failed_powders[file_path.stem] = str(e)
             
-            logger.info(f"Loaded {len(self._parameters)} parameters, {len(self._nozzles)} nozzles, and {len(self._powders)} powders")
+            logger.info(f"Loaded {len(self._powders)} powders")
             
         except Exception as e:
-            error_msg = f"Failed to load parameters: {str(e)}"
+            error_msg = f"Failed to load powders: {str(e)}"
             logger.error(error_msg)
             raise create_error(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,

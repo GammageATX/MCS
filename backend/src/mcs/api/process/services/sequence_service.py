@@ -3,21 +3,15 @@
 This module implements the Sequence service for managing process sequences.
 """
 
-import os
-from pathlib import Path
 from datetime import datetime
+from pathlib import Path
 from typing import Dict, Any, List
-
-import json
 from fastapi import status
 from loguru import logger
+import json
 
 from mcs.utils.errors import create_error
-from mcs.utils.health import (  # Noqa: F401
-    HealthStatus,
-    ComponentHealth,
-    create_error_health  # Noqa: F401
-)
+from mcs.utils.health import HealthStatus, ComponentHealth
 from mcs.api.process.models.process_models import (
     ProcessStatus,
     Sequence,
@@ -30,20 +24,28 @@ from mcs.api.process.models.process_models import (
 class SequenceService:
     """Service for managing process sequences."""
 
-    def __init__(self, config: Dict[str, Any]):
+    def __init__(self, config: Dict[str, Any]) -> None:
         """Initialize sequence service.
         
         Args:
             config: Service configuration
         """
+        # Basic properties
         self._service_name = "sequence"
-        self._version = config.get("version", "1.0.0")  # Get version from top level
+        self._config = config
+        self._version = config.get("version", "1.0.0")
         self._is_running = False
         self._is_initialized = False
+        self._is_prepared = False
         self._start_time = None
         
-        # Initialize components
-        self._sequences = {}  # Initialize as empty dict
+        # Paths
+        self._data_path = None
+        self._schema_path = None
+        self._sequence_dir = None
+        
+        # State
+        self._sequences = {}
         self._failed_sequences = {}
         self._active_sequence = None
         self._sequence_status = ProcessStatus.IDLE
@@ -71,6 +73,11 @@ class SequenceService:
         return self._is_initialized
 
     @property
+    def is_prepared(self) -> bool:
+        """Get service preparation state."""
+        return self._is_prepared
+
+    @property
     def uptime(self) -> float:
         """Get service uptime in seconds."""
         return (datetime.now() - self._start_time).total_seconds() if self._start_time else 0.0
@@ -84,17 +91,55 @@ class SequenceService:
                     message=f"{self.service_name} service already running"
                 )
             
-            # Initialize sequences
-            self._sequences = {}
+            # Get paths from config
+            self._data_path = Path(self._config["paths"]["data"])
+            self._schema_path = Path(self._config["paths"]["schemas"])
             
-            # Load sequences from config
-            await self._load_sequences()
+            # Set component directories - use data path directly since it already points to the sequences folder
+            self._sequence_dir = self._data_path
+            
+            # Validate paths
+            if not self._sequence_dir.exists():
+                self._sequence_dir.mkdir(parents=True, exist_ok=True)
+                logger.info(f"Created sequence directory: {self._sequence_dir}")
             
             self._is_initialized = True
             logger.info(f"{self.service_name} service initialized")
             
         except Exception as e:
             error_msg = f"Failed to initialize {self.service_name} service: {str(e)}"
+            logger.error(error_msg)
+            raise create_error(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                message=error_msg
+            )
+
+    async def prepare(self) -> None:
+        """Prepare service for operation."""
+        try:
+            if not self.is_initialized:
+                raise create_error(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    message=f"{self.service_name} service not initialized"
+                )
+
+            if self.is_running:
+                raise create_error(
+                    status_code=status.HTTP_409_CONFLICT,
+                    message=f"{self.service_name} service already running"
+                )
+
+            # Initialize state
+            self._sequences = {}
+            self._failed_sequences = {}
+            self._active_sequence = None
+            self._sequence_status = ProcessStatus.IDLE
+
+            self._is_prepared = True
+            logger.info(f"{self.service_name} service prepared")
+
+        except Exception as e:
+            error_msg = f"Failed to prepare {self.service_name} service: {str(e)}"
             logger.error(error_msg)
             raise create_error(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
@@ -109,19 +154,25 @@ class SequenceService:
                     status_code=status.HTTP_409_CONFLICT,
                     message=f"{self.service_name} service already running"
                 )
-                
-            if not self.is_initialized:
+
+            if not self.is_prepared:
                 raise create_error(
                     status_code=status.HTTP_400_BAD_REQUEST,
-                    message=f"{self.service_name} service not initialized"
+                    message=f"{self.service_name} service not prepared"
                 )
-            
-            logger.info(f"Starting {self.service_name} service...")
+
+            # Load sequences
+            await self._load_sequences()
+
             self._is_running = True
             self._start_time = datetime.now()
-            logger.info(f"{self.service_name} service started successfully")
-            
+            self._sequence_status = ProcessStatus.IDLE
+            logger.info(f"{self.service_name} service started")
+
         except Exception as e:
+            self._is_running = False
+            self._start_time = None
+            self._sequence_status = ProcessStatus.ERROR
             error_msg = f"Failed to start {self.service_name} service: {str(e)}"
             logger.error(error_msg)
             raise create_error(
@@ -138,7 +189,6 @@ class SequenceService:
                     message=f"{self.service_name} service not running"
                 )
 
-            self._is_initialized = False
             self._is_running = False
             self._start_time = None
             self._sequence_status = ProcessStatus.IDLE
@@ -152,121 +202,46 @@ class SequenceService:
                 message=error_msg
             )
 
-    async def health(self) -> ComponentHealth:
-        """Get service health status."""
+    async def shutdown(self) -> None:
+        """Shutdown service and cleanup resources."""
         try:
-            if not self.is_running:
-                return ComponentHealth(
-                    status=HealthStatus.ERROR,
-                    error=f"{self.service_name} service not running"
-                )
-
-            # Check critical components
-            sequences_loaded = self._sequences is not None and len(self._sequences) > 0
-            sequence_dir = Path("backend/data/sequences")
-            dir_exists = sequence_dir.exists()
-            dir_writable = dir_exists and os.access(sequence_dir, os.W_OK)
-
-            # Map process status to health status
-            if self._sequence_status == ProcessStatus.ERROR:
-                return ComponentHealth(
-                    status=HealthStatus.ERROR,
-                    error="Sequence system in error state",
-                    details={
-                        "sequences": {
-                            "total": len(self._sequences or {}),
-                            "loaded": list(self._sequences.keys()) if self._sequences else [],
-                            "failed": list(self._failed_sequences.keys()),
-                            "recovery_attempts": len(self._failed_sequences)
-                        },
-                        "execution": {
-                            "active_sequence": self._active_sequence,
-                            "status": self._sequence_status.value
-                        },
-                        "storage": {
-                            "path": str(sequence_dir),
-                            "exists": dir_exists,
-                            "writable": dir_writable
-                        }
-                    }
-                )
-            elif self._sequence_status == ProcessStatus.PAUSED:
-                return ComponentHealth(
-                    status=HealthStatus.DEGRADED,
-                    error="Sequence system paused",
-                    details={
-                        "sequences": {
-                            "total": len(self._sequences or {}),
-                            "loaded": list(self._sequences.keys()) if self._sequences else [],
-                            "failed": list(self._failed_sequences.keys()),
-                            "recovery_attempts": len(self._failed_sequences)
-                        },
-                        "execution": {
-                            "active_sequence": self._active_sequence,
-                            "status": self._sequence_status.value
-                        },
-                        "storage": {
-                            "path": str(sequence_dir),
-                            "exists": dir_exists,
-                            "writable": dir_writable
-                        }
-                    }
-                )
-
-            # Check if any critical components are missing
-            if not (sequences_loaded and dir_exists and dir_writable):
-                return ComponentHealth(
-                    status=HealthStatus.DEGRADED,
-                    error="Sequence system partially operational",
-                    details={
-                        "sequences": {
-                            "total": len(self._sequences or {}),
-                            "loaded": list(self._sequences.keys()) if self._sequences else [],
-                            "failed": list(self._failed_sequences.keys()),
-                            "recovery_attempts": len(self._failed_sequences)
-                        },
-                        "execution": {
-                            "active_sequence": self._active_sequence,
-                            "status": self._sequence_status.value
-                        },
-                        "storage": {
-                            "path": str(sequence_dir),
-                            "exists": dir_exists,
-                            "writable": dir_writable
-                        }
-                    }
-                )
-
-            return ComponentHealth(
-                status=HealthStatus.OK,
-                error=None,
-                details={
-                    "sequences": {
-                        "total": len(self._sequences or {}),
-                        "loaded": list(self._sequences.keys()) if self._sequences else [],
-                        "failed": list(self._failed_sequences.keys()),
-                        "recovery_attempts": len(self._failed_sequences)
-                    },
-                    "execution": {
-                        "active_sequence": self._active_sequence,
-                        "status": self._sequence_status.value
-                    },
-                    "storage": {
-                        "path": str(sequence_dir),
-                        "exists": dir_exists,
-                        "writable": dir_writable
-                    },
-                    "uptime": self.uptime
-                }
-            )
-
+            if self.is_running:
+                await self.stop()
+                
+            self._is_initialized = False
+            self._is_prepared = False
+            self._sequences = {}
+            self._failed_sequences = {}
+            self._active_sequence = None
+            logger.info(f"{self.service_name} service shut down")
+            
         except Exception as e:
-            error_msg = f"Health check failed: {str(e)}"
+            error_msg = f"Error during {self.service_name} service shutdown: {str(e)}"
             logger.error(error_msg)
-            return ComponentHealth(
-                status=HealthStatus.ERROR,
-                error=error_msg
+            raise create_error(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                message=error_msg
             )
+
+    def health(self) -> ComponentHealth:
+        """Get service health."""
+        status = HealthStatus.HEALTHY if self.is_running else HealthStatus.UNHEALTHY
+        details = {
+            "version": self._version,
+            "uptime": self.uptime,
+            "status": status,
+            "initialized": self.is_initialized,
+            "prepared": self.is_prepared,
+            "sequences_loaded": len(self._sequences),
+            "failed_sequences": len(self._failed_sequences),
+            "active_sequence": self._active_sequence,
+            "sequence_status": self._sequence_status
+        }
+        return ComponentHealth(
+            name=self.service_name,
+            status=status,
+            details=details
+        )
 
     async def get_sequence_status(self, sequence_id: str) -> ProcessStatus:
         """Get sequence execution status."""
@@ -299,18 +274,9 @@ class SequenceService:
     async def _load_sequences(self) -> None:
         """Load sequences from configuration."""
         try:
-            # Load service config
-            config_path = os.path.join("backend", "config", "process.json")
-            if os.path.exists(config_path):
-                with open(config_path, "r") as f:
-                    config = json.load(f)
-                    if "sequence" in config:
-                        self._version = config["sequence"].get("version", self._version)
-            
             # Load sequence files from data directory
-            sequence_dir = Path("backend/data/sequences")
-            if sequence_dir.exists():
-                for file_path in sequence_dir.glob("*.json"):
+            if self._sequence_dir.exists():
+                for file_path in self._sequence_dir.glob("*.json"):
                     try:
                         with open(file_path, "r") as f:
                             sequence_data = json.load(f)
@@ -365,13 +331,13 @@ class SequenceService:
         """Get sequence by ID.
         
         Args:
-            sequence_id: Sequence identifier
+            sequence_id: Sequence ID
             
         Returns:
-            SequenceResponse: Sequence response containing sequence data
+            Sequence data
             
         Raises:
-            HTTPException: If sequence not found or service error
+            HTTPException: If sequence not found or service not running
         """
         try:
             if not self.is_running:
@@ -379,27 +345,39 @@ class SequenceService:
                     status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
                     message=f"{self.service_name} service not running"
                 )
-            
+                
             if sequence_id not in self._sequences:
                 raise create_error(
                     status_code=status.HTTP_404_NOT_FOUND,
-                    message=f"Sequence {sequence_id} not found"
+                    message=f'Sequence "{sequence_id}" not found'
                 )
                 
-            sequence_data = self._sequences[sequence_id]["sequence"]
-            # Convert the loaded JSON data into a Sequence model
+            sequence_data = self._sequences[sequence_id]
+            if "sequence" not in sequence_data:
+                sequence_data = {"sequence": sequence_data}
+                
+            # First create the metadata object
+            metadata = SequenceMetadata(
+                name=sequence_data["sequence"]["metadata"]["name"],
+                version=sequence_data["sequence"]["metadata"]["version"],
+                created=sequence_data["sequence"]["metadata"]["created"],
+                author=sequence_data["sequence"]["metadata"]["author"],
+                description=sequence_data["sequence"]["metadata"]["description"]
+            )
+            
+            # Create list of sequence steps
+            steps = [SequenceStep(**step) for step in sequence_data["sequence"]["steps"]]
+            
+            # Create the sequence object
             sequence = Sequence(
                 id=sequence_id,
-                metadata=SequenceMetadata(
-                    name=sequence_data["metadata"]["name"],
-                    version=sequence_data["metadata"]["version"],
-                    created=sequence_data["metadata"]["created"],
-                    author=sequence_data["metadata"]["author"],
-                    description=sequence_data["metadata"]["description"]
-                ),
-                steps=[SequenceStep(**step) for step in sequence_data["steps"]]
+                metadata=metadata,
+                steps=steps
             )
-            return SequenceResponse(sequence=sequence)
+            
+            # Create and return the response
+            response = SequenceResponse(sequence=sequence)
+            return response
             
         except KeyError as e:
             logger.error(f"Invalid sequence data structure for {sequence_id}: {e}")

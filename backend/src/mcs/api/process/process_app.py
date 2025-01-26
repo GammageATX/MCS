@@ -16,6 +16,7 @@ from mcs.api.process.endpoints.process_endpoints import router as process_router
 from mcs.api.process.endpoints.pattern_endpoints import router as pattern_router
 from mcs.api.process.endpoints.parameter_endpoints import router as parameter_router
 from mcs.api.process.endpoints.sequence_endpoints import router as sequence_router
+from mcs.api.process.endpoints.schema_endpoints import router as schema_router
 from mcs.utils.errors import create_error
 
 
@@ -118,8 +119,8 @@ def create_process_service() -> FastAPI:
             content={"detail": exc.errors()},
         )
     
-    # Create service instance with config
-    service = ProcessService(config=config)
+    # Create service instance with version from config
+    service = ProcessService(version=config.get("version", "1.0.0"))
     app.state.service = service
     
     # Add routes
@@ -127,5 +128,6 @@ def create_process_service() -> FastAPI:
     app.include_router(pattern_router)
     app.include_router(parameter_router)
     app.include_router(sequence_router)
+    app.include_router(schema_router)
     
     return app

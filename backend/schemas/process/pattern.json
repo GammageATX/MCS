@@ -1,0 +1,70 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Pattern",
+  "type": "object",
+  "properties": {
+    "id": {
+      "type": "string",
+      "title": "ID",
+      "description": "Unique pattern identifier"
+    },
+    "name": {
+      "type": "string",
+      "title": "Name",
+      "description": "Pattern name"
+    },
+    "description": {
+      "type": "string",
+      "title": "Description",
+      "description": "Pattern description"
+    },
+    "type": {
+      "type": "string",
+      "title": "Type",
+      "enum": ["linear", "serpentine", "spiral", "custom"],
+      "description": "Pattern type"
+    },
+    "params": {
+      "type": "object",
+      "title": "Parameters",
+      "properties": {
+        "width": {
+          "type": "number",
+          "title": "Width",
+          "description": "Pattern width in mm",
+          "minimum": 0,
+          "maximum": 500
+        },
+        "height": {
+          "type": "number",
+          "title": "Height",
+          "description": "Pattern height in mm",
+          "minimum": 0,
+          "maximum": 500
+        },
+        "velocity": {
+          "type": "number",
+          "title": "Velocity",
+          "description": "Motion velocity in mm/s",
+          "minimum": 0,
+          "maximum": 500
+        },
+        "line_spacing": {
+          "type": "number",
+          "title": "Line Spacing",
+          "description": "Line spacing in mm",
+          "minimum": 0.1,
+          "maximum": 50
+        },
+        "direction": {
+          "type": "string",
+          "title": "Direction",
+          "description": "Primary motion direction",
+          "pattern": "^[xy]$"
+        }
+      },
+      "required": ["width", "height", "velocity", "line_spacing", "direction"]
+    }
+  },
+  "required": ["name", "type", "params"]
+} 

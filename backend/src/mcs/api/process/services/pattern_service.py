@@ -3,39 +3,43 @@
 This module implements the Pattern service for managing process patterns.
 """
 
-import os
-from pathlib import Path
 from datetime import datetime
+from pathlib import Path
 from typing import List, Dict, Any
-
-import json
 from fastapi import status
 from loguru import logger
+import json
 
+from mcs.api.process.models import ProcessStatus
+from mcs.api.process.validators import validate_pattern
 from mcs.utils.errors import create_error
-from mcs.utils.health import (
-    HealthStatus,
-    ComponentHealth
-)
-from mcs.api.process.models.process_models import ProcessStatus, Pattern
+from mcs.utils.health import HealthStatus, ComponentHealth
+from mcs.api.process.models.process_models import Pattern
 
 
 class PatternService:
     """Service for managing process patterns."""
 
-    def __init__(self, config: Dict[str, Any]):
+    def __init__(self, config: Dict[str, Any]) -> None:
         """Initialize pattern service.
         
         Args:
             config: Service configuration
         """
+        # Basic properties
         self._service_name = "pattern"
+        self._config = config
         self._version = config.get("version", "1.0.0")
         self._is_running = False
         self._is_initialized = False
+        self._is_prepared = False
         self._start_time = None
         
-        # Initialize components to None
+        # Paths
+        self._data_path = None
+        self._schema_path = None
+        
+        # State
         self._patterns = {}
         self._failed_patterns = {}
         self._pattern_status = ProcessStatus.IDLE
@@ -63,6 +67,11 @@ class PatternService:
         return self._is_initialized
 
     @property
+    def is_prepared(self) -> bool:
+        """Get service preparation state."""
+        return self._is_prepared
+
+    @property
     def uptime(self) -> float:
         """Get service uptime in seconds."""
         return (datetime.now() - self._start_time).total_seconds() if self._start_time else 0.0
@@ -76,17 +85,55 @@ class PatternService:
                     message=f"{self.service_name} service already running"
                 )
             
-            # Initialize patterns
-            self._patterns = {}
+            # Get paths from config
+            self._data_path = Path(self._config["paths"]["data"])
+            self._schema_path = Path(self._config["paths"]["schemas"])
             
-            # Load patterns from config
-            await self._load_patterns()
+            # Validate paths
+            if not self._data_path.exists():
+                self._data_path.mkdir(parents=True, exist_ok=True)
+                logger.info(f"Created pattern data directory: {self._data_path}")
+                
+            if not self._schema_path.exists():
+                self._schema_path.mkdir(parents=True, exist_ok=True)
+                logger.info(f"Created pattern schema directory: {self._schema_path}")
             
             self._is_initialized = True
             logger.info(f"{self.service_name} service initialized")
             
         except Exception as e:
             error_msg = f"Failed to initialize {self.service_name} service: {str(e)}"
+            logger.error(error_msg)
+            raise create_error(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                message=error_msg
+            )
+
+    async def prepare(self) -> None:
+        """Prepare service for operation."""
+        try:
+            if not self.is_initialized:
+                raise create_error(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    message=f"{self.service_name} service not initialized"
+                )
+
+            if self.is_running:
+                raise create_error(
+                    status_code=status.HTTP_409_CONFLICT,
+                    message=f"{self.service_name} service already running"
+                )
+
+            # Initialize state
+            self._patterns = {}
+            self._failed_patterns = {}
+            self._pattern_status = ProcessStatus.IDLE
+
+            self._is_prepared = True
+            logger.info(f"{self.service_name} service prepared")
+
+        except Exception as e:
+            error_msg = f"Failed to prepare {self.service_name} service: {str(e)}"
             logger.error(error_msg)
             raise create_error(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
@@ -102,11 +149,14 @@ class PatternService:
                     message=f"{self.service_name} service already running"
                 )
 
-            if not self.is_initialized:
+            if not self.is_prepared:
                 raise create_error(
                     status_code=status.HTTP_400_BAD_REQUEST,
-                    message=f"{self.service_name} service not initialized"
+                    message=f"{self.service_name} service not prepared"
                 )
+
+            # Load patterns
+            await self._load_patterns()
 
             self._is_running = True
             self._start_time = datetime.now()
@@ -133,7 +183,6 @@ class PatternService:
                     message=f"{self.service_name} service not running"
                 )
 
-            self._is_initialized = False
             self._is_running = False
             self._start_time = None
             self._pattern_status = ProcessStatus.IDLE
@@ -147,145 +196,90 @@ class PatternService:
                 message=error_msg
             )
 
-    async def health(self) -> ComponentHealth:
-        """Get service health status."""
+    async def shutdown(self) -> None:
+        """Shutdown service and cleanup resources."""
         try:
-            if not self.is_running:
-                return ComponentHealth(
-                    status=HealthStatus.ERROR,
-                    error=f"{self.service_name} service not running"
-                )
-
-            # Check critical components
-            patterns_loaded = self._patterns is not None and len(self._patterns) > 0
-            pattern_dir = Path("backend/data/patterns")
-            dir_exists = pattern_dir.exists()
-            dir_writable = dir_exists and os.access(pattern_dir, os.W_OK)
-
-            # Map process status to health status
-            if self._pattern_status == ProcessStatus.ERROR:
-                return ComponentHealth(
-                    status=HealthStatus.ERROR,
-                    error="Pattern system in error state",
-                    details={
-                        "patterns": {
-                            "total": len(self._patterns or {}),
-                            "loaded": list(self._patterns.keys()) if self._patterns else [],
-                            "failed": list(self._failed_patterns.keys()),
-                            "recovery_attempts": len(self._failed_patterns)
-                        },
-                        "storage": {
-                            "path": str(pattern_dir),
-                            "exists": dir_exists,
-                            "writable": dir_writable
-                        }
-                    }
-                )
-            elif self._pattern_status == ProcessStatus.PAUSED:
-                return ComponentHealth(
-                    status=HealthStatus.DEGRADED,
-                    error="Pattern system paused",
-                    details={
-                        "patterns": {
-                            "total": len(self._patterns or {}),
-                            "loaded": list(self._patterns.keys()) if self._patterns else [],
-                            "failed": list(self._failed_patterns.keys()),
-                            "recovery_attempts": len(self._failed_patterns)
-                        },
-                        "storage": {
-                            "path": str(pattern_dir),
-                            "exists": dir_exists,
-                            "writable": dir_writable
-                        }
-                    }
-                )
-
-            # Check if any critical components are missing
-            if not (patterns_loaded and dir_exists and dir_writable):
-                return ComponentHealth(
-                    status=HealthStatus.DEGRADED,
-                    error="Pattern system partially operational",
-                    details={
-                        "patterns": {
-                            "total": len(self._patterns or {}),
-                            "loaded": list(self._patterns.keys()) if self._patterns else [],
-                            "failed": list(self._failed_patterns.keys()),
-                            "recovery_attempts": len(self._failed_patterns)
-                        },
-                        "storage": {
-                            "path": str(pattern_dir),
-                            "exists": dir_exists,
-                            "writable": dir_writable
-                        }
-                    }
-                )
-
-            return ComponentHealth(
-                status=HealthStatus.OK,
-                error=None,
-                details={
-                    "patterns": {
-                        "total": len(self._patterns or {}),
-                        "loaded": list(self._patterns.keys()) if self._patterns else [],
-                        "failed": list(self._failed_patterns.keys()),
-                        "recovery_attempts": len(self._failed_patterns)
-                    },
-                    "storage": {
-                        "path": str(pattern_dir),
-                        "exists": dir_exists,
-                        "writable": dir_writable
-                    },
-                    "uptime": self.uptime
-                }
-            )
-
+            if self.is_running:
+                await self.stop()
+                
+            self._is_initialized = False
+            self._is_prepared = False
+            self._patterns = {}
+            self._failed_patterns = {}
+            logger.info(f"{self.service_name} service shut down")
+            
         except Exception as e:
-            error_msg = f"Health check failed: {str(e)}"
+            error_msg = f"Error during {self.service_name} service shutdown: {str(e)}"
             logger.error(error_msg)
-            return ComponentHealth(
-                status=HealthStatus.ERROR,
-                error=error_msg
+            raise create_error(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                message=error_msg
             )
+
+    def health(self) -> ComponentHealth:
+        """Get service health."""
+        status = HealthStatus.HEALTHY if self.is_running else HealthStatus.UNHEALTHY
+        details = {
+            "version": self._version,
+            "uptime": self.uptime,
+            "status": status,
+            "initialized": self.is_initialized,
+            "prepared": self.is_prepared,
+            "patterns_loaded": len(self._patterns),
+            "failed_patterns": len(self._failed_patterns),
+            "pattern_status": self._pattern_status
+        }
+        return ComponentHealth(
+            name=self.service_name,
+            status=status,
+            details=details
+        )
 
     async def _load_patterns(self) -> None:
-        """Load patterns from configuration."""
+        """Load patterns from files."""
         try:
-            # Load service config
-            config_path = os.path.join("backend", "config", "process.json")
-            if os.path.exists(config_path):
-                with open(config_path, "r") as f:
-                    config = json.load(f)
-                    if "pattern" in config:
-                        self._version = config["pattern"].get("version", self._version)
-            
-            # Load pattern files from data directory
-            pattern_dir = Path("backend/data/patterns")
-            if pattern_dir.exists():
-                for file_path in pattern_dir.glob("*.json"):
+            logger.debug(f"Loading patterns from {self._data_path}")
+            if not self._data_path.exists():
+                logger.error(f"Pattern directory not found: {self._data_path}")
+                return
+
+            pattern_files = [f for f in self._data_path.glob("*.json")]
+            logger.debug(f"Found pattern files: {pattern_files}")
+
+            for file_path in pattern_files:
+                try:
+                    logger.debug(f"Loading pattern from {file_path}")
+                    
+                    with open(file_path) as f:
+                        pattern_data = json.load(f)
+                        
+                    logger.debug(f"Pattern data loaded: {pattern_data}")
+                    
+                    # Validate pattern data
                     try:
-                        with open(file_path, "r") as f:
-                            pattern_data = json.load(f)
-                            pattern_id = file_path.stem
-                            # Convert the loaded JSON data into a Pattern model
-                            self._patterns[pattern_id] = {
-                                "id": pattern_id,
-                                "name": pattern_data["pattern"]["name"],
-                                "description": pattern_data["pattern"]["description"],
-                                "type": pattern_data["pattern"]["type"],
-                                "params": pattern_data["pattern"]["params"]
-                            }
-                            logger.info(f"Loaded pattern file: {file_path.name}")
+                        validated_data = validate_pattern(pattern_data)
+                        pattern_data = validated_data.get("pattern", pattern_data)
                     except Exception as e:
-                        logger.error(f"Failed to load pattern file {file_path.name}: {str(e)}")
-                        self._failed_patterns[file_path.stem] = str(e)
-            
+                        logger.error(f"Invalid pattern data in {file_path.name}: {str(e)}")
+                        self._failed_patterns[file_path.stem] = f"Validation failed: {str(e)}"
+                        continue
+                    
+                    pattern_id = pattern_data.get("id", file_path.stem)
+                    self._patterns[pattern_id] = pattern_data
+                    logger.info(f"Loaded pattern file: {file_path.name}")
+                except Exception as e:
+                    logger.error(f"Failed to load pattern file {file_path.name}: {str(e)}")
+                    self._failed_patterns[file_path.stem] = str(e)
+                    continue
+
             logger.info(f"Loaded {len(self._patterns)} patterns")
+            logger.debug(f"Pattern IDs: {list(self._patterns.keys())}")
             
         except Exception as e:
             error_msg = f"Failed to load patterns: {str(e)}"
             logger.error(error_msg)
             raise create_error(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
                 message=error_msg
             )
 
@@ -331,34 +325,28 @@ class PatternService:
                 message=error_msg
             )
             
-    async def list_patterns(self) -> List[Pattern]:
+    async def list_patterns(self) -> List[str]:
         """List all available patterns.
         
         Returns:
-            List of Pattern objects
+            List of pattern IDs
             
         Raises:
             HTTPException if service not running
         """
         try:
+            logger.debug(f"Pattern service list_patterns called. Running: {self.is_running}")
+            
             if not self.is_running:
                 raise create_error(
                     status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
                     message=f"{self.service_name} service not running"
                 )
-                
-            patterns = []
-            for pattern_id, pattern_data in self._patterns.items():
-                pattern = Pattern(
-                    id=pattern_id,
-                    name=pattern_data["name"],
-                    description=pattern_data["description"],
-                    type=pattern_data["type"],
-                    params=pattern_data["params"]
-                )
-                patterns.append(pattern)
             
-            return patterns
+            logger.debug(f"Number of patterns loaded: {len(self._patterns)}")
+            pattern_ids = list(self._patterns.keys())
+            logger.debug(f"Pattern IDs: {pattern_ids}")
+            return pattern_ids
             
         except Exception as e:
             error_msg = f"Failed to list patterns: {str(e)}"

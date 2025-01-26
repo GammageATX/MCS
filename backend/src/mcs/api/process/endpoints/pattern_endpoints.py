@@ -7,7 +7,7 @@ from mcs.utils.errors import create_error
 from mcs.api.process.process_service import ProcessService
 from mcs.api.process.models.process_models import PatternResponse, PatternListResponse, BaseResponse, Pattern
 
-router = APIRouter(tags=["patterns"])
+router = APIRouter(prefix="/patterns", tags=["patterns"])
 
 
 def get_process_service(request: Request) -> ProcessService:
@@ -27,8 +27,16 @@ async def list_patterns(
 ) -> PatternListResponse:
     """List available patterns."""
     try:
-        patterns = await service.pattern_service.list_patterns()
-        return PatternListResponse(patterns=patterns)
+        logger.debug("Listing patterns...")
+        logger.debug(f"Pattern service running: {service.pattern_service.is_running}")
+        logger.debug(f"Pattern service initialized: {service.pattern_service.is_initialized}")
+        
+        pattern_ids = await service.pattern_service.list_patterns()
+        logger.debug(f"Found {len(pattern_ids)} patterns")
+        
+        # Create and return the response with the list of IDs
+        return PatternListResponse(patterns=pattern_ids)
+        
     except Exception as e:
         logger.error(f"Failed to list patterns: {e}")
         raise create_error(

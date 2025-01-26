@@ -129,8 +129,7 @@ async def get_sequence(
 ) -> SequenceResponse:
     """Get sequence by ID."""
     try:
-        sequence = await service.sequence_service.get_sequence(sequence_id)
-        return SequenceResponse(sequence=sequence)
+        return await service.sequence_service.get_sequence(sequence_id)
     except Exception as e:
         logger.error(f"Failed to get sequence {sequence_id}: {e}")
         raise create_error(

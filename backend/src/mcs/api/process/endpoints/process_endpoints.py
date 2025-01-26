@@ -1,6 +1,5 @@
 """Process API endpoints."""
 
-from typing import Dict, Any
 from fastapi import APIRouter, Depends, Request, status
 from loguru import logger
 
@@ -14,30 +13,6 @@ router = APIRouter(tags=["process"])
 def get_process_service(request: Request) -> ProcessService:
     """Get service instance from app state."""
     return request.app.state.service
-
-
-@router.get(
-    "/schemas/{entity_type}",
-    response_model=Dict[str, Any],
-    responses={
-        status.HTTP_404_NOT_FOUND: {"description": "Schema not found"},
-        status.HTTP_500_INTERNAL_SERVER_ERROR: {"description": "Failed to get schema"}
-    }
-)
-async def get_schema(
-    entity_type: str,
-    service: ProcessService = Depends(get_process_service)
-) -> Dict[str, Any]:
-    """Get JSON Schema for entity type."""
-    try:
-        schema = await service.schema_service.get_schema(entity_type)
-        return schema
-    except Exception as e:
-        logger.error(f"Failed to get schema for {entity_type}: {e}")
-        raise create_error(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            message=f"Failed to get schema: {str(e)}"
-        )
 
 
 @router.get(

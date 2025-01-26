@@ -15,7 +15,7 @@ from mcs.utils.health import ServiceHealth, ComponentHealth, HealthStatus, creat
 class SchemaService:
     """Schema service."""
 
-    def __init__(self, schema_path: str = os.path.join("backend", "config", "schemas"), version: str = "1.0.0"):
+    def __init__(self, schema_path: str = os.path.join("backend", "schemas", "config"), version: str = "1.0.0"):
         """Initialize service.
         
         Args:
