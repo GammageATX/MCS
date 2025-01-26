@@ -218,7 +218,7 @@ class PatternService:
 
     def health(self) -> ComponentHealth:
         """Get service health."""
-        status = HealthStatus.HEALTHY if self.is_running else HealthStatus.UNHEALTHY
+        status = HealthStatus.OK if self.is_running else HealthStatus.ERROR
         details = {
             "version": self._version,
             "uptime": self.uptime,
