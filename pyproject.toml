@@ -1,33 +1,25 @@
 [project]
 name = "mcs"
-version = "1.0.0"
-description = "Micro Cold Spray Control System"
-requires-python = ">=3.9"
-authors = [
-    {name = "Your Name", email = "your.email@example.com"}
-]
+version = "0.1.0"
+description = "Motion Control System"
 dependencies = [
-    "fastapi>=0.95.0",
-    "uvicorn>=0.22.0",
-    "pydantic>=2.0.0",
-    "pyyaml>=6.0.1",
-    "ruamel.yaml>=0.17.21",
-    "paramiko>=3.4.0",
-    "loguru>=0.7.0",
-    "productivity>=0.12.0",
-    "asyncssh>=2.13.2",
-    "websockets>=12.0",
-    "httpx>=0.24.0",
-    "jinja2>=3.1.2",
-    "python-multipart>=0.0.6",
-    "aiofiles>=23.2.1",
-    "typing_extensions>=4.0.0",
-    "jsonschema>=4.17.3",
-    "psutil>=5.9.0",
-    "redis>=5.0.0",
+    "fastapi>=0.104.1",
+    "uvicorn>=0.24.0",
+    "pydantic>=2.5.2",
+    "loguru>=0.7.2",
+    "python-dotenv>=1.0.0",
+    "requests>=2.31.0",
+    "paramiko>=3.3.1",
     "psycopg2-binary>=2.9.9",
-    "asyncio>=3.4.3",
-    "python-dotenv>=1.0.0"
+    "sqlalchemy>=2.0.23",
+    "alembic>=1.12.1",
+    "pytest>=7.4.3",
+    "pytest-asyncio>=0.21.1",
+    "httpx>=0.25.2",
+    "python-multipart>=0.0.6",
+    "python-jose[cryptography]>=3.3.0",
+    "passlib[bcrypt]>=1.7.4",
+    "email-validator>=2.1.0.post1"
 ]
 
 [build-system]

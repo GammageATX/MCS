@@ -37,16 +37,63 @@ export default function SystemMonitoring() {
   useEffect(() => {
     const pollSystemState = async () => {
       try {
-        const response = await fetch(`${API_CONFIG.COMMUNICATION_SERVICE}/state`);
-        if (!response.ok) {
-          throw new Error('Failed to fetch system state');
-        }
-        const data = await response.json();
-        setSystemState(data);
+        // Fetch health status from each service
+        const [configHealth, commHealth, processHealth, dataHealth] = await Promise.all([
+          fetch(`${API_CONFIG.CONFIG_SERVICE}/health`).then(res => res.json()),
+          fetch(`${API_CONFIG.COMMUNICATION_SERVICE}/health`).then(res => res.json()),
+          fetch(`${API_CONFIG.PROCESS_SERVICE}/health`).then(res => res.json()),
+          fetch(`${API_CONFIG.DATA_COLLECTION_SERVICE}/health`).then(res => res.json())
+        ]);
+
+        // Construct system state from individual health responses
+        const systemState: SystemState = {
+          config: {
+            name: 'config',
+            port: parseInt(API_CONFIG.CONFIG_SERVICE.split(':').pop() || '8001'),
+            status: configHealth.status,
+            uptime: configHealth.uptime,
+            version: configHealth.version,
+            mode: configHealth.mode || 'production',
+            error: configHealth.error,
+            components: configHealth.components || {}
+          },
+          communication: {
+            name: 'communication',
+            port: parseInt(API_CONFIG.COMMUNICATION_SERVICE.split(':').pop() || '8002'),
+            status: commHealth.status,
+            uptime: commHealth.uptime,
+            version: commHealth.version,
+            mode: commHealth.mode || 'production',
+            error: commHealth.error,
+            components: commHealth.components || {}
+          },
+          process: {
+            name: 'process',
+            port: parseInt(API_CONFIG.PROCESS_SERVICE.split(':').pop() || '8003'),
+            status: processHealth.status,
+            uptime: processHealth.uptime,
+            version: processHealth.version,
+            mode: processHealth.mode || 'production',
+            error: processHealth.error,
+            components: processHealth.components || {}
+          },
+          data_collection: {
+            name: 'data_collection',
+            port: parseInt(API_CONFIG.DATA_COLLECTION_SERVICE.split(':').pop() || '8004'),
+            status: dataHealth.status,
+            uptime: dataHealth.uptime,
+            version: dataHealth.version,
+            mode: dataHealth.mode || 'production',
+            error: dataHealth.error,
+            components: dataHealth.components || {}
+          }
+        };
+
+        setSystemState(systemState);
         setError(null);
       } catch (err) {
-        console.error('Error fetching system state:', err);
-        setError('Failed to fetch system state');
+        console.error('Error fetching system health:', err);
+        setError('Failed to fetch system health');
       }
     };
 
@@ -238,7 +285,7 @@ export default function SystemMonitoring() {
 
       {error && (
         <Alert severity="error" sx={{ mb: 3 }}>
-          Error fetching system state: {error}
+          Error fetching system health: {error}
         </Alert>
       )}
 

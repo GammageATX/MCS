@@ -1,5 +1,61 @@
 # Development Standards
 
+## Service Implementation
+
+1. Basic Properties
+   - Set in __init__
+   - Include version
+   - Include name
+   - Include dependencies
+
+2. Initialization
+   - Initialize components
+   - Start in dependency order
+   - Proper error handling
+   - Health check setup
+
+3. State Management
+   - Clear state transitions
+   - Proper error states
+   - Recovery procedures
+   - State persistence
+
+4. Real-time Updates
+   - Efficient polling
+   - Proper intervals
+   - Error handling
+   - State caching
+
+5. Error Handling
+   - Use create_error
+   - Proper status codes
+   - Detailed messages
+   - Error logging
+
+6. Health Monitoring
+   - Regular checks
+   - Component status
+   - Resource usage
+   - Error reporting
+
+7. Data Management
+   - Proper buffering
+   - Data validation
+   - Persistence handling
+   - Clean shutdown
+
+8. Communication
+   - REST endpoints
+   - Polling intervals
+   - Response formats
+   - Error handling
+
+9. Documentation
+   - API documentation
+   - Error codes
+   - State diagrams
+   - Setup guides
+
 ## Service Implementation Pattern
 
 ### Base Service Structure
@@ -48,7 +104,6 @@ def create_example_service() -> FastAPI:
     )
     
     return app
-```
 
 ### Service Lifecycle Methods
 
@@ -668,19 +723,19 @@ const theme = createTheme({
 
 ### Best Practices
 
-1. **Component Structure**
+1. *Component Structure*
    - Keep components focused and single-responsibility
    - Use TypeScript for props definitions
    - Implement proper error boundaries
    - Handle loading and error states
 
-2. **State Management**
+2. *State Management*
    - Use React Query for API state
    - Implement proper caching strategies
    - Handle optimistic updates
    - Manage WebSocket connections efficiently
 
-3. **Performance**
+3. *Performance*
    - Implement proper memoization
    - Use lazy loading for routes
    - Optimize re-renders

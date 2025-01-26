@@ -289,7 +289,6 @@ class InternalStateService:
         """
         # First check if this is an internal state
         if tag_pattern in self._internal_states:
-            logger.debug(f"Found internal state value for {tag_pattern} = {self._internal_states[tag_pattern]}")
             return self._internal_states[tag_pattern]
             
         # Handle {1|2} pattern
@@ -300,7 +299,6 @@ class InternalStateService:
                 try:
                     value = await self._tag_cache.get_tag(tag)
                     if value is not None:
-                        logger.debug(f"Found value for wildcard tag {tag_pattern} -> {tag} = {value}")
                         return value
                 except Exception as e:
                     logger.warning(f"Error getting tag {tag}: {e}")
@@ -312,8 +310,6 @@ class InternalStateService:
                 value = await self._tag_cache.get_tag(tag_pattern)
                 if value is None:
                     logger.warning(f"No value found for tag: {tag_pattern}")
-                else:
-                    logger.debug(f"Found value for tag {tag_pattern} = {value}")
                 return value
             except Exception as e:
                 logger.warning(f"Error getting tag {tag_pattern}: {e}")
@@ -467,14 +463,12 @@ class InternalStateService:
             state for state in self._state_rules
             if self._is_base_state(state)
         ]
-        logger.debug(f"Evaluating base states: {base_states}")
         
         for state in base_states:
             await self._evaluate_state(state)
             
         # Then evaluate states that depend on other states
         dependent_states = [state for state in self._state_rules if state not in base_states]
-        logger.debug(f"Evaluating dependent states: {dependent_states}")
         
         for state in dependent_states:
             await self._evaluate_state(state)

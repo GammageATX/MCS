@@ -36,7 +36,7 @@ class PatternService:
         self._start_time = None
         
         # Initialize components to None
-        self._patterns = None
+        self._patterns = {}
         self._failed_patterns = {}
         self._pattern_status = ProcessStatus.IDLE
         
@@ -266,7 +266,14 @@ class PatternService:
                         with open(file_path, "r") as f:
                             pattern_data = json.load(f)
                             pattern_id = file_path.stem
-                            self._patterns[pattern_id] = pattern_data
+                            # Convert the loaded JSON data into a Pattern model
+                            self._patterns[pattern_id] = {
+                                "id": pattern_id,
+                                "name": pattern_data["pattern"]["name"],
+                                "description": pattern_data["pattern"]["description"],
+                                "type": pattern_data["pattern"]["type"],
+                                "params": pattern_data["pattern"]["params"]
+                            }
                             logger.info(f"Loaded pattern file: {file_path.name}")
                     except Exception as e:
                         logger.error(f"Failed to load pattern file {file_path.name}: {str(e)}")
@@ -282,28 +289,77 @@ class PatternService:
                 message=error_msg
             )
 
-    async def list_patterns(self) -> List[Pattern]:
-        """List available patterns."""
+    async def get_pattern(self, pattern_id: str) -> Pattern:
+        """Get pattern by ID.
+        
+        Args:
+            pattern_id: Pattern ID
+            
+        Returns:
+            Pattern object
+            
+        Raises:
+            HTTPException if pattern not found or service not running
+        """
         try:
             if not self.is_running:
                 raise create_error(
                     status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
                     message=f"{self.service_name} service not running"
                 )
-
+                
+            if pattern_id not in self._patterns:
+                raise create_error(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    message=f"Pattern {pattern_id} not found"
+                )
+                
+            pattern_data = self._patterns[pattern_id]
+            return Pattern(
+                id=pattern_id,
+                name=pattern_data["name"],
+                description=pattern_data["description"],
+                type=pattern_data["type"],
+                params=pattern_data["params"]
+            )
+            
+        except Exception as e:
+            error_msg = f"Failed to get pattern {pattern_id}: {str(e)}"
+            logger.error(error_msg)
+            raise create_error(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                message=error_msg
+            )
+            
+    async def list_patterns(self) -> List[Pattern]:
+        """List all available patterns.
+        
+        Returns:
+            List of Pattern objects
+            
+        Raises:
+            HTTPException if service not running
+        """
+        try:
+            if not self.is_running:
+                raise create_error(
+                    status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                    message=f"{self.service_name} service not running"
+                )
+                
             patterns = []
             for pattern_id, pattern_data in self._patterns.items():
                 pattern = Pattern(
                     id=pattern_id,
-                    name=pattern_data.get("name", pattern_id),
-                    description=pattern_data.get("description", ""),
-                    type=pattern_data.get("type", "linear"),
-                    params=pattern_data.get("params", {})
+                    name=pattern_data["name"],
+                    description=pattern_data["description"],
+                    type=pattern_data["type"],
+                    params=pattern_data["params"]
                 )
                 patterns.append(pattern)
-
+            
             return patterns
-
+            
         except Exception as e:
             error_msg = f"Failed to list patterns: {str(e)}"
             logger.error(error_msg)

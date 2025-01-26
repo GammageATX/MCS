@@ -139,7 +139,7 @@ class SequenceResponse(BaseModel):
 
 class SequenceListResponse(BaseModel):
     """Sequence list response."""
-    sequences: List[Sequence]
+    sequences: List[str] = Field(description="List of sequence IDs")
 
 
 class ProcessStatus(str, Enum):

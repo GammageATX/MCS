@@ -6,7 +6,7 @@ This module implements the Sequence service for managing process sequences.
 import os
 from pathlib import Path
 from datetime import datetime
-from typing import Dict, Any
+from typing import Dict, Any, List
 
 import json
 from fastapi import status
@@ -16,9 +16,15 @@ from mcs.utils.errors import create_error
 from mcs.utils.health import (  # Noqa: F401
     HealthStatus,
     ComponentHealth,
-    create_error_health
+    create_error_health  # Noqa: F401
 )
-from mcs.api.process.models.process_models import ProcessStatus
+from mcs.api.process.models.process_models import (
+    ProcessStatus,
+    Sequence,
+    SequenceMetadata,
+    SequenceStep,
+    SequenceResponse
+)
 
 
 class SequenceService:
@@ -309,6 +315,9 @@ class SequenceService:
                         with open(file_path, "r") as f:
                             sequence_data = json.load(f)
                             sequence_id = file_path.stem
+                            # Validate sequence data structure
+                            if "sequence" not in sequence_data:
+                                sequence_data = {"sequence": sequence_data}
                             self._sequences[sequence_id] = sequence_data
                             logger.info(f"Loaded sequence file: {file_path.name}")
                     except Exception as e:
@@ -325,53 +334,41 @@ class SequenceService:
                 message=error_msg
             )
 
-    async def list_sequences(self):
+    async def list_sequences(self) -> List[str]:
         """List available sequences.
         
         Returns:
-            List[Sequence]: List of available sequences
+            List of sequence IDs
             
         Raises:
-            HTTPException: If service not running or error occurs
+            HTTPException if service not running
         """
         try:
-            logger.info(f"list_sequences called - running: {self.is_running}, initialized: {self.is_initialized}")
-            logger.info(f"Current sequences: {list(self._sequences.keys())}")
-            
             if not self.is_running:
                 raise create_error(
                     status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
                     message=f"{self.service_name} service not running"
                 )
-            
-            # Return sequences with their IDs
-            sequences = []
-            for sequence_id, sequence_data in self._sequences.items():
-                # Create a Sequence object with the ID
-                sequence = {
-                    "id": sequence_id,
-                    "metadata": sequence_data.get("metadata", {}),
-                    "steps": sequence_data.get("steps", [])
-                }
-                sequences.append(sequence)
-            
-            return sequences
+                
+            # Just return the list of sequence IDs
+            return list(self._sequences.keys())
             
         except Exception as e:
-            logger.error(f"Failed to list sequences: {e}")
+            error_msg = f"Failed to list sequences: {str(e)}"
+            logger.error(error_msg)
             raise create_error(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                message=f"Failed to list sequences: {str(e)}"
+                message=error_msg
             )
 
-    async def get_sequence(self, sequence_id: str):
+    async def get_sequence(self, sequence_id: str) -> SequenceResponse:
         """Get sequence by ID.
         
         Args:
             sequence_id: Sequence identifier
             
         Returns:
-            Sequence: Sequence data
+            SequenceResponse: Sequence response containing sequence data
             
         Raises:
             HTTPException: If sequence not found or service error
@@ -389,15 +386,27 @@ class SequenceService:
                     message=f"Sequence {sequence_id} not found"
                 )
                 
-            sequence_data = self._sequences[sequence_id]
-            # Add the ID to the sequence data
-            sequence = {
-                "id": sequence_id,
-                "metadata": sequence_data.get("metadata", {}),
-                "steps": sequence_data.get("steps", [])
-            }
-            return sequence
+            sequence_data = self._sequences[sequence_id]["sequence"]
+            # Convert the loaded JSON data into a Sequence model
+            sequence = Sequence(
+                id=sequence_id,
+                metadata=SequenceMetadata(
+                    name=sequence_data["metadata"]["name"],
+                    version=sequence_data["metadata"]["version"],
+                    created=sequence_data["metadata"]["created"],
+                    author=sequence_data["metadata"]["author"],
+                    description=sequence_data["metadata"]["description"]
+                ),
+                steps=[SequenceStep(**step) for step in sequence_data["steps"]]
+            )
+            return SequenceResponse(sequence=sequence)
             
+        except KeyError as e:
+            logger.error(f"Invalid sequence data structure for {sequence_id}: {e}")
+            raise create_error(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                message=f"Invalid sequence data structure: missing {str(e)}"
+            )
         except Exception as e:
             logger.error(f"Failed to get sequence {sequence_id}: {e}")
             raise create_error(

@@ -433,10 +433,8 @@ class TagCacheService:
                                 values = await self._plc_client.get(batch)
                                 for tag, value in values.items():
                                     if tag in self._cache and self._cache[tag] != value:
-                                        old_value = self._cache[tag]
                                         self._cache[tag] = value
                                         self._notify_tag_subscribers(tag, value)
-                                        logger.debug(f"Tag {tag} changed: {old_value} -> {value}")
                         except Exception as e:
                             logger.error(f"Failed to poll PLC tags: {e}")
                     

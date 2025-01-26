@@ -224,11 +224,11 @@ export default function EquipmentControl() {
   const toggleVentValve = async () => {
     if (!equipmentState) return;
     const newState = !equipmentState.vacuum.vent_valve_state;
-    const endpoint = newState ? 'open' : 'close';
     try {
       const response = await fetch(`${API_CONFIG.COMMUNICATION_SERVICE}/equipment/vacuum/vent_valve`, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' }
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ open: newState })
       });
       if (!response.ok) throw new Error('Failed to toggle vent valve');
       // Update local state

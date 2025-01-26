@@ -16,7 +16,29 @@
         "version": "1.0.0"
       },
       "internal_state": {
-        "version": "1.0.0"
+        "version": "1.0.0",
+        "state_rules": {
+          "motion_enabled": {
+            "type": "tag",
+            "tag": "Motion.Enabled",
+            "value": true
+          },
+          "at_valid_position": {
+            "type": "tag",
+            "tag": "Motion.AtValidPosition",
+            "value": true
+          },
+          "flows_stable": {
+            "type": "tag",
+            "tag": "Process.FlowsStable",
+            "value": true
+          },
+          "pressures_stable": {
+            "type": "tag",
+            "tag": "Process.PressuresStable",
+            "value": true
+          }
+        }
       }
     },
     "hardware": {

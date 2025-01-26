@@ -45,7 +45,7 @@ Build a comprehensive control system for a novel micro cold spray coating proces
 - Modern React application with TypeScript
 - Component-based architecture with shadcn/ui
 - Real-time monitoring and control interface
-- WebSocket integration for live updates
+- Polling-based state updates
 
 #### Backend (FastAPI + Python)
 
@@ -95,6 +95,11 @@ Build a comprehensive control system for a novel micro cold spray coating proces
    - System state tracking
    - Performance metrics collection
 
+5. **Real-time State Updates**
+   - Polling-based state updates
+   - User authentication and authorization
+   - Health monitoring
+
 ## Technical Requirements
 
 - Type-safe communication between frontend and backend
@@ -118,3 +123,19 @@ Build a comprehensive control system for a novel micro cold spray coating proces
    - Clear documentation
    - Component isolation
    - Error handling best practices
+
+## Integration Points
+
+- REST API endpoints for service communication
+- Database connections
+- Hardware interfaces
+- External system integrations
+
+## Development Standards
+
+- Type safety across all services
+- Automated testing
+- Documentation requirements
+- Code review process
+- Performance monitoring
+- Security best practices

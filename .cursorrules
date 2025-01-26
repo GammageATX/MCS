@@ -52,11 +52,11 @@
                 "Report detailed health state",
                 "Include uptime and version"
             ],
-            "websocket_handling": [
-                "Implement reconnection logic",
+            "polling": [
+                "Implement efficient polling",
                 "Handle connection state changes",
-                "Maintain message queue on disconnect",
-                "Implement heartbeat mechanism"
+                "Maintain state cache",
+                "Implement proper intervals"
             ],
             "plc_communication": [
                 "Implement SSH connection retry logic",

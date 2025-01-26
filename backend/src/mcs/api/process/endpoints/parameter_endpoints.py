@@ -18,7 +18,7 @@ from mcs.api.process.models.process_models import (
     Powder
 )
 
-router = APIRouter(tags=["parameters"])
+router = APIRouter(prefix="/parameters", tags=["parameters"])
 
 
 def get_process_service(request: Request) -> ProcessService:
