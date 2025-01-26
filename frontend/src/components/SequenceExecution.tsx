@@ -14,37 +14,39 @@ import {
 } from '@mui/material';
 import { API_CONFIG } from '../config/api';
 
+interface SequenceMetadata {
+  name: string;
+  version: string;
+  created: string;
+  author: string;
+  description: string;
+}
+
+interface SequenceStep {
+  name: string;
+  step_type: string;
+  description?: string | null;
+  pattern_id?: string | null;
+  parameters?: string | null;
+  origin?: number[] | null;
+}
+
 interface Sequence {
   id: string;
-  metadata: {
-    name: string;
-    version: string;
-    created: string;
-    author: string;
-    description: string;
-  };
-  steps: Array<{
-    name: string;
-    step_type: string;
-    description: string;
-    pattern_id: string | null;
-    parameters: any | null;
-    origin: any | null;
-  }>;
+  metadata: SequenceMetadata;
+  steps: SequenceStep[];
+}
+
+interface SequenceResponse {
+  sequence: Sequence;
 }
 
 interface SequenceListResponse {
-  sequences: Array<{
-    id: string;
-    metadata: {
-      name: string;
-      description: string;
-    };
-  }>;
+  sequences: string[];
 }
 
 export default function SequenceExecution() {
-  const [sequences, setSequences] = useState<SequenceListResponse['sequences']>([]);
+  const [sequences, setSequences] = useState<string[]>([]);
   const [selectedSequence, setSelectedSequence] = useState<string>('');
   const [loadedSequence, setLoadedSequence] = useState<Sequence | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -59,7 +61,7 @@ export default function SequenceExecution() {
       if (!response.ok) {
         throw new Error('Failed to fetch sequences');
       }
-      const data = await response.json();
+      const data: SequenceListResponse = await response.json();
       console.log('Fetched sequences:', data);
       
       if (data && Array.isArray(data.sequences)) {
@@ -84,7 +86,7 @@ export default function SequenceExecution() {
       if (!response.ok) {
         throw new Error('Failed to load sequence details');
       }
-      const data = await response.json();
+      const data: SequenceResponse = await response.json();
       console.log('Loaded sequence:', data);
       if (data && data.sequence) {
         setLoadedSequence(data.sequence);
@@ -166,9 +168,9 @@ export default function SequenceExecution() {
               <em>No sequences available</em>
             </MenuItem>
           ) : (
-            sequences.map((sequence) => (
-              <MenuItem key={sequence.id} value={sequence.id}>
-                {sequence.metadata.name}
+            sequences.map((sequenceId) => (
+              <MenuItem key={sequenceId} value={sequenceId}>
+                {sequenceId}
               </MenuItem>
             ))
           )}
@@ -206,6 +208,15 @@ export default function SequenceExecution() {
           <Typography variant="h6" gutterBottom>
             {loadedSequence.metadata.name}
           </Typography>
+          <Typography variant="body2" color="textSecondary" paragraph>
+            Version: {loadedSequence.metadata.version}
+          </Typography>
+          <Typography variant="body2" color="textSecondary" paragraph>
+            Created: {loadedSequence.metadata.created}
+          </Typography>
+          <Typography variant="body2" color="textSecondary" paragraph>
+            Author: {loadedSequence.metadata.author}
+          </Typography>
           <Typography variant="body2" color="textSecondary" gutterBottom>
             {loadedSequence.metadata.description}
           </Typography>
@@ -214,7 +225,15 @@ export default function SequenceExecution() {
               <ListItem key={index}>
                 <ListItemText
                   primary={step.name}
-                  secondary={`Type: ${step.step_type}${step.description ? ` - ${step.description}` : ''}`}
+                  secondary={
+                    <>
+                      Type: {step.step_type}
+                      {step.description && ` - ${step.description}`}
+                      {step.pattern_id && ` - Pattern: ${step.pattern_id}`}
+                      {step.parameters && ` - Parameters: ${step.parameters}`}
+                      {step.origin && ` - Origin: [${step.origin.join(', ')}]`}
+                    </>
+                  }
                 />
               </ListItem>
             ))}

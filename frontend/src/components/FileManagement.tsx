@@ -47,37 +47,99 @@ import {
   sequenceSchema,
   sequenceUiSchema
 } from '../schemas/process';
-import { configSchema, configUiSchema, schemaSchema, schemaUiSchema } from '../schemas/config';
 
 interface Pattern {
   id: string;
   name: string;
-  type: string;
   description: string;
+  type: "linear" | "serpentine" | "spiral";
+  params: Record<string, any>;
+}
+
+interface PatternResponse {
+  pattern: Pattern;
+}
+
+interface PatternListResponse {
+  patterns: string[];
 }
 
 interface Parameter {
-  id: string;
   name: string;
-  value: any;
+  created: string;
+  author: string;
+  description: string;
+  nozzle: string;
+  main_gas: number;
+  feeder_gas: number;
+  frequency: number;
+  deagglomerator_speed: number;
+}
+
+interface ParameterResponse {
+  parameter: Parameter;
+}
+
+interface ParameterListResponse {
+  parameters: string[];
 }
 
 interface Nozzle {
-  id: string;
   name: string;
-  type: string;
+  manufacturer: string;
+  type: "convergent-divergent" | "convergent" | "vented" | "flat-plate" | "de laval";
+  description: string;
+}
+
+interface NozzleResponse {
+  nozzle: Nozzle;
+}
+
+interface NozzleListResponse {
+  nozzles: string[];
 }
 
 interface Powder {
-  id: string;
   name: string;
-  properties: any;
+  type: string;
+  size: string;
+  manufacturer: string;
+  lot: string;
+}
+
+interface PowderResponse {
+  powder: Powder;
+}
+
+interface PowderListResponse {
+  powders: string[];
 }
 
 interface Sequence {
   id: string;
-  name: string;
-  steps: any[];
+  metadata: {
+    name: string;
+    version: string;
+    created: string;
+    author: string;
+    description: string;
+  };
+  steps: Array<{
+    name: string;
+    step_type: string;
+    description?: string;
+    pattern_id?: string;
+    parameters?: string;
+    origin?: number[];
+  }>;
+}
+
+interface SequenceResponse {
+  sequence: Sequence;
+}
+
+interface SequenceListResponse {
+  sequences: string[];
 }
 
 interface CreatePatternData {
@@ -117,11 +179,16 @@ interface FileAction {
 }
 
 export default function FileManagement() {
-  const [patterns, setPatterns] = useState<Pattern[]>([]);
-  const [parameters, setParameters] = useState<Parameter[]>([]);
-  const [nozzles, setNozzles] = useState<Nozzle[]>([]);
-  const [powders, setPowders] = useState<Powder[]>([]);
-  const [sequences, setSequences] = useState<Sequence[]>([]);
+  const [patterns, setPatterns] = useState<string[]>([]);
+  const [parameters, setParameters] = useState<string[]>([]);
+  const [nozzles, setNozzles] = useState<string[]>([]);
+  const [powders, setPowders] = useState<string[]>([]);
+  const [sequences, setSequences] = useState<string[]>([]);
+  const [selectedPattern, setSelectedPattern] = useState<Pattern | null>(null);
+  const [selectedParameter, setSelectedParameter] = useState<Parameter | null>(null);
+  const [selectedNozzle, setSelectedNozzle] = useState<Nozzle | null>(null);
+  const [selectedPowder, setSelectedPowder] = useState<Powder | null>(null);
+  const [selectedSequence, setSelectedSequence] = useState<Sequence | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
@@ -162,7 +229,7 @@ export default function FileManagement() {
     try {
       const response = await fetch(`${API_CONFIG.PROCESS_SERVICE}/patterns/`);
       if (!response.ok) throw new Error('Failed to fetch patterns');
-      const data = await response.json();
+      const data: PatternListResponse = await response.json();
       setPatterns(data.patterns);
     } catch (err) {
       setError('Failed to load patterns');
@@ -173,7 +240,7 @@ export default function FileManagement() {
     try {
       const response = await fetch(`${API_CONFIG.PROCESS_SERVICE}/parameters/`);
       if (!response.ok) throw new Error('Failed to fetch parameters');
-      const data = await response.json();
+      const data: ParameterListResponse = await response.json();
       setParameters(data.parameters);
     } catch (err) {
       setError('Failed to load parameters');
@@ -182,9 +249,9 @@ export default function FileManagement() {
 
   const fetchNozzles = async () => {
     try {
-      const response = await fetch(`${API_CONFIG.PROCESS_SERVICE}/parameters/nozzles`);
+      const response = await fetch(`${API_CONFIG.PROCESS_SERVICE}/nozzles/`);
       if (!response.ok) throw new Error('Failed to fetch nozzles');
-      const data = await response.json();
+      const data: NozzleListResponse = await response.json();
       setNozzles(data.nozzles);
     } catch (err) {
       setError('Failed to load nozzles');
@@ -193,9 +260,9 @@ export default function FileManagement() {
 
   const fetchPowders = async () => {
     try {
-      const response = await fetch(`${API_CONFIG.PROCESS_SERVICE}/parameters/powders`);
+      const response = await fetch(`${API_CONFIG.PROCESS_SERVICE}/powders/`);
       if (!response.ok) throw new Error('Failed to fetch powders');
-      const data = await response.json();
+      const data: PowderListResponse = await response.json();
       setPowders(data.powders);
     } catch (err) {
       setError('Failed to load powders');
@@ -206,7 +273,7 @@ export default function FileManagement() {
     try {
       const response = await fetch(`${API_CONFIG.PROCESS_SERVICE}/sequences/`);
       if (!response.ok) throw new Error('Failed to fetch sequences');
-      const data = await response.json();
+      const data: SequenceListResponse = await response.json();
       setSequences(data.sequences);
     } catch (err) {
       setError('Failed to load sequences');
@@ -251,10 +318,10 @@ export default function FileManagement() {
           endpoint = `${API_CONFIG.PROCESS_SERVICE}/parameters/`;
           break;
         case 'nozzle':
-          endpoint = `${API_CONFIG.PROCESS_SERVICE}/parameters/nozzles`;
+          endpoint = `${API_CONFIG.PROCESS_SERVICE}/nozzles/`;
           break;
         case 'powder':
-          endpoint = `${API_CONFIG.PROCESS_SERVICE}/parameters/powders`;
+          endpoint = `${API_CONFIG.PROCESS_SERVICE}/powders/`;
           break;
         case 'sequence':
           endpoint = `${API_CONFIG.PROCESS_SERVICE}/sequences/`;
@@ -410,6 +477,62 @@ export default function FileManagement() {
     } catch (err) {
       console.error('Update failed:', err);
       setError(`Failed to update ${fileAction.fileType}`);
+    }
+  };
+
+  // Load individual item functions
+  const loadPattern = async (patternId: string) => {
+    try {
+      const response = await fetch(`${API_CONFIG.PROCESS_SERVICE}/patterns/${patternId}`);
+      if (!response.ok) throw new Error('Failed to fetch pattern');
+      const data: PatternResponse = await response.json();
+      setSelectedPattern(data.pattern);
+    } catch (err) {
+      setError('Failed to load pattern');
+    }
+  };
+
+  const loadParameter = async (parameterId: string) => {
+    try {
+      const response = await fetch(`${API_CONFIG.PROCESS_SERVICE}/parameters/${parameterId}`);
+      if (!response.ok) throw new Error('Failed to fetch parameter');
+      const data: ParameterResponse = await response.json();
+      setSelectedParameter(data.parameter);
+    } catch (err) {
+      setError('Failed to load parameter');
+    }
+  };
+
+  const loadNozzle = async (nozzleId: string) => {
+    try {
+      const response = await fetch(`${API_CONFIG.PROCESS_SERVICE}/nozzles/${nozzleId}`);
+      if (!response.ok) throw new Error('Failed to fetch nozzle');
+      const data: NozzleResponse = await response.json();
+      setSelectedNozzle(data.nozzle);
+    } catch (err) {
+      setError('Failed to load nozzle');
+    }
+  };
+
+  const loadPowder = async (powderId: string) => {
+    try {
+      const response = await fetch(`${API_CONFIG.PROCESS_SERVICE}/powders/${powderId}`);
+      if (!response.ok) throw new Error('Failed to fetch powder');
+      const data: PowderResponse = await response.json();
+      setSelectedPowder(data.powder);
+    } catch (err) {
+      setError('Failed to load powder');
+    }
+  };
+
+  const loadSequence = async (sequenceId: string) => {
+    try {
+      const response = await fetch(`${API_CONFIG.PROCESS_SERVICE}/sequences/${sequenceId}`);
+      if (!response.ok) throw new Error('Failed to fetch sequence');
+      const data: SequenceResponse = await response.json();
+      setSelectedSequence(data.sequence);
+    } catch (err) {
+      setError('Failed to load sequence');
     }
   };
 
@@ -653,135 +776,438 @@ export default function FileManagement() {
 
   return (
     <Box sx={{ p: 3 }}>
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 3 }}>
-        <Typography variant="h4">File Management</Typography>
-        <Box>
-          <Tooltip title="Import YAML">
-            <IconButton
-              onClick={() => setImportDialogOpen(true)}
-              sx={{ mr: 1 }}
-            >
-              <UploadIcon />
-            </IconButton>
-          </Tooltip>
-        </Box>
-      </Box>
+      <Typography variant="h4" gutterBottom>
+        File Management
+      </Typography>
 
-      <Grid container spacing={3}>
-        {/* Patterns */}
-        <Grid item xs={12} md={6}>
-          <Paper sx={{ p: 2 }}>
-            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-              <Typography variant="h6">Patterns</Typography>
-              <Tooltip title="Create Pattern">
-                <IconButton
+      {error && (
+        <Alert severity="error" sx={{ mb: 2 }}>
+          {error}
+        </Alert>
+      )}
+
+      {loading ? (
+        <CircularProgress />
+      ) : (
+        <Grid container spacing={3}>
+          {/* Patterns Section */}
+          <Grid item xs={12} md={6}>
+            <Paper sx={{ p: 2 }}>
+              <Stack direction="row" alignItems="center" justifyContent="space-between" mb={2}>
+                <Typography variant="h6">Patterns</Typography>
+                <Button
+                  startIcon={<AddIcon />}
                   onClick={() => {
                     setCreateType('pattern');
                     setCreateDialogOpen(true);
                   }}
                 >
-                  <AddIcon />
-                </IconButton>
-              </Tooltip>
-            </Box>
-            <List>
-              {patterns.map((pattern) => renderListItem(pattern, 'pattern'))}
-            </List>
-          </Paper>
-        </Grid>
+                  Create
+                </Button>
+              </Stack>
+              <List>
+                {patterns.map((patternId) => (
+                  <ListItem key={patternId}>
+                    <ListItemText primary={patternId} />
+                    <ListItemSecondaryAction>
+                      <Tooltip title="View">
+                        <IconButton
+                          edge="end"
+                          onClick={() => loadPattern(patternId)}
+                        >
+                          <VisibilityIcon />
+                        </IconButton>
+                      </Tooltip>
+                      <Tooltip title="Edit">
+                        <IconButton
+                          edge="end"
+                          onClick={() => {
+                            setFileAction({
+                              type: 'edit',
+                              fileType: 'pattern',
+                              fileId: patternId
+                            });
+                          }}
+                        >
+                          <EditIcon />
+                        </IconButton>
+                      </Tooltip>
+                      <Tooltip title="Delete">
+                        <IconButton
+                          edge="end"
+                          onClick={() => {
+                            setFileAction({
+                              type: 'delete',
+                              fileType: 'pattern',
+                              fileId: patternId
+                            });
+                          }}
+                        >
+                          <DeleteIcon />
+                        </IconButton>
+                      </Tooltip>
+                    </ListItemSecondaryAction>
+                  </ListItem>
+                ))}
+              </List>
+            </Paper>
+          </Grid>
 
-        {/* Parameters */}
-        <Grid item xs={12} md={6}>
-          <Paper sx={{ p: 2 }}>
-            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-              <Typography variant="h6">Parameters</Typography>
-              <Tooltip title="Create Parameter">
-                <IconButton
+          {/* Parameters Section */}
+          <Grid item xs={12} md={6}>
+            <Paper sx={{ p: 2 }}>
+              <Stack direction="row" alignItems="center" justifyContent="space-between" mb={2}>
+                <Typography variant="h6">Parameters</Typography>
+                <Button
+                  startIcon={<AddIcon />}
                   onClick={() => {
                     setCreateType('parameter');
                     setCreateDialogOpen(true);
                   }}
                 >
-                  <AddIcon />
-                </IconButton>
-              </Tooltip>
-            </Box>
-            <List>
-              {parameters.map((param) => renderListItem(param, 'parameter'))}
-            </List>
-          </Paper>
-        </Grid>
+                  Create
+                </Button>
+              </Stack>
+              <List>
+                {parameters.map((parameterId) => (
+                  <ListItem key={parameterId}>
+                    <ListItemText primary={parameterId} />
+                    <ListItemSecondaryAction>
+                      <Tooltip title="View">
+                        <IconButton
+                          edge="end"
+                          onClick={() => loadParameter(parameterId)}
+                        >
+                          <VisibilityIcon />
+                        </IconButton>
+                      </Tooltip>
+                      <Tooltip title="Edit">
+                        <IconButton
+                          edge="end"
+                          onClick={() => {
+                            setFileAction({
+                              type: 'edit',
+                              fileType: 'parameter',
+                              fileId: parameterId
+                            });
+                          }}
+                        >
+                          <EditIcon />
+                        </IconButton>
+                      </Tooltip>
+                      <Tooltip title="Delete">
+                        <IconButton
+                          edge="end"
+                          onClick={() => {
+                            setFileAction({
+                              type: 'delete',
+                              fileType: 'parameter',
+                              fileId: parameterId
+                            });
+                          }}
+                        >
+                          <DeleteIcon />
+                        </IconButton>
+                      </Tooltip>
+                    </ListItemSecondaryAction>
+                  </ListItem>
+                ))}
+              </List>
+            </Paper>
+          </Grid>
 
-        {/* Nozzles */}
-        <Grid item xs={12} md={6}>
-          <Paper sx={{ p: 2 }}>
-            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-              <Typography variant="h6">Nozzles</Typography>
-              <Tooltip title="Create Nozzle">
-                <IconButton
+          {/* Nozzles Section */}
+          <Grid item xs={12} md={6}>
+            <Paper sx={{ p: 2 }}>
+              <Stack direction="row" alignItems="center" justifyContent="space-between" mb={2}>
+                <Typography variant="h6">Nozzles</Typography>
+                <Button
+                  startIcon={<AddIcon />}
                   onClick={() => {
                     setCreateType('nozzle');
                     setCreateDialogOpen(true);
                   }}
                 >
-                  <AddIcon />
-                </IconButton>
-              </Tooltip>
-            </Box>
-            <List>
-              {nozzles.map((nozzle) => renderListItem(nozzle, 'nozzle'))}
-            </List>
-          </Paper>
-        </Grid>
+                  Create
+                </Button>
+              </Stack>
+              <List>
+                {nozzles.map((nozzleId) => (
+                  <ListItem key={nozzleId}>
+                    <ListItemText primary={nozzleId} />
+                    <ListItemSecondaryAction>
+                      <Tooltip title="View">
+                        <IconButton
+                          edge="end"
+                          onClick={() => loadNozzle(nozzleId)}
+                        >
+                          <VisibilityIcon />
+                        </IconButton>
+                      </Tooltip>
+                      <Tooltip title="Edit">
+                        <IconButton
+                          edge="end"
+                          onClick={() => {
+                            setFileAction({
+                              type: 'edit',
+                              fileType: 'nozzle',
+                              fileId: nozzleId
+                            });
+                          }}
+                        >
+                          <EditIcon />
+                        </IconButton>
+                      </Tooltip>
+                      <Tooltip title="Delete">
+                        <IconButton
+                          edge="end"
+                          onClick={() => {
+                            setFileAction({
+                              type: 'delete',
+                              fileType: 'nozzle',
+                              fileId: nozzleId
+                            });
+                          }}
+                        >
+                          <DeleteIcon />
+                        </IconButton>
+                      </Tooltip>
+                    </ListItemSecondaryAction>
+                  </ListItem>
+                ))}
+              </List>
+            </Paper>
+          </Grid>
 
-        {/* Powders */}
-        <Grid item xs={12} md={6}>
-          <Paper sx={{ p: 2 }}>
-            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-              <Typography variant="h6">Powders</Typography>
-              <Tooltip title="Create Powder">
-                <IconButton
+          {/* Powders Section */}
+          <Grid item xs={12} md={6}>
+            <Paper sx={{ p: 2 }}>
+              <Stack direction="row" alignItems="center" justifyContent="space-between" mb={2}>
+                <Typography variant="h6">Powders</Typography>
+                <Button
+                  startIcon={<AddIcon />}
                   onClick={() => {
                     setCreateType('powder');
                     setCreateDialogOpen(true);
                   }}
                 >
-                  <AddIcon />
-                </IconButton>
-              </Tooltip>
-            </Box>
-            <List>
-              {powders.map((powder) => renderListItem(powder, 'powder'))}
-            </List>
-          </Paper>
-        </Grid>
+                  Create
+                </Button>
+              </Stack>
+              <List>
+                {powders.map((powderId) => (
+                  <ListItem key={powderId}>
+                    <ListItemText primary={powderId} />
+                    <ListItemSecondaryAction>
+                      <Tooltip title="View">
+                        <IconButton
+                          edge="end"
+                          onClick={() => loadPowder(powderId)}
+                        >
+                          <VisibilityIcon />
+                        </IconButton>
+                      </Tooltip>
+                      <Tooltip title="Edit">
+                        <IconButton
+                          edge="end"
+                          onClick={() => {
+                            setFileAction({
+                              type: 'edit',
+                              fileType: 'powder',
+                              fileId: powderId
+                            });
+                          }}
+                        >
+                          <EditIcon />
+                        </IconButton>
+                      </Tooltip>
+                      <Tooltip title="Delete">
+                        <IconButton
+                          edge="end"
+                          onClick={() => {
+                            setFileAction({
+                              type: 'delete',
+                              fileType: 'powder',
+                              fileId: powderId
+                            });
+                          }}
+                        >
+                          <DeleteIcon />
+                        </IconButton>
+                      </Tooltip>
+                    </ListItemSecondaryAction>
+                  </ListItem>
+                ))}
+              </List>
+            </Paper>
+          </Grid>
 
-        {/* Sequences */}
-        <Grid item xs={12}>
-          <Paper sx={{ p: 2 }}>
-            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-              <Typography variant="h6">Sequences</Typography>
-              <Tooltip title="Create Sequence">
-                <IconButton
+          {/* Sequences Section */}
+          <Grid item xs={12} md={6}>
+            <Paper sx={{ p: 2 }}>
+              <Stack direction="row" alignItems="center" justifyContent="space-between" mb={2}>
+                <Typography variant="h6">Sequences</Typography>
+                <Button
+                  startIcon={<AddIcon />}
                   onClick={() => {
                     setCreateType('sequence');
                     setCreateDialogOpen(true);
                   }}
                 >
-                  <AddIcon />
-                </IconButton>
-              </Tooltip>
-            </Box>
-            <List>
-              {sequences.map((sequence) => renderListItem(sequence, 'sequence'))}
-            </List>
-          </Paper>
+                  Create
+                </Button>
+              </Stack>
+              <List>
+                {sequences.map((sequenceId) => (
+                  <ListItem key={sequenceId}>
+                    <ListItemText primary={sequenceId} />
+                    <ListItemSecondaryAction>
+                      <Tooltip title="View">
+                        <IconButton
+                          edge="end"
+                          onClick={() => loadSequence(sequenceId)}
+                        >
+                          <VisibilityIcon />
+                        </IconButton>
+                      </Tooltip>
+                      <Tooltip title="Edit">
+                        <IconButton
+                          edge="end"
+                          onClick={() => {
+                            setFileAction({
+                              type: 'edit',
+                              fileType: 'sequence',
+                              fileId: sequenceId
+                            });
+                          }}
+                        >
+                          <EditIcon />
+                        </IconButton>
+                      </Tooltip>
+                      <Tooltip title="Delete">
+                        <IconButton
+                          edge="end"
+                          onClick={() => {
+                            setFileAction({
+                              type: 'delete',
+                              fileType: 'sequence',
+                              fileId: sequenceId
+                            });
+                          }}
+                        >
+                          <DeleteIcon />
+                        </IconButton>
+                      </Tooltip>
+                    </ListItemSecondaryAction>
+                  </ListItem>
+                ))}
+              </List>
+            </Paper>
+          </Grid>
         </Grid>
-      </Grid>
+      )}
 
-      {renderCreateDialog()}
-      {renderImportDialog()}
-      {renderActionDialog()}
+      {/* Details Dialog */}
+      <Dialog
+        open={Boolean(selectedPattern || selectedParameter || selectedNozzle || selectedPowder || selectedSequence)}
+        onClose={() => {
+          setSelectedPattern(null);
+          setSelectedParameter(null);
+          setSelectedNozzle(null);
+          setSelectedPowder(null);
+          setSelectedSequence(null);
+        }}
+        maxWidth="md"
+        fullWidth
+      >
+        <DialogTitle>
+          {selectedPattern ? 'Pattern Details' :
+           selectedParameter ? 'Parameter Details' :
+           selectedNozzle ? 'Nozzle Details' :
+           selectedPowder ? 'Powder Details' :
+           selectedSequence ? 'Sequence Details' : ''}
+        </DialogTitle>
+        <DialogContent>
+          {selectedPattern && (
+            <Box>
+              <Typography variant="h6">{selectedPattern.name}</Typography>
+              <Typography variant="body1">Type: {selectedPattern.type}</Typography>
+              <Typography variant="body1">Description: {selectedPattern.description}</Typography>
+              <Typography variant="body1">Parameters:</Typography>
+              <pre>{JSON.stringify(selectedPattern.params, null, 2)}</pre>
+            </Box>
+          )}
+          {selectedParameter && (
+            <Box>
+              <Typography variant="h6">{selectedParameter.name}</Typography>
+              <Typography variant="body1">Created: {selectedParameter.created}</Typography>
+              <Typography variant="body1">Author: {selectedParameter.author}</Typography>
+              <Typography variant="body1">Description: {selectedParameter.description}</Typography>
+              <Typography variant="body1">Nozzle: {selectedParameter.nozzle}</Typography>
+              <Typography variant="body1">Main Gas: {selectedParameter.main_gas}</Typography>
+              <Typography variant="body1">Feeder Gas: {selectedParameter.feeder_gas}</Typography>
+              <Typography variant="body1">Frequency: {selectedParameter.frequency}</Typography>
+              <Typography variant="body1">Deagglomerator Speed: {selectedParameter.deagglomerator_speed}</Typography>
+            </Box>
+          )}
+          {selectedNozzle && (
+            <Box>
+              <Typography variant="h6">{selectedNozzle.name}</Typography>
+              <Typography variant="body1">Manufacturer: {selectedNozzle.manufacturer}</Typography>
+              <Typography variant="body1">Type: {selectedNozzle.type}</Typography>
+              <Typography variant="body1">Description: {selectedNozzle.description}</Typography>
+            </Box>
+          )}
+          {selectedPowder && (
+            <Box>
+              <Typography variant="h6">{selectedPowder.name}</Typography>
+              <Typography variant="body1">Type: {selectedPowder.type}</Typography>
+              <Typography variant="body1">Size: {selectedPowder.size}</Typography>
+              <Typography variant="body1">Manufacturer: {selectedPowder.manufacturer}</Typography>
+              <Typography variant="body1">Lot: {selectedPowder.lot}</Typography>
+            </Box>
+          )}
+          {selectedSequence && (
+            <Box>
+              <Typography variant="h6">{selectedSequence.metadata.name}</Typography>
+              <Typography variant="body1">Version: {selectedSequence.metadata.version}</Typography>
+              <Typography variant="body1">Created: {selectedSequence.metadata.created}</Typography>
+              <Typography variant="body1">Author: {selectedSequence.metadata.author}</Typography>
+              <Typography variant="body1">Description: {selectedSequence.metadata.description}</Typography>
+              <Typography variant="h6" sx={{ mt: 2 }}>Steps:</Typography>
+              <List>
+                {selectedSequence.steps.map((step, index) => (
+                  <ListItem key={index}>
+                    <ListItemText
+                      primary={step.name}
+                      secondary={
+                        <>
+                          Type: {step.step_type}
+                          {step.description && ` - ${step.description}`}
+                          {step.pattern_id && ` - Pattern: ${step.pattern_id}`}
+                          {step.parameters && ` - Parameters: ${step.parameters}`}
+                          {step.origin && ` - Origin: [${step.origin.join(', ')}]`}
+                        </>
+                      }
+                    />
+                  </ListItem>
+                ))}
+              </List>
+            </Box>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => {
+            setSelectedPattern(null);
+            setSelectedParameter(null);
+            setSelectedNozzle(null);
+            setSelectedPowder(null);
+            setSelectedSequence(null);
+          }}>
+            Close
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 } 
