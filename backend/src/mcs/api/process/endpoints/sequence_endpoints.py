@@ -9,7 +9,8 @@ from mcs.api.process.models import (
     BaseResponse,
     SequenceListResponse,
     SequenceResponse,
-    StatusResponse
+    StatusResponse,
+    Sequence
 )
 
 router = APIRouter(prefix="/sequences", tags=["sequences"])
@@ -135,4 +136,78 @@ async def get_sequence(
         raise create_error(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             message=f"Failed to get sequence: {str(e)}"
+        )
+
+
+@router.post(
+    "/",
+    response_model=BaseResponse,
+    responses={
+        status.HTTP_422_UNPROCESSABLE_ENTITY: {"description": "Validation failed"},
+        status.HTTP_500_INTERNAL_SERVER_ERROR: {"description": "Failed to create sequence"}
+    }
+)
+async def create_sequence(
+    sequence: Sequence,
+    service: ProcessService = Depends(get_process_service)
+) -> BaseResponse:
+    """Create new sequence."""
+    try:
+        sequence_id = await service.sequence_service.create_sequence(sequence)
+        return BaseResponse(message=f"Sequence {sequence_id} created successfully")
+    except Exception as e:
+        logger.error(f"Failed to create sequence: {e}")
+        raise create_error(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            message=f"Failed to create sequence: {str(e)}"
+        )
+
+
+@router.put(
+    "/{sequence_id}",
+    response_model=BaseResponse,
+    responses={
+        status.HTTP_404_NOT_FOUND: {"description": "Sequence not found"},
+        status.HTTP_422_UNPROCESSABLE_ENTITY: {"description": "Validation failed"},
+        status.HTTP_500_INTERNAL_SERVER_ERROR: {"description": "Failed to update sequence"}
+    }
+)
+async def update_sequence(
+    sequence_id: str,
+    sequence: Sequence,
+    service: ProcessService = Depends(get_process_service)
+) -> BaseResponse:
+    """Update sequence."""
+    try:
+        await service.sequence_service.update_sequence(sequence_id, sequence)
+        return BaseResponse(message=f"Sequence {sequence_id} updated successfully")
+    except Exception as e:
+        logger.error(f"Failed to update sequence {sequence_id}: {e}")
+        raise create_error(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            message=f"Failed to update sequence: {str(e)}"
+        )
+
+
+@router.delete(
+    "/{sequence_id}",
+    response_model=BaseResponse,
+    responses={
+        status.HTTP_404_NOT_FOUND: {"description": "Sequence not found"},
+        status.HTTP_500_INTERNAL_SERVER_ERROR: {"description": "Failed to delete sequence"}
+    }
+)
+async def delete_sequence(
+    sequence_id: str,
+    service: ProcessService = Depends(get_process_service)
+) -> BaseResponse:
+    """Delete sequence."""
+    try:
+        await service.sequence_service.delete_sequence(sequence_id)
+        return BaseResponse(message=f"Sequence {sequence_id} deleted successfully")
+    except Exception as e:
+        logger.error(f"Failed to delete sequence {sequence_id}: {e}")
+        raise create_error(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            message=f"Failed to delete sequence: {str(e)}"
         )

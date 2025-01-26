@@ -439,8 +439,15 @@ class ParameterService:
                 message=error_msg
             )
 
-    async def list_powders(self) -> List[Powder]:
-        """List available powders."""
+    async def list_powders(self) -> List[str]:
+        """List available powders.
+        
+        Returns:
+            List[str]: List of powder IDs
+            
+        Raises:
+            HTTPException: If service error
+        """
         try:
             if not self.is_running:
                 raise create_error(
@@ -448,20 +455,7 @@ class ParameterService:
                     message=f"{self.service_name} service not running"
                 )
 
-            powders = []
-            for powder_id, powder_data in self._powders.items():
-                if "powder" in powder_data:
-                    powder_info = powder_data["powder"]
-                    powder = Powder(
-                        name=powder_info.get("name", powder_id),
-                        type=powder_info.get("type", ""),
-                        size=powder_info.get("size", ""),
-                        manufacturer=powder_info.get("manufacturer", ""),
-                        lot=powder_info.get("lot", "")
-                    )
-                    powders.append(powder)
-
-            return powders
+            return list(self._powders.keys())
 
         except Exception as e:
             error_msg = f"Failed to list powders: {str(e)}"

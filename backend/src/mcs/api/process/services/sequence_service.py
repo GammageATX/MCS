@@ -9,6 +9,7 @@ from typing import Dict, Any, List
 from fastapi import status
 from loguru import logger
 import json
+import uuid
 
 from mcs.utils.errors import create_error
 from mcs.utils.health import HealthStatus, ComponentHealth
@@ -390,4 +391,141 @@ class SequenceService:
             raise create_error(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 message=f"Failed to get sequence: {str(e)}"
+            )
+
+    async def create_sequence(self, sequence: Sequence) -> str:
+        """Create new sequence.
+        
+        Args:
+            sequence: Sequence to create
+            
+        Returns:
+            ID of created sequence
+            
+        Raises:
+            HTTPException if service not running or error occurs
+        """
+        try:
+            if not self.is_running:
+                raise create_error(
+                    status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                    message=f"{self.service_name} service not running"
+                )
+
+            # Generate unique ID
+            sequence_id = str(uuid.uuid4())
+            
+            # Create sequence data structure
+            sequence_data = {
+                "sequence": {
+                    "metadata": sequence.metadata.dict(),
+                    "steps": [step.dict() for step in sequence.steps]
+                }
+            }
+            
+            # Save to file
+            file_path = self._data_path / f"{sequence_id}.json"
+            with open(file_path, "w") as f:
+                json.dump(sequence_data, f, indent=2)
+                
+            # Add to loaded sequences
+            self._sequences[sequence_id] = sequence_data
+            logger.info(f"Created sequence {sequence_id}")
+            
+            return sequence_id
+
+        except Exception as e:
+            error_msg = f"Failed to create sequence: {str(e)}"
+            logger.error(error_msg)
+            raise create_error(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                message=error_msg
+            )
+
+    async def update_sequence(self, sequence_id: str, sequence: Sequence) -> None:
+        """Update sequence.
+        
+        Args:
+            sequence_id: ID of sequence to update
+            sequence: Updated sequence data
+            
+        Raises:
+            HTTPException if service not running, sequence not found, or error occurs
+        """
+        try:
+            if not self.is_running:
+                raise create_error(
+                    status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                    message=f"{self.service_name} service not running"
+                )
+
+            # Check if sequence exists
+            if sequence_id not in self._sequences:
+                raise create_error(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    message=f"Sequence {sequence_id} not found"
+                )
+                
+            # Create sequence data structure
+            sequence_data = {
+                "sequence": {
+                    "metadata": sequence.metadata.dict(),
+                    "steps": [step.dict() for step in sequence.steps]
+                }
+            }
+            
+            # Save to file
+            file_path = self._data_path / f"{sequence_id}.json"
+            with open(file_path, "w") as f:
+                json.dump(sequence_data, f, indent=2)
+                
+            # Update loaded sequence
+            self._sequences[sequence_id] = sequence_data
+            logger.info(f"Updated sequence {sequence_id}")
+
+        except Exception as e:
+            error_msg = f"Failed to update sequence {sequence_id}: {str(e)}"
+            logger.error(error_msg)
+            raise create_error(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                message=error_msg
+            )
+
+    async def delete_sequence(self, sequence_id: str) -> None:
+        """Delete sequence.
+        
+        Args:
+            sequence_id: ID of sequence to delete
+            
+        Raises:
+            HTTPException if service not running, sequence not found, or error occurs
+        """
+        try:
+            if not self.is_running:
+                raise create_error(
+                    status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                    message=f"{self.service_name} service not running"
+                )
+
+            # Check if sequence exists
+            if sequence_id not in self._sequences:
+                raise create_error(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    message=f"Sequence {sequence_id} not found"
+                )
+                
+            # Delete file
+            file_path = self._data_path / f"{sequence_id}.json"
+            file_path.unlink()
+                
+            # Remove from loaded sequences
+            del self._sequences[sequence_id]
+            logger.info(f"Deleted sequence {sequence_id}")
+
+        except Exception as e:
+            error_msg = f"Failed to delete sequence {sequence_id}: {str(e)}"
+            logger.error(error_msg)
+            raise create_error(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                message=error_msg
             )

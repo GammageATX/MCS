@@ -129,7 +129,7 @@ class ParameterResponse(BaseModel):
 
 class ParameterListResponse(BaseModel):
     """Parameter list response."""
-    parameters: List[Parameter]
+    parameters: List[str] = Field(description="List of parameter IDs")
 
 
 class SequenceResponse(BaseModel):
@@ -180,7 +180,7 @@ class NozzleResponse(BaseModel):
 
 class NozzleListResponse(BaseModel):
     """List of nozzles response."""
-    nozzles: List[Nozzle]
+    nozzles: List[str] = Field(description="List of nozzle IDs")
 
 
 class PowderResponse(BaseModel):
@@ -190,4 +190,4 @@ class PowderResponse(BaseModel):
 
 class PowderListResponse(BaseModel):
     """List of powders response."""
-    powders: List[Powder]
+    powders: List[str] = Field(description="List of powder IDs")
