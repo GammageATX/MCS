@@ -237,7 +237,7 @@ class ParameterService:
                 message=error_msg
             )
 
-    def health(self) -> ComponentHealth:
+    async def health(self) -> ComponentHealth:
         """Get service health."""
         status = HealthStatus.OK if self.is_running else HealthStatus.ERROR
         details = {
