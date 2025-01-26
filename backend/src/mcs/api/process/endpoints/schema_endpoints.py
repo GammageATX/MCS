@@ -1,7 +1,7 @@
 """Process schema endpoints."""
 
 from typing import Dict, Any, List
-from fastapi import APIRouter, Depends, Request, status, HTTPException
+from fastapi import APIRouter, Depends, Request, status
 from loguru import logger
 
 from mcs.utils.errors import create_error
@@ -38,7 +38,7 @@ async def list_schemas(
 
 
 @router.get(
-    "/{entity_type}",
+    "/{schema_type}",
     response_model=Dict[str, Any],
     responses={
         status.HTTP_404_NOT_FOUND: {"description": "Schema not found"},
@@ -46,30 +46,28 @@ async def list_schemas(
     }
 )
 async def get_schema(
-    entity_type: str,
+    schema_type: str,
     service: ProcessService = Depends(get_process_service)
 ) -> Dict[str, Any]:
-    """Get JSON Schema for entity type.
+    """Get schema by type.
     
     Args:
-        entity_type: Type of entity (pattern, parameter, nozzle, powder, sequence)
+        schema_type: Type of schema to get (pattern, parameter, nozzle, powder, sequence)
         service: Process service instance
         
     Returns:
-        JSON Schema definition
+        Schema definition as JSON Schema
     """
     try:
-        schema = await service.schema_service.get_schema(entity_type)
+        schema = await service.schema_service.get_schema(schema_type)
         if not schema:
             raise create_error(
                 status_code=status.HTTP_404_NOT_FOUND,
-                message=f"Schema not found for type: {entity_type}"
+                message=f"Schema not found for type: {schema_type}"
             )
         return schema
     except Exception as e:
-        if isinstance(e, HTTPException):
-            raise e
-        logger.error(f"Failed to get schema for {entity_type}: {e}")
+        logger.error(f"Failed to get schema: {e}")
         raise create_error(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             message=f"Failed to get schema: {str(e)}"

@@ -5,14 +5,14 @@ This module implements the Schema service for managing process schemas.
 
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, Any, Optional
+from typing import Dict, Any
 from fastapi import status
 from loguru import logger
 import json
 
 from mcs.utils.errors import create_error
 from mcs.utils.health import HealthStatus, ComponentHealth
-from mcs.api.process.models.process_models import ProcessStatus
+from mcs.api.process.models import ProcessStatus
 
 
 class SchemaService:
@@ -35,7 +35,7 @@ class SchemaService:
         
         # Paths
         self._data_path = None
-        self._schema_path = None
+        self._schema_path = Path("backend/schemas/process")
         
         # State
         self._schemas = {}
@@ -259,34 +259,35 @@ class SchemaService:
                 message=error_msg
             )
 
-    async def get_schema(self, entity_type: str) -> Optional[Dict[str, Any]]:
-        """Get JSON Schema for entity type.
+    async def get_schema(self, schema_type: str) -> Dict[str, Any]:
+        """Get schema by type.
         
         Args:
-            entity_type: Type of entity (pattern, parameter, nozzle, powder, sequence)
+            schema_type: Type of schema to get
             
         Returns:
-            JSON Schema definition or None if not found
-            
-        Raises:
-            HTTPException: If service not running or schema not found
+            Schema definition as JSON Schema
         """
-        try:
-            if not self.is_running:
-                raise create_error(
-                    status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                    message=f"{self.service_name} service not running"
-                )
+        if not self.is_running:
+            raise RuntimeError("Service not running")
 
-            if entity_type not in self._schemas:
+        try:
+            # Check if schema is already loaded
+            if schema_type in self._schemas:
+                return self._schemas[schema_type]
+
+            # Load schema from file
+            schema_file = self._schema_path / f"{schema_type}.json"
+            if not schema_file.exists():
+                logger.error(f"Schema file not found: {schema_file}")
                 return None
 
-            return self._schemas[entity_type]
+            with open(schema_file, "r") as f:
+                schema = json.load(f)
+                self._schemas[schema_type] = schema
+                return schema
 
         except Exception as e:
-            error_msg = f"Failed to get schema for {entity_type}: {str(e)}"
-            logger.error(error_msg)
-            raise create_error(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                message=error_msg
-            )
+            logger.error(f"Failed to get schema {schema_type}: {e}")
+            self._failed_schemas[schema_type] = str(e)
+            return None

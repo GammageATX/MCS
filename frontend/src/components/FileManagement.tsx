@@ -35,18 +35,6 @@ import VisibilityIcon from '@mui/icons-material/Visibility';
 import UploadIcon from '@mui/icons-material/Upload';
 import DownloadIcon from '@mui/icons-material/Download';
 import { API_CONFIG } from '../config/api';
-import {
-  patternSchema,
-  patternUiSchema,
-  parameterSchema,
-  parameterUiSchema,
-  nozzleSchema,
-  nozzleUiSchema,
-  powderSchema,
-  powderUiSchema,
-  sequenceSchema,
-  sequenceUiSchema
-} from '../schemas/process';
 
 interface Pattern {
   id: string;
@@ -178,6 +166,16 @@ interface FileAction {
   fileId: string;
 }
 
+interface LayoutElement extends UISchemaElement {
+  type: 'VerticalLayout' | 'HorizontalLayout';
+  elements: UISchemaElement[];
+}
+
+interface ControlElement extends UISchemaElement {
+  type: 'Control';
+  scope: string;
+}
+
 export default function FileManagement() {
   const [patterns, setPatterns] = useState<string[]>([]);
   const [parameters, setParameters] = useState<string[]>([]);
@@ -200,28 +198,70 @@ export default function FileManagement() {
   const [importDialogOpen, setImportDialogOpen] = useState(false);
   const [yamlContent, setYamlContent] = useState('');
   const [importType, setImportType] = useState<'pattern' | 'parameter' | 'nozzle' | 'powder' | 'sequence' | null>(null);
+  const [schemas, setSchemas] = useState<Record<string, JsonSchema>>({});
+  const [uiSchemas, setUiSchemas] = useState<Record<string, LayoutElement>>({});
+  const [schemaError, setSchemaError] = useState<string | null>(null);
+
+  // Fetch schemas on mount
+  useEffect(() => {
+    const fetchSchemas = async () => {
+      try {
+        // First get list of available schemas
+        const response = await fetch(`${API_CONFIG.PROCESS_SERVICE}/schemas/`);
+        if (!response.ok) throw new Error('Failed to fetch schema list');
+        const schemaTypes: string[] = await response.json();
+
+        // Then fetch each schema
+        const schemaPromises = schemaTypes.map(async (type) => {
+          const schemaResponse = await fetch(`${API_CONFIG.PROCESS_SERVICE}/schemas/${type}`);
+          if (!schemaResponse.ok) throw new Error(`Failed to fetch schema for ${type}`);
+          return {
+            type,
+            schema: await schemaResponse.json()
+          };
+        });
+
+        const results = await Promise.all(schemaPromises);
+        
+        // Create schema and UI schema maps
+        const newSchemas: Record<string, JsonSchema> = {};
+        const newUiSchemas: Record<string, LayoutElement> = {};
+        
+        results.forEach(({type, schema}) => {
+          newSchemas[type] = schema;
+          // Generate a basic UI schema - this could be enhanced
+          newUiSchemas[type] = {
+            type: 'VerticalLayout',
+            elements: Object.keys(schema.properties || {}).map(prop => ({
+              type: 'Control',
+              scope: `#/properties/${prop}`
+            }))
+          };
+        });
+
+        setSchemas(newSchemas);
+        setUiSchemas(newUiSchemas);
+        setSchemaError(null);
+
+      } catch (err) {
+        console.error('Failed to fetch schemas:', err);
+        setSchemaError('Failed to load schemas');
+      }
+    };
+
+    fetchSchemas();
+  }, []);
 
   const getSchemaForType = (type: string): { schema: JsonSchema, uiSchema: UISchemaElement } => {
-    switch (type) {
-      case 'pattern':
-        return { schema: patternSchema, uiSchema: patternUiSchema as UISchemaElement };
-      case 'parameter':
-        return { schema: parameterSchema, uiSchema: parameterUiSchema as UISchemaElement };
-      case 'nozzle':
-        return { schema: nozzleSchema, uiSchema: nozzleUiSchema as UISchemaElement };
-      case 'powder':
-        return { schema: powderSchema, uiSchema: powderUiSchema as UISchemaElement };
-      case 'sequence':
-        return { schema: sequenceSchema, uiSchema: sequenceUiSchema as UISchemaElement };
-      default:
-        return { 
-          schema: {} as JsonSchema, 
-          uiSchema: {
-            type: 'VerticalLayout',
-            elements: []
-          } as UISchemaElement 
-        };
-    }
+    const defaultUiSchema: LayoutElement = {
+      type: 'VerticalLayout',
+      elements: []
+    };
+
+    return {
+      schema: schemas[type] || {} as JsonSchema,
+      uiSchema: uiSchemas[type] || defaultUiSchema
+    };
   };
 
   // Fetch data functions
